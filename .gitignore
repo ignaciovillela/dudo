@@ -1,0 +1,105 @@
+# =========================
+
+# Python
+
+# =========================
+
+**pycache**/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+
+venv/
+.env/
+.venv/
+env/
+
+# Variables de entorno
+
+.env
+.env.*
+
+# =========================
+
+# FastAPI / ASGI
+
+# =========================
+
+*.log
+logs/
+uvicorn.log
+
+# SQLite (si usas DB local)
+
+*.db
+*.sqlite3
+
+# =========================
+
+# Claude Code / AI tooling
+
+# =========================
+
+.claude/
+.claude-cache/
+.claude_logs/
+*.claude.json
+
+# =========================
+
+# PyCharm / JetBrains
+
+# =========================
+
+.idea/
+*.iml
+*.iws
+
+# =========================
+
+# VS Code (por si acaso)
+
+# =========================
+
+.vscode/
+
+# =========================
+
+# Testing / coverage
+
+# =========================
+
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# =========================
+
+# Build / dist
+
+# =========================
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+
+# OS
+
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+
+# Misc
+
+# =========================
+
+*.swp
+*.swo

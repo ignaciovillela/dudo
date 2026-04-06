@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dudo — El Juego de los Cachos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════  LOBBY  ══════════════════════════════ -->
+<div id="lobby-screen" class="screen active">
+  <div class="lobby-wrap">
+    <div class="lobby-logo">
+      <div class="logo-dice-row">
+        <span class="logo-die">⚄</span>
+        <span class="logo-die main-die">⚅</span>
+        <span class="logo-die">⚂</span>
+      </div>
+      <h1>DUDO</h1>
+      <p class="tagline">El Juego de los Cachos</p>
+    </div>
+
+    <div class="lobby-card" id="lobby-form">
+      <div class="field-group">
+        <label>Tu nombre</label>
+        <input id="inp-name" type="text" placeholder="Ingresa tu nombre" maxlength="20"
+               onkeydown="if(event.key==='Enter') joinRoom()" />
+      </div>
+      <div class="field-group">
+        <label>Código de sala</label>
+        <div class="row-group">
+          <input id="inp-room" type="text" placeholder="ej: sala1" maxlength="20"
+                 onkeydown="if(event.key==='Enter') joinRoom()" />
+          <button class="btn btn-gold" onclick="joinRoom()">Unirse</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lobby-card" id="lobby-room" style="display:none">
+      <div class="room-header">
+        <span class="room-label">Sala:</span>
+        <strong id="disp-room-code" class="room-code"></strong>
+        <button class="btn btn-sm" onclick="copyRoomCode()">Copiar</button>
+      </div>
+      <div id="lobby-player-list" class="lobby-player-list"></div>
+      <div class="lobby-actions">
+        <button id="btn-ready" class="btn btn-gold" onclick="toggleReady()">¡Listo!</button>
+        <button id="btn-start" class="btn btn-start" onclick="startGame()" style="display:none">
+          Iniciar Juego
+        </button>
+      </div>
+      <p class="hint">Mínimo 2 jugadores · El juego comienza cuando todos estén listos.<br/>
+        Los <strong>unos</strong> son comodines (cuentan para cualquier cara).</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════  GAME  ═══════════════════════════════ -->
+<div id="game-screen" class="screen" style="display:none">
+  <div class="game-layout">
+
+    <!-- ── Table ── -->
+    <div class="game-table">
+
+      <!-- Other players (top) -->
+      <div id="other-players" class="other-players"></div>
+
+      <!-- Center zone -->
+      <div class="table-center">
+        <div class="turn-banner-row">
+          <div id="turn-banner" class="turn-banner">Esperando...</div>
+          <span id="direction-indicator" class="direction-indicator" style="display:none" title=""></span>
+        </div>
+
+        <div id="bid-area" class="bid-area">
+          <div id="no-bid-msg" class="no-bid-msg">Sin apuesta — primera ronda</div>
+          <div id="paso-indicator" class="paso-indicator" style="display:none"></div>
+          <div id="bid-visual" class="bid-visual" style="display:none">
+            <span id="bv-qty" class="bv-qty">3</span>
+            <span class="bv-x">×</span>
+            <div id="bv-die" class="bv-die-wrap"></div>
+            <span id="bv-wild" class="bv-wild">(+comodines)</span>
+          </div>
+        </div>
+
+        <!-- Reveal overlay (solo info complementaria; dados en la mesa) -->
+        <div id="reveal-overlay" class="reveal-overlay" style="display:none">
+          <div class="reveal-box">
+            <div id="reveal-result" class="reveal-result"></div>
+            <div id="reveal-countdown" class="reveal-countdown"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- My dice (bottom) -->
+      <div class="my-area">
+        <div class="my-label">
+          <span id="my-name-disp" class="my-name">Tú</span>
+          <span id="my-count-disp" class="my-count">●●●●●</span>
+        </div>
+        <div id="my-cup" class="cup-wrap">
+          <div id="my-dice-row" class="dice-row"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+
+      <!-- Bid panel -->
+      <div class="panel" id="bid-panel">
+        <div class="panel-title-row">
+          <h3 class="panel-title">Tu apuesta</h3>
+          <div class="dir-toggle">
+            <button id="btn-dir-ccw" class="dir-tog" onclick="sendDirection('ccw')" title="Anti-horario">↺</button>
+            <button id="btn-dir-cw"  class="dir-tog" onclick="sendDirection('cw')"  title="Horario">↻</button>
+          </div>
+        </div>
+        <div class="bid-builder">
+          <label class="bb-label">Pinta</label>
+          <div id="face-picker" class="face-picker"></div>
+          <label class="bb-label">Cantidad <span id="bb-min-hint" class="bb-min-hint"></span></label>
+          <div class="stepper stepper-qty">
+            <button onclick="adjBid('q',-1)">−</button>
+            <span id="bb-qty">1</span>
+            <button onclick="adjBid('q',1)">+</button>
+          </div>
+        </div>
+        <div class="action-btns">
+          <button id="btn-bid"   class="btn btn-primary"  onclick="sendBid()">Apostar</button>
+          <button id="btn-paso"  class="btn btn-secondary" onclick="sendPaso()">Pasar</button>
+          <button id="btn-dudo"  class="btn btn-danger"   onclick="sendDudo()">¡Dudo!</button>
+          <button id="btn-calzo" class="btn btn-warning"  onclick="sendCalzo()">¡Calzo!</button>
+        </div>
+        <p id="wait-msg" class="wait-msg">Esperando tu turno…</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="panel panel-stats">
+        <div class="stat">
+          <span class="stat-lbl">Ronda</span>
+          <span id="disp-round" class="stat-val">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-lbl">Dados en mesa</span>
+          <span id="disp-total" class="stat-val">—</span>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="panel panel-log">
+        <h3 class="panel-title">Registro</h3>
+        <div id="game-log" class="game-log"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Game Over Overlay -->
+<div id="game-over-overlay" class="game-over-overlay" style="display:none">
+  <div class="game-over-box">
+    <div class="go-dice-row">⚄ ⚅ ⚂</div>
+    <h2 id="go-title" class="go-title"></h2>
+    <p id="go-winner" class="go-winner"></p>
+    <button class="btn btn-gold go-btn" onclick="closeGameOver()">Volver al lobby</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
