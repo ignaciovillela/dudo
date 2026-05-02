@@ -122,6 +122,108 @@ const S = {
   bidFace:        2,
 };
 
+// ══════════════════════════════════  SOUND  ═══════════════════════════════════
+const AUDIO_STORAGE_KEY = 'dudoMuted';
+const AudioState = {
+  ctx: null,
+  muted: localStorage.getItem(AUDIO_STORAGE_KEY) === '1',
+};
+
+function ensureAudioCtx() {
+  if (AudioState.ctx) return AudioState.ctx;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  AudioState.ctx = new AC();
+  return AudioState.ctx;
+}
+
+function unlockAudio() {
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+}
+
+function playTone(freq, duration = 0.08, opts = {}) {
+  if (AudioState.muted) return;
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+
+  const when = ctx.currentTime + (opts.delay || 0);
+  const gain = ctx.createGain();
+  const osc = ctx.createOscillator();
+
+  osc.type = opts.type || 'sine';
+  osc.frequency.setValueAtTime(freq, when);
+
+  const volume = opts.volume ?? 0.05;
+  gain.gain.setValueAtTime(0.0001, when);
+  gain.gain.exponentialRampToValueAtTime(volume, when + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(when);
+  osc.stop(when + duration + 0.02);
+}
+
+const SFX = {
+  click() {
+    playTone(620, 0.05, { type: 'square', volume: 0.03 });
+  },
+  bid() {
+    playTone(420, 0.07, { type: 'triangle', volume: 0.045 });
+    playTone(540, 0.08, { type: 'triangle', delay: 0.06, volume: 0.04 });
+  },
+  paso() {
+    playTone(260, 0.12, { type: 'sine', volume: 0.04 });
+  },
+  yourTurn() {
+    playTone(740, 0.08, { type: 'square', volume: 0.05 });
+    playTone(980, 0.12, { type: 'square', delay: 0.09, volume: 0.045 });
+  },
+  reveal() {
+    playTone(360, 0.09, { type: 'triangle', volume: 0.04 });
+    playTone(280, 0.12, { type: 'triangle', delay: 0.08, volume: 0.035 });
+  },
+  win() {
+    playTone(650, 0.1, { type: 'triangle', volume: 0.055 });
+    playTone(860, 0.12, { type: 'triangle', delay: 0.1, volume: 0.05 });
+    playTone(1080, 0.16, { type: 'triangle', delay: 0.2, volume: 0.045 });
+  },
+  lose() {
+    playTone(420, 0.1, { type: 'sawtooth', volume: 0.045 });
+    playTone(320, 0.16, { type: 'sawtooth', delay: 0.1, volume: 0.04 });
+  },
+  error() {
+    playTone(220, 0.08, { type: 'sawtooth', volume: 0.045 });
+    playTone(180, 0.12, { type: 'sawtooth', delay: 0.07, volume: 0.04 });
+  },
+};
+
+function playSfx(name) {
+  unlockAudio();
+  const fx = SFX[name];
+  if (fx) fx();
+}
+
+function updateSoundButton() {
+  const btn = document.getElementById('btn-sound');
+  if (!btn) return;
+  btn.classList.toggle('muted', AudioState.muted);
+  btn.textContent = AudioState.muted ? '🔇' : '🔊';
+  btn.setAttribute('aria-pressed', AudioState.muted ? 'true' : 'false');
+  const label = AudioState.muted ? 'Activar sonido' : 'Silenciar sonido';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
+function toggleSound() {
+  AudioState.muted = !AudioState.muted;
+  localStorage.setItem(AUDIO_STORAGE_KEY, AudioState.muted ? '1' : '0');
+  updateSoundButton();
+  if (!AudioState.muted) playSfx('click');
+}
+
 // ══════════════════════════════════  WEBSOCKET  ════════════════════════════════
 function connect(roomId) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -284,11 +386,13 @@ function onTurn(msg) {
   renderOtherPlayers();
 
   if (isMe) {
+    playSfx('yourTurn');
     resetBidInputs();
   }
 }
 
 function onBidMade(msg) {
+  playSfx('bid');
   S.currentBid = msg.bid;
   S.activePaso = null;  // la apuesta reemplaza al paso como acción activa
   const b = msg.bid;
@@ -299,6 +403,7 @@ function onBidMade(msg) {
 }
 
 function onPasoMade(msg) {
+  playSfx('paso');
   S.activePaso = { player_id: msg.passer_id, player_name: msg.passer_name };
   if (msg.passer_id === S.playerId) S.hasPassed = true;
   const name = S.players[msg.passer_id]?.name || msg.passer_name;
@@ -317,6 +422,7 @@ function onDirectionSet(msg) {
 }
 
 function onReveal(msg) {
+  playSfx('reveal');
   S.phase = 'reveal';
   // Guardar dados revelados para mostrarlos en la mesa
   S.revealDice    = msg.all_dice || {};
@@ -372,6 +478,9 @@ function onReveal(msg) {
 
   log(resultText, resultClass);
 
+  if (resultClass === 'win') playSfx('win');
+  if (resultClass === 'lose') playSfx('lose');
+
   startRevealCountdown(7);
 }
 
@@ -405,6 +514,7 @@ function onGameOver(msg) {
   log(`═══ ${msg.winner_name} GANÓ ═══`, 'win');
 
   const isWinner = msg.winner_id === S.playerId;
+  playSfx(isWinner ? 'win' : 'lose');
   const overlay  = document.getElementById('game-over-overlay');
   document.getElementById('go-title').textContent  = isWinner ? '¡Ganaste!' : 'Fin de la partida';
   document.getElementById('go-winner').textContent = `${msg.winner_name} es el ganador`;
@@ -428,6 +538,7 @@ function closeGameOver() {
 }
 
 function onError(msg) {
+  playSfx('error');
   showToast(msg.message, true);
 }
 
@@ -734,22 +845,27 @@ function refreshBidInputUI() {
 
 // ══════════════════════════════════  ACTIONS  ════════════════════════════════
 function sendBid() {
+  playSfx('click');
   send({ type: 'bid', quantity: S.bidQty, face: S.bidFace });
 }
 
 function sendDirection(value) {
+  playSfx('click');
   send({ type: 'direction', value });
 }
 
 function sendPaso() {
+  playSfx('click');
   send({ type: 'paso' });
 }
 
 function sendDudo() {
+  playSfx('click');
   send({ type: 'dudo' });
 }
 
 function sendCalzo() {
+  playSfx('click');
   send({ type: 'calzo' });
 }
 
@@ -760,20 +876,24 @@ function joinRoom() {
   if (!name) { showToast('Ingresa tu nombre', true); return; }
   if (!room) { showToast('Ingresa el código de sala', true); return; }
   S.playerName = name;
+  playSfx('click');
   connect(room);
 }
 
 function toggleReady() {
   S.isReady = !S.isReady;
   document.getElementById('btn-ready').textContent = S.isReady ? 'Cancelar' : '¡Listo!';
+  playSfx('click');
   send({ type: 'ready' });
 }
 
 function startGame() {
+  playSfx('click');
   send({ type: 'start' });
 }
 
 function copyRoomCode() {
+  playSfx('click');
   navigator.clipboard.writeText(S.roomId)
     .then(() => showToast('Código copiado'))
     .catch(() => showToast(S.roomId));
@@ -880,3 +1000,10 @@ function playerColor(pid) {
 // ══════════════════════════════════  INIT  ════════════════════════════════════
 // Init bid UI on load
 refreshBidInputUI();
+updateSoundButton();
+window.toggleSound = toggleSound;
+
+// Desbloquea audio en la primera interacción del usuario (requisito del navegador).
+['pointerdown', 'keydown'].forEach(evt => {
+  window.addEventListener(evt, unlockAudio, { once: true });
+});

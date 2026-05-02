@@ -31,6 +31,47 @@ body {
   overflow: hidden;
 }
 
+.sound-toggle {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 80;
+  border: 1px solid rgba(232,184,109,0.28);
+  background: rgba(0,0,0,0.32);
+  color: var(--gold);
+  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.68;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  backdrop-filter: blur(4px);
+  transition: background 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s, transform 0.2s;
+}
+
+.sound-toggle:hover {
+  background: rgba(232,184,109,0.12);
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.sound-toggle.muted {
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.sound-toggle:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 /* ── Screens ── */
 .screen { display: none; width: 100%; height: 100vh; }
 .screen.active { display: flex; }
@@ -664,7 +705,6 @@ input[type="text"]::placeholder { color: var(--text-dim); }
   justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
-  justify-content: center;
 }
 
 /* ══════════════════════════════  DICE  ══════════════════════════════════ */
@@ -1120,6 +1160,14 @@ input[type="text"]::placeholder { color: var(--text-dim); }
 
 /* ══════════════════════════════  RESPONSIVE  ══════════════════════════════ */
 @media (max-width: 640px) {
+  .sound-toggle {
+    left: 10px;
+    bottom: 10px;
+    width: 34px;
+    height: 34px;
+    font-size: 0.9rem;
+  }
+
   /* Layout: tabla arriba, sidebar abajo */
   .game-layout {
     grid-template-columns: 1fr;
