@@ -361,6 +361,7 @@ input[type="text"]::placeholder { color: var(--text-dim); }
   align-items: center;
   gap: 8px;
   min-width: 100px;
+  overflow: visible;
   transition: border-color 0.3s, box-shadow 0.3s, transform 0.4s;
   backdrop-filter: blur(4px);
 }
@@ -383,6 +384,72 @@ input[type="text"]::placeholder { color: var(--text-dim); }
   color: var(--text-dim);
 }
 .player-card-dice { /* wrapper añadido por JS al dice-rows */ }
+
+/* ── Action badge (DUDO / CALZO) ── */
+.player-action-badge {
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  z-index: 10;
+  pointer-events: none;
+  animation: badgePop 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+@keyframes badgePop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.player-action-badge.action-dudo {
+  color: #fff;
+  background: var(--danger);
+  border-color: rgba(255,120,100,0.7);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  box-shadow: 0 0 10px rgba(192,57,43,0.6);
+}
+
+.player-action-badge.action-calzo {
+  color: #1a0e00;
+  background: var(--gold);
+  border-color: rgba(255,220,120,0.7);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  box-shadow: 0 0 10px rgba(232,184,109,0.65);
+}
+
+@keyframes actionCardPulseDudo {
+  0%, 100% { box-shadow: 0 0 20px rgba(192,57,43,0.55), 0 0 0 2px rgba(192,57,43,0.4); }
+  50%       { box-shadow: 0 0 48px rgba(192,57,43,1),    0 0 0 3px rgba(255,80,60,0.7); }
+}
+
+@keyframes actionCardPulseCalzo {
+  0%, 100% { box-shadow: 0 0 20px rgba(232,184,109,0.55), 0 0 0 2px rgba(232,184,109,0.4); }
+  50%       { box-shadow: 0 0 48px rgba(232,184,109,1),    0 0 0 3px rgba(255,220,100,0.7); }
+}
+
+.player-card.action-dudo {
+  border-color: var(--danger);
+  border-width: 2px;
+  animation: actionCardPulseDudo 1.2s ease-in-out infinite;
+  z-index: 6;
+}
+
+.player-card.action-calzo {
+  border-color: var(--gold);
+  border-width: 2px;
+  animation: actionCardPulseCalzo 1.2s ease-in-out infinite;
+  z-index: 6;
+}
 
 .dice-rows {
   display: flex;
@@ -779,6 +846,17 @@ input[type="text"]::placeholder { color: var(--text-dim); }
   align-items: center;
   justify-content: center;
   grid-area: 2 / 2 / 3 / 3;
+}
+
+/* die gained animation */
+@keyframes die-fly-in {
+  0%   { transform: scale(0.2) translateY(-80px) rotate(-50deg); opacity: 0; }
+  60%  { transform: scale(1.15) translateY(4px) rotate(5deg);   opacity: 1; }
+  100% { transform: scale(1) translateY(0) rotate(0deg);         opacity: 1; }
+}
+.die.die-gained {
+  animation: die-fly-in 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  box-shadow: 0 0 16px rgba(46,204,113,0.85), 0 0 32px rgba(46,204,113,0.4);
 }
 
 /* die lost animation */

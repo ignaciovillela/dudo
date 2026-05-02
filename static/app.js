@@ -113,6 +113,8 @@ const S = {
   totalDice:      0,
   revealDice:       {},    // pid → dice[] durante la fase de reveal
   revealBidFace:    null,  // cara apostada para resaltar coincidencias
+  lastActionPlayerId: null,
+  lastActionType:     null, // 'dudo' | 'calzo'
   direction:           1,   // 1 = horario, -1 = antihorario
   roundFirstPlayer:    '',
   hasFirstAction:      false,
@@ -317,6 +319,8 @@ function onGameStarted(msg) {
   S.hasPassed       = false;
   S.revealDice      = {};
   S.revealBidFace   = null;
+  S.lastActionPlayerId = null;
+  S.lastActionType = null;
   S.direction         = 1;
   S.roundFirstPlayer  = '';
   S.hasFirstAction    = false;
@@ -424,6 +428,13 @@ function onDirectionSet(msg) {
 function onReveal(msg) {
   playSfx('reveal');
   S.phase = 'reveal';
+  if (msg.action === 'dudo' || msg.action === 'calzo') {
+    S.lastActionPlayerId = msg.challenger_id || null;
+    S.lastActionType = msg.action;
+  } else {
+    S.lastActionPlayerId = null;
+    S.lastActionType = null;
+  }
   // Guardar dados revelados para mostrarlos en la mesa
   S.revealDice    = msg.all_dice || {};
   S.revealBidFace = (msg.action === 'paso') ? null : (msg.bid?.face ?? null);
@@ -438,6 +449,18 @@ function onReveal(msg) {
   showReveal(msg);
   // Animar pérdida de dado (con un breve delay para que el flip termine)
   if (msg.loser_id) setTimeout(() => animateDieLoss(msg.loser_id), 600);
+  // Actualizar conteo y animar dado recuperado (calzo exitoso)
+  if (msg.challenger_gained && msg.challenger_id) {
+    if (S.players[msg.challenger_id]) {
+      S.players[msg.challenger_id].dice_count += 1;
+      renderOtherPlayers();
+      if (msg.challenger_id === S.playerId) {
+        document.getElementById('my-count-disp').textContent =
+          '●'.repeat(S.players[S.playerId].dice_count);
+      }
+    }
+    setTimeout(() => animateDieGain(msg.challenger_id), 700);
+  }
 
   const bid = msg.bid || null;
   const face = bid?.face;
@@ -445,11 +468,21 @@ function onReveal(msg) {
 
   let resultText, resultClass;
   if (msg.action === 'paso') {
+    const gavilan = msg.is_gavilan;
     if (msg.paso_valid) {
-      resultText = `Paso válido. ${msg.challenger_name} pierde un dado.`;
+      if (gavilan) {
+        resultText = `Gavilán fallido: ${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso válido → ${msg.challenger_name} pierde un dado.`;
+      } else {
+        resultText = `${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso válido → ${msg.challenger_name} pierde un dado.`;
+      }
       resultClass = 'lose';
     } else {
-      resultText = `Paso inválido. ${msg.passer_name} pierde un dado.`;
+      const gainText = msg.challenger_gained ? ' ¡Recupera un dado!' : '';
+      if (gavilan) {
+        resultText = `¡Gavilán! ${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso inválido → ${msg.passer_name} pierde un dado.${gainText}`;
+      } else {
+        resultText = `${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso inválido → ${msg.passer_name} pierde un dado.`;
+      }
       resultClass = 'win';
     }
   } else if (isCalzo) {
@@ -457,18 +490,18 @@ function onReveal(msg) {
       const gainText = msg.challenger_gained
         ? `${msg.challenger_name} recupera un dado.`
         : 'La ronda se reinicia.';
-      resultText = `¡CALZO! Exactamente ${msg.actual_count} ${faceName(face)}. ${gainText}`;
+      resultText = `${msg.challenger_name} calzó. ¡Exactamente ${msg.actual_count} ${faceName(face)}! ${gainText}`;
       resultClass = 'win';
     } else {
-      resultText = `Calzo fallido. Había ${msg.actual_count}, no ${bid.quantity} ${faceName(face)}. ${msg.challenger_name} pierde un dado.`;
+      resultText = `${msg.challenger_name} calzó. Había ${msg.actual_count}, no ${bid.quantity} ${faceName(face)} → ${msg.challenger_name} pierde un dado.`;
       resultClass = 'lose';
     }
   } else {
     if (msg.bid_holds) {
-      resultText = `¡La apuesta se sostiene! Hay ${msg.actual_count} ${faceName(face)}. ${msg.challenger_name} pierde un dado.`;
+      resultText = `${msg.challenger_name} dudó. ¡La apuesta se sostiene! Hay ${msg.actual_count} ${faceName(face)} → ${msg.challenger_name} pierde un dado.`;
       resultClass = 'lose';
     } else {
-      resultText = `¡DUDO! Solo hay ${msg.actual_count} ${faceName(face)}. ${S.players[bid.player_id]?.name || bid.player_name} pierde un dado.`;
+      resultText = `${msg.challenger_name} dudó. Solo hay ${msg.actual_count} ${faceName(face)} → ${S.players[bid.player_id]?.name || bid.player_name} pierde un dado.`;
       resultClass = 'win';
     }
   }
@@ -491,6 +524,8 @@ function onNewRound(msg) {
   S.hasPassed        = false;
   S.revealDice       = {};
   S.revealBidFace    = null;
+  S.lastActionPlayerId = null;
+  S.lastActionType = null;
   S.direction          = 1;
   S.roundFirstPlayer   = '';
   S.hasFirstAction     = false;
@@ -567,6 +602,23 @@ function animateDieLoss(pid) {
   target.classList.add('die-lost');
 }
 
+function animateDieGain(pid) {
+  let diceRow;
+  if (pid === S.playerId) {
+    diceRow = document.getElementById('my-dice-row');
+  } else {
+    const card = document.querySelector(`.player-card[data-pid="${pid}"]`);
+    diceRow = card?.querySelector('.player-card-dice');
+  }
+  if (!diceRow) return;
+  const dice = Array.from(diceRow.querySelectorAll('.die'));
+  if (!dice.length) return;
+  // Animar el último dado (el recién recuperado)
+  const target = dice[dice.length - 1];
+  target.classList.add('die-gained');
+  target.addEventListener('animationend', () => target.classList.remove('die-gained'), { once: true });
+}
+
 let countdownTimer = null;
 function startRevealCountdown(seconds) {
   if (countdownTimer) clearInterval(countdownTimer);
@@ -625,8 +677,10 @@ function renderOtherPlayers() {
     if (!p) continue;
 
     const card = document.createElement('div');
+    const actionType = pid === S.lastActionPlayerId ? S.lastActionType : null;
     card.className = 'player-card' +
       (pid === S.currentPid ? ' active-player' : '') +
+      (actionType ? ` action-actor action-${actionType}` : '') +
       (p.dice_count <= 0 ? ' eliminated' : '');
     card.dataset.pid = pid;
 
@@ -637,6 +691,12 @@ function renderOtherPlayers() {
     const countEl = document.createElement('div');
     countEl.className = 'player-card-count';
     countEl.textContent = p.dice_count > 0 ? `${p.dice_count} dado${p.dice_count !== 1 ? 's' : ''}` : 'Eliminado';
+
+    const actionBadge = actionType ? document.createElement('div') : null;
+    if (actionBadge) {
+      actionBadge.className = `player-action-badge action-${actionType}`;
+      actionBadge.textContent = actionType === 'dudo' ? '🎲 ¡DUDO!' : '🔒 ¡CALZO!';
+    }
 
     const revealedDice = S.phase === 'reveal' ? S.revealDice[pid] : null;
     const diceRow = revealedDice
@@ -654,6 +714,7 @@ function renderOtherPlayers() {
     card.appendChild(nameEl);
     card.appendChild(countEl);
     card.appendChild(diceRow);
+    if (actionBadge) card.appendChild(actionBadge);
     container.appendChild(card);
   }
 

@@ -200,8 +200,18 @@ class GameManager:
                 return await self._send(room_id, player_id,
                                         {"type": "error", "message": "No puedes dudar tu propio paso"})
 
+            was_current = game.current_player_id() == player_id
             paso_valid = game.is_valid_paso(paso["player_id"])
             loser_id = player_id if paso_valid else paso["player_id"]
+            is_gavilan = not was_current
+
+            # Gavilán correcto: solo recupera dado si NO es el jugador en turno (gavilán real)
+            challenger_gained = False
+            if not paso_valid and is_gavilan:
+                p = game.players[player_id]
+                if p.dice_count < 5:
+                    p.dice_count += 1
+                    challenger_gained = True
 
             await self._broadcast(room_id, {
                 "type": "reveal",
@@ -211,7 +221,9 @@ class GameManager:
                 "passer_id": paso["player_id"],
                 "passer_name": paso["player_name"],
                 "paso_valid": paso_valid,
+                "is_gavilan": is_gavilan,
                 "loser_id": loser_id,
+                "challenger_gained": challenger_gained,
                 "all_dice": game.all_dice_reveal(),
             })
             await self._apply_loss(room_id, game, loser_id)
