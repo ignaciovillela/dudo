@@ -33,6 +33,10 @@
   <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
 </button>
 
+<button id="btn-notif" class="notif-toggle" type="button" onclick="openNotificationModal()" aria-label="Activar notificaciones de turno" title="Activar notificaciones" style="display:none">
+  <i class="fa-regular fa-bell" aria-hidden="true"></i>
+</button>
+
 <!-- ═══════════════════════════════  LOBBY  ══════════════════════════════ -->
 <div id="lobby-screen" class="screen active">
   <div class="lobby-decor" aria-hidden="true">
@@ -280,6 +284,18 @@
       <tbody id="stats-table-body"></tbody>
     </table>
     <button class="btn btn-gold" type="button" onclick="closeStatsModal()">Cerrar</button>
+  </div>
+</div>
+
+<div id="notif-modal" class="stats-modal" style="display:none">
+  <div class="stats-box notif-box">
+    <h2><i class="fa-regular fa-bell" aria-hidden="true"></i> Notificaciones de turno</h2>
+    <p>Podemos avisarte cuando sea tu turno, incluso si tienes otra pestaña abierta.</p>
+    <p>Solo usamos esta notificación para no frenar la partida.</p>
+    <div class="lobby-actions">
+      <button class="btn btn-gold" type="button" onclick="acceptNotificationPrompt()">Activar</button>
+      <button class="btn btn-sm" type="button" onclick="rejectNotificationPrompt()">Ahora no</button>
+    </div>
   </div>
 </div>
 

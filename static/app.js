@@ -239,13 +239,76 @@ let notificationPrompted = false;
 let turnCountdownTimer = null;
 let turnCountdownDeadline = 0;
 
-function requestTurnNotificationPermission() {
+const NOTIF_PREF_STORAGE_KEY = 'dudoNotifPref';
+
+function loadNotificationPref() {
+  try { return localStorage.getItem(NOTIF_PREF_STORAGE_KEY) || ''; } catch (_) { return ''; }
+}
+
+function saveNotificationPref(value) {
+  try { localStorage.setItem(NOTIF_PREF_STORAGE_KEY, value); } catch (_) {}
+}
+
+async function requestTurnNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try {
+      await Notification.requestPermission();
+    } catch (_) {}
+  }
+  updateNotificationButton();
+}
+
+function updateNotificationButton() {
+  const btn = document.getElementById('btn-notif');
+  if (!btn) return;
+  if (!('Notification' in window)) {
+    btn.style.display = 'none';
+    return;
+  }
+  const pref = loadNotificationPref();
+  const show = Notification.permission !== 'granted' && (pref === 'rejected' || Notification.permission === 'denied');
+  btn.style.display = show ? 'inline-flex' : 'none';
+}
+
+function openNotificationModal() {
+  if (!('Notification' in window)) return;
+  const modal = document.getElementById('notif-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeNotificationModal() {
+  const modal = document.getElementById('notif-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function acceptNotificationPrompt() {
+  saveNotificationPref('accepted');
+  closeNotificationModal();
+  requestTurnNotificationPermission();
+}
+
+function rejectNotificationPrompt() {
+  saveNotificationPref('rejected');
+  closeNotificationModal();
+  updateNotificationButton();
+}
+
+function maybeShowNotificationIntro() {
   if (notificationPrompted) return;
   notificationPrompted = true;
   if (!('Notification' in window)) return;
-  if (Notification.permission === 'default') {
-    Notification.requestPermission().catch(() => {});
+  if (Notification.permission === 'granted') return;
+  const pref = loadNotificationPref();
+  if (pref === 'accepted') {
+    requestTurnNotificationPermission();
+    return;
   }
+  if (pref === 'rejected') {
+    updateNotificationButton();
+    return;
+  }
+  openNotificationModal();
 }
 
 function startTurnTitleBlink() {
@@ -556,6 +619,7 @@ function updateSoundButton() {
   const label = AudioState.muted ? 'Activar sonido' : 'Silenciar sonido';
   btn.title = label;
   btn.setAttribute('aria-label', label);
+  updateNotificationButton();
 }
 
 function toggleSound() {
@@ -1922,6 +1986,9 @@ window.toggleSound = toggleSound;
 window.onHostRulesChanged = onHostRulesChanged;
 window.openStatsModal = openStatsModal;
 window.closeStatsModal = closeStatsModal;
+window.openNotificationModal = openNotificationModal;
+window.acceptNotificationPrompt = acceptNotificationPrompt;
+window.rejectNotificationPrompt = rejectNotificationPrompt;
 
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (function () {
@@ -1972,7 +2039,7 @@ window.closeStatsModal = closeStatsModal;
 // Desbloquea audio en la primera interacción del usuario (requisito del navegador).
 ['pointerdown', 'keydown'].forEach(evt => {
   window.addEventListener(evt, unlockAudio, { once: true });
-  window.addEventListener(evt, requestTurnNotificationPermission, { once: true });
+  window.addEventListener(evt, maybeShowNotificationIntro, { once: true });
 });
 
 document.addEventListener('visibilitychange', () => {
