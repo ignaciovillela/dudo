@@ -1,10 +1,11 @@
 import asyncio
 import json
 import random
+import time
 
 from fastapi import WebSocket
 
-from game.config import MAX_PLAYERS, REVEAL_SECONDS
+from game.config import MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 
@@ -14,6 +15,7 @@ class GameManager:
         self.games: dict[str, Game] = {}
         self.connections: dict[str, dict[str, WebSocket]] = {}
         self.hosts: dict[str, str] = {}
+        self.last_message_at: dict[str, float] = {}
 
     # ------------------------------------------------------------------ connect
 
@@ -29,6 +31,7 @@ class GameManager:
 
     async def disconnect(self, room_id: str, player_id: str):
         self.connections.get(room_id, {}).pop(player_id, None)
+        self.last_message_at.pop(player_id, None)
         game = self.games.get(room_id)
 
         # Liberar sala si no quedan conexiones activas
@@ -78,6 +81,9 @@ class GameManager:
         game = self.games.get(room_id)
         if not game:
             return
+        msg_type = msg.get("type")
+        if msg_type not in {"join", "connected"} and not self._allow_message(player_id):
+            return
         handlers = {
             "join":      self._h_join,
             "ready":     self._h_ready,
@@ -89,9 +95,20 @@ class GameManager:
             "dudo":      self._h_dudo,
             "calzo":     self._h_calzo,
         }
-        handler = handlers.get(msg.get("type"))
+        handler = handlers.get(msg_type)
         if handler:
             await handler(room_id, player_id, game, msg)
+
+    def _allow_message(self, player_id: str) -> bool:
+        if RATE_LIMIT_MS <= 0:
+            return True
+        now = time.monotonic()
+        min_interval = RATE_LIMIT_MS / 1000
+        last = self.last_message_at.get(player_id)
+        if last is not None and (now - last) < min_interval:
+            return False
+        self.last_message_at[player_id] = now
+        return True
 
     # ------------------------------------------------------------------ handlers
 

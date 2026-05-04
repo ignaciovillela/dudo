@@ -18,13 +18,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ## 🔴 Alta prioridad
 
-### 3. Rate limiting de mensajes WS
-**Por qué:** un cliente malicioso o buggy podría saturar el servidor.
-- En `GameManager`, mantener un `dict[str, float]` con el timestamp del último mensaje por `player_id`.
-- Rechazar silenciosamente mensajes si llegan más de 1 por 200 ms (configurable via env var).
-- Excepción: mensajes `join` y `connected` no tienen límite.
-
-
 ## 🟡 Prioridad media
 
 ### 5. Avatar de jugador (emoji)
@@ -95,7 +88,6 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Impacto |
 |---|--------|-------------------|------------|---------|
-| 3 | Rate limiting | `manager.py` | ⭐⭐ | 🔥🔥 |
 | 5 | Avatar de jugador | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥🔥 |
 | 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |
 | 7 | Límite de tiempo por turno | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐⭐ | 🔥🔥 |
