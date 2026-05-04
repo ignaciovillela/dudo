@@ -11,6 +11,9 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 - Reconexion de jugadores en partidas en curso usando `reconnect_id`, con recuperacion de estado y dados al volver.
 - Persistencia de sesion en frontend (`room`, `name`, `playerId`) y pre-relleno automatico del formulario de lobby.
 - Guardado del nombre del jugador en tiempo real mientras se escribe.
+- Soporte de URL compartible de sala (`?sala=codigo`) con pre-relleno automatico al abrir el lobby.
+- Boton `Copiar` del lobby actualizado para copiar el enlace completo de invitacion (`origin + ?sala=codigo`).
+- Reconexion automatica del WebSocket con backoff (1s, 2s, 4s, 8s, 16s) y banner de estado durante reintentos.
 - Reglas de sala configurables desde lobby:
   - modo de resultado (`winner` o `loser`)
   - habilitar/deshabilitar Gavilan
@@ -24,6 +27,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 
 ### Changed
 - Flujo de estado de partida en backend para incluir reglas en eventos clave (`joined`, `game_started`, `game_over`).
+- Transferencia automatica de anfitrion al desconectarse el host, promoviendo al siguiente jugador conectado y notificando `host_changed`.
 - Al actualizar reglas en lobby, se reinicia el estado `ready` de todos los jugadores para evitar inicios con configuracion desincronizada.
 - Se reforzo la resolucion de desafios (`dudo`/`calzo`) y el anuncio de turno con metadatos de accion activa y direccion.
 - Documento de reglas (`REGLAS.md`) ampliado para cubrir personalizacion de sala, sentido de ronda y casos de desafio.
