@@ -20,15 +20,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ## 🟡 Prioridad media
 
-### 9. Animación de revelación mejorada
-**Propuesta concreta (reutiliza infraestructura existente):**
-- Flip de dados uno por uno con delay escalonado (la clase `revealed` + `flip-in` ya existe, solo orquestar delays).
-- Dados con `.match` añaden un segundo keyframe `bounce-match` (rebote dorado).
-- El dado perdido usa `animateDieCup exit` con filtro rojo progresivo en los frames finales.
-- El contador numérico en la carta del perdedor cae animado al actualizarse.
-
----
-
 ### 10. Sonidos adicionales
 **Por qué:** los tonos sintéticos actuales son funcionales pero no temáticos.
 - Añadir a `SFX` usando Web Audio API (ya instanciada):
@@ -45,5 +36,4 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Impacto |
 |---|--------|-------------------|------------|---------|
-| 9 | Animación revelación | `app.js`, `style.css` | ⭐⭐ | 🔥 |
 | 10 | Sonidos adicionales | `app.js` | ⭐⭐ | 🔥 |

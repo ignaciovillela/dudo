@@ -156,10 +156,10 @@ function animateDieCup(pid, type) {
   if (type === 'exit') {
     die.style.boxShadow = '0 0 14px rgba(192,57,43,0.85), 0 0 28px rgba(192,57,43,0.4)';
     keyframes = [
-      { transform: 'translate(-50%, -50%) scale(0.55) rotate(0deg)',                                      opacity: 0.5, offset: 0    },
-      { transform: `translate(calc(-50% + ${tx*0.18}px), calc(-50% + ${ty*0.18}px)) scale(1.15) rotate(-12deg)`, opacity: 1,   offset: 0.18 },
-      { transform: `translate(calc(-50% + ${tx*0.6}px),  calc(-50% + ${ty*0.6}px))  scale(0.7)  rotate(28deg)`,  opacity: 0.7, offset: 0.6  },
-      { transform: `translate(calc(-50% + ${tx}px),      calc(-50% + ${ty}px))       scale(0.05) rotate(65deg)`,  opacity: 0,   offset: 1    },
+      { transform: 'translate(-50%, -50%) scale(0.55) rotate(0deg)',                                      opacity: 0.5, filter: 'hue-rotate(0deg) saturate(1)', offset: 0    },
+      { transform: `translate(calc(-50% + ${tx*0.18}px), calc(-50% + ${ty*0.18}px)) scale(1.15) rotate(-12deg)`, opacity: 1,   filter: 'hue-rotate(-10deg) saturate(1.2)', offset: 0.18 },
+      { transform: `translate(calc(-50% + ${tx*0.6}px),  calc(-50% + ${ty*0.6}px))  scale(0.7)  rotate(28deg)`,  opacity: 0.7, filter: 'hue-rotate(-35deg) saturate(1.6)', offset: 0.6  },
+      { transform: `translate(calc(-50% + ${tx}px),      calc(-50% + ${ty}px))       scale(0.05) rotate(65deg)`,  opacity: 0,   filter: 'hue-rotate(-55deg) saturate(2)', offset: 1    },
     ];
     options = { duration: 1320, easing: 'cubic-bezier(0.4, 0, 0.7, 1)', fill: 'forwards' };
   } else {
@@ -210,6 +210,7 @@ const S = {
   direction:           1,   // 1 = horario, -1 = antihorario
   roundFirstPlayer:    '',
   hasFirstAction:      false,
+  lastLossPlayerId:    null,
   pendingStats: {
     dudoOk: 0,
     dudoFail: 0,
@@ -809,6 +810,7 @@ function onGameStarted(msg) {
   S.direction         = 1;
   S.roundFirstPlayer  = '';
   S.hasFirstAction    = false;
+  S.lastLossPlayerId = null;
   S.pendingStats = { dudoOk: 0, dudoFail: 0, calzoOk: 0, calzoFail: 0 };
   showScreen('game');
   applySpectatorMode();
@@ -938,6 +940,7 @@ function onReveal(msg) {
   playSfx('reveal');
   stopTurnCountdown();
   S.phase = 'reveal';
+  S.lastLossPlayerId = msg.loser_id || null;
   if (msg.action === 'dudo' || msg.action === 'calzo') {
     S.lastActionPlayerId = msg.challenger_id || null;
     S.lastActionType = msg.action;
@@ -959,6 +962,10 @@ function onReveal(msg) {
   showReveal(msg);
   // Animar dado saliendo del cacho (pérdida)
   if (msg.loser_id) setTimeout(() => animateDieCup(msg.loser_id, 'exit'), 400);
+  if (msg.loser_id && S.players[msg.loser_id]) {
+    S.players[msg.loser_id].dice_count = Math.max(0, (S.players[msg.loser_id].dice_count || 0) - 1);
+    renderOtherPlayers();
+  }
   // Actualizar conteo y animar dado entrando al cacho (recuperación)
   if (msg.challenger_gained && msg.challenger_id) {
     if (S.players[msg.challenger_id]) {
@@ -1052,6 +1059,7 @@ function onNewRound(msg) {
   S.direction          = 1;
   S.roundFirstPlayer   = '';
   S.hasFirstAction     = false;
+  S.lastLossPlayerId   = null;
   S.phase              = 'playing';
   hideReveal();
   updateDirectionIndicator();
@@ -1274,6 +1282,10 @@ function renderOtherPlayers() {
     nameEl.className = 'player-card-name';
     nameEl.textContent = `${p.avatar || '🎲'} ${p.name}`;
 
+    const countEl = document.createElement('div');
+    countEl.className = 'player-card-count' + (pid === S.lastLossPlayerId ? ' count-drop' : '');
+    countEl.textContent = `Dados: ${p.dice_count || 0}`;
+
     const actionBadge = actionType ? document.createElement('div') : null;
     if (actionBadge) {
       actionBadge.className = `player-action-badge action-${actionType}`;
@@ -1294,6 +1306,7 @@ function renderOtherPlayers() {
     }
 
     card.appendChild(nameEl);
+    card.appendChild(countEl);
     card.appendChild(diceRow);
     if (actionBadge) card.appendChild(actionBadge);
     container.appendChild(card);
