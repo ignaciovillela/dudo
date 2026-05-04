@@ -5,6 +5,17 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.1] - 2026-05-04
+
+### Added
+- Nuevo modulo `game/config.py` para centralizar configuraciones por entorno (`REVEAL_SECONDS`, `MAX_PLAYERS`, `RATE_LIMIT_MS`).
+
+### Changed
+- `game/manager.py` ahora usa `MAX_PLAYERS` para validar cupo de sala y `REVEAL_SECONDS` para la espera entre rondas.
+
+### Docs
+- `README.md` documenta las variables de entorno disponibles y sus valores por defecto.
+
 ## [0.3.0] - 2026-05-04
 
 ### Added

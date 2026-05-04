@@ -4,6 +4,7 @@ import random
 
 from fastapi import WebSocket
 
+from game.config import MAX_PLAYERS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 
@@ -140,9 +141,9 @@ class GameManager:
         if game.phase != "lobby":
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Partida en curso"})
-        if len(game.players) >= 6:
+        if len(game.players) >= MAX_PLAYERS:
             return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "Sala llena (máx. 6)"})
+                                    {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
 
         name = (msg.get("name") or f"Jugador {len(game.players) + 1}").strip()[:20]
         player = Player(id=player_id, name=name)
@@ -460,7 +461,7 @@ class GameManager:
 
     async def _new_round(self, room_id: str, game: Game, first_player_id: str):
         game.phase = "reveal"
-        await asyncio.sleep(7)
+        await asyncio.sleep(REVEAL_SECONDS)
 
         game.phase = "playing"
         game.round_number += 1

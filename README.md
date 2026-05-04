@@ -19,6 +19,12 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+## Variables de entorno
+
+- `REVEAL_SECONDS` (default: `7`): segundos de la fase de reveal entre rondas.
+- `MAX_PLAYERS` (default: `6`): cantidad máxima de jugadores por sala.
+- `RATE_LIMIT_MS` (default: `200`): ventana para rate limiting de mensajes WS (reservado para backend).
+
 Luego abre `http://localhost:8000` en el navegador.
 
 ## Cómo jugar

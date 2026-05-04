@@ -40,17 +40,6 @@ Referencia completa en `CHANGELOG.md`.
 - Excepción: mensajes `join` y `connected` no tienen límite.
 
 
-### 4. Variables de entorno
-**Por qué:** valores como `MAX_PLAYERS`, `REVEAL_SECONDS`, `RATE_LIMIT_MS` están hardcodeados.
-- Crear `config.py` con valores leídos de `os.environ`:
-    - `REVEAL_SECONDS = int(os.getenv("REVEAL_SECONDS", 7))`
-    - `MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", 6))`
-    - `RATE_LIMIT_MS = int(os.getenv("RATE_LIMIT_MS", 200))`
-- Referenciar desde `manager.py` y eliminar literales hardcodeados.
-- Documentar en `README.md`.
-
----
-
 ## 🟡 Prioridad media
 
 ### 5. Avatar de jugador (emoji)
@@ -124,7 +113,6 @@ Referencia completa en `CHANGELOG.md`.
 | 1 | Reconexión en lobby | `manager.py`, `app.js` | ⭐⭐ | 🔥🔥 |
 | 2 | Notificación de turno | `app.js` | ⭐ | 🔥🔥 |
 | 3 | Rate limiting | `manager.py` | ⭐⭐ | 🔥🔥 |
-| 4 | Variables de entorno | `config.py`, `manager.py` | ⭐ | 🔥 |
 | 5 | Avatar de jugador | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥🔥 |
 | 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |
 | 7 | Límite de tiempo por turno | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐⭐ | 🔥🔥 |
