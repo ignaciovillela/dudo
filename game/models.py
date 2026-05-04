@@ -41,6 +41,42 @@ class Bid:
 
 
 @dataclass
+class RuleConfig:
+    elimination_mode: str = "winner"  # winner | loser
+    allow_gavilan: bool = True
+    calzo_recovers_on_turn: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "elimination_mode": self.elimination_mode,
+            "allow_gavilan": self.allow_gavilan,
+            "calzo_recovers_on_turn": self.calzo_recovers_on_turn,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: Optional[dict], current: Optional["RuleConfig"] = None) -> "RuleConfig":
+        base = current or cls()
+        if not isinstance(payload, dict):
+            return cls(
+                elimination_mode=base.elimination_mode,
+                allow_gavilan=base.allow_gavilan,
+                calzo_recovers_on_turn=base.calzo_recovers_on_turn,
+            )
+
+        elimination_mode = payload.get("elimination_mode", base.elimination_mode)
+        if elimination_mode not in {"winner", "loser"}:
+            elimination_mode = base.elimination_mode
+
+        return cls(
+            elimination_mode=elimination_mode,
+            allow_gavilan=bool(payload.get("allow_gavilan", base.allow_gavilan)),
+            calzo_recovers_on_turn=bool(
+                payload.get("calzo_recovers_on_turn", base.calzo_recovers_on_turn)
+            ),
+        )
+
+
+@dataclass
 class Game:
     room_id: str
     players: dict = field(default_factory=dict)
@@ -54,6 +90,7 @@ class Game:
     passed_players: set = field(default_factory=set)  # jugadores que ya pasaron esta ronda
     direction: int = 1              # 1 = horario, -1 = antihorario
     round_first_player: str = ""    # jugador que inicia la ronda (puede cambiar sentido)
+    rules: RuleConfig = field(default_factory=RuleConfig)
 
     def active_players(self) -> list[str]:
         return [

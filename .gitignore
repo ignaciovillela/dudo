@@ -81,6 +81,8 @@ htmlcov/
 
 # =========================
 
+node_modules/
+
 build/
 dist/
 *.egg-info/

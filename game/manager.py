@@ -4,7 +4,8 @@ import random
 
 from fastapi import WebSocket
 
-from game.models import Bid, Game, Player
+from game.models import Bid, Game, Player, RuleConfig
+from game.rules import RuleEngine
 
 
 class GameManager:
@@ -45,9 +46,9 @@ class GameManager:
         })
 
         if game.phase == "playing":
-            winner = game.get_winner()
-            if winner:
-                await self._end_game(room_id, game, winner)
+            outcome = self._rules_engine(game).resolve_outcome(game, player_id)
+            if outcome:
+                await self._end_game(room_id, game, outcome)
 
     # ------------------------------------------------------------------ dispatch
 
@@ -59,6 +60,7 @@ class GameManager:
             "join":      self._h_join,
             "ready":     self._h_ready,
             "start":     self._h_start,
+            "set_rules": self._h_set_rules,
             "direction": self._h_direction,
             "bid":       self._h_bid,
             "paso":      self._h_paso,
@@ -90,6 +92,7 @@ class GameManager:
             "is_host": game.player_order[0] == player_id,
             "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
             "player_order": game.player_order,
+            "rules": game.rules.to_dict(),
         })
         await self._broadcast_except(room_id, player_id, {
             "type": "player_joined",
@@ -113,6 +116,29 @@ class GameManager:
         connected = [p for p in game.players.values() if p.connected]
         if is_host and len(connected) >= 2:
             await self._begin_game(room_id, game)
+
+    async def _h_set_rules(self, room_id, player_id, game, msg):
+        if game.phase != "lobby":
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Solo puedes cambiar reglas en el lobby"})
+        is_host = bool(game.player_order) and game.player_order[0] == player_id
+        if not is_host:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Solo el anfitrión puede cambiar reglas"})
+
+        if game.players.get(player_id) and game.players[player_id].ready:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Cancela tu listo antes de cambiar reglas"})
+
+        game.rules = RuleConfig.from_payload(msg.get("rules"), game.rules)
+        # Resetear estado "listo" de todos al cambiar reglas
+        for player in game.players.values():
+            player.ready = False
+        await self._broadcast(room_id, {
+            "type": "rules_updated",
+            "rules": game.rules.to_dict(),
+            "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
+        })
 
     async def _h_direction(self, room_id, player_id, game, msg):
         """Solo el primer jugador de la ronda puede cambiar sentido, y solo antes de su primera acción."""
@@ -191,16 +217,21 @@ class GameManager:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Estás eliminado"})
 
+        was_current = game.current_player_id() == player_id
+        if not was_current and not self._rules_engine(game).allow_gavilan():
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Gavilán está desactivado en esta sala"})
+
         # ── Dudo sobre un paso activo ──────────────────────────────────────────
         if game.last_paso is not None:
             paso = game.last_paso
             game.last_paso = None  # evitar doble dudo simultáneo
 
             if paso["player_id"] == player_id:
+                game.last_paso = paso
                 return await self._send(room_id, player_id,
                                         {"type": "error", "message": "No puedes dudar tu propio paso"})
 
-            was_current = game.current_player_id() == player_id
             paso_valid = game.is_valid_paso(paso["player_id"])
             loser_id = player_id if paso_valid else paso["player_id"]
             is_gavilan = not was_current
@@ -272,6 +303,10 @@ class GameManager:
                                     {"type": "error", "message": "No hay apuesta"})
 
         was_current = game.current_player_id() == player_id
+        if not was_current and not self._rules_engine(game).allow_gavilan():
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Gavilán está desactivado en esta sala"})
+
         bid = game.current_bid
         game.current_bid = None  # evitar doble calzo simultánea
 
@@ -282,9 +317,10 @@ class GameManager:
         actual = game.count_dice(bid.face)
         exact = actual == bid.quantity
 
-        # Si el calzo es exitosa y quien calza NO es el jugador en turno, recupera un dado
+        # Recuperación de dado definida por plugin de reglas.
         challenger_gained = False
-        if exact and not was_current:
+        can_recover_on_turn = self._rules_engine(game).calzo_recovers_on_turn()
+        if exact and (not was_current or can_recover_on_turn):
             p = game.players[player_id]
             if p.dice_count < 5:
                 p.dice_count += 1
@@ -330,6 +366,7 @@ class GameManager:
         await self._broadcast(room_id, {
             "type": "game_started",
             "player_order": game.player_order,
+            "rules": game.rules.to_dict(),
         })
         await self._send_dice(room_id, game)
         await self._announce_turn(room_id, game)
@@ -345,9 +382,9 @@ class GameManager:
                 "player_name": game.players[loser_id].name,
             })
 
-        winner = game.get_winner()
-        if winner:
-            return await self._end_game(room_id, game, winner)
+        outcome = self._rules_engine(game).resolve_outcome(game, loser_id)
+        if outcome:
+            return await self._end_game(room_id, game, outcome)
 
         active = game.active_players()
         next_first = loser_id if game.players[loser_id].dice_count > 0 else active[0]
@@ -375,14 +412,14 @@ class GameManager:
         await self._send_dice(room_id, game)
         await self._announce_turn(room_id, game)
 
-    async def _end_game(self, room_id: str, game: Game, winner_id: str):
+    async def _end_game(self, room_id: str, game: Game, outcome):
         game.phase = "lobby"
-        winner = game.players.get(winner_id)
-        await self._broadcast(room_id, {
-            "type": "game_over",
-            "winner_id": winner_id,
-            "winner_name": winner.name if winner else "?",
-        })
+        payload = {"type": "game_over", "result_mode": outcome.kind, "rules": game.rules.to_dict()}
+        if outcome.kind == "winner":
+            payload.update({"winner_id": outcome.player_id, "winner_name": outcome.player_name})
+        else:
+            payload.update({"loser_id": outcome.player_id, "loser_name": outcome.player_name})
+        await self._broadcast(room_id, payload)
         for player in game.players.values():
             player.ready = False
             player.dice = []
@@ -390,6 +427,9 @@ class GameManager:
         game.current_bid = None
         game.bid_history = []
         game.round_number = 0
+
+    def _rules_engine(self, game: Game) -> RuleEngine:
+        return RuleEngine.from_config(game.rules)
 
     async def _send_dice(self, room_id: str, game: Game):
         for pid, player in game.players.items():

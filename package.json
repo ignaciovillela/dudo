@@ -1,0 +1,12 @@
+{
+  "name": "dudo-og-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "og:cover": "node scripts/generate-og-cover.mjs"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  }
+}
+

@@ -26,3 +26,13 @@ Luego abre `http://localhost:8000` en el navegador.
 Cada jugador se une a una sala compartida. El objetivo es ser el último con dados. Las reglas completas están en [REGLAS.md](REGLAS.md).
 
 Acciones disponibles por turno: **Apostar**, **Pasar**, **Dudar** o **Calzar**.
+
+## Generar OG cover PNG
+
+El archivo `static/og-cover.png` se puede regenerar desde `static/og-cover.svg` con `@resvg/resvg-js`.
+
+```bash
+npm install
+npm run og:cover
+```
+

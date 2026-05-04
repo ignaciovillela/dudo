@@ -4,6 +4,8 @@
 
 Ser el último jugador con dados. Cada jugador comienza con **5 dados**.
 
+> El anfitrión puede personalizar reglas de la sala antes de iniciar.
+
 ---
 
 ## Conceptos base
@@ -25,6 +27,15 @@ Ser el último jugador con dados. Cada jugador comienza con **5 dados**.
 ---
 
 ## Estructura del juego
+
+### Reglas configurables por sala (anfitrión)
+
+- **Modo ganador (`winner`)**: gana el último jugador con dados (modo clásico).
+- **Modo perdedor (`loser`)**: la partida termina cuando aparece el primer eliminado; ese jugador queda como perdedor.
+- **Permitir Gavilán**: habilita o deshabilita **dudar o calzar** fuera de turno.
+- **Calzo recupera en mi turno**: si está activo, un calzo correcto recupera dado incluso si quien calza era el jugador en turno.
+
+Las reglas se fijan en lobby y aplican a toda la partida.
 
 ### Inicio
 
@@ -190,11 +201,11 @@ Se declara que la cantidad es exacta.
 
 | Resultado | Consecuencia |
 |----------|-------------|
-| Exacto | El calzador no pierde dado. Si no era su turno, recupera 1 dado (máx. 5) |
+| Exacto | El calzador no pierde dado. Recuperación de dado según regla de sala (fuera de turno o también en turno, máx. 5) |
 | No exacto | El calzador pierde 1 dado |
 
 - El apostador nunca pierde dados en un calzo.
-- El jugador en turno no recupera dados.
+- Si la regla de sala no lo permite, el jugador en turno no recupera dados.
 
 ---
 
@@ -213,12 +224,15 @@ Se declara que la cantidad es exacta.
 
 ---
 
-## Eliminación y victoria
+## Eliminación y victoria / derrota
 
 - Un jugador queda eliminado al llegar a 0 dados.
 - No puede volver a participar en la partida (no puede apostar, pasar ni desafiar).
 
-El juego termina cuando queda un solo jugador con dados.
+Según la regla configurada:
+
+- **winner**: el juego termina cuando queda un solo jugador con dados.
+- **loser**: el juego termina cuando aparece el primer jugador con 0 dados.
 
 Al finalizar:
 - Se muestran los resultados de la última ronda antes de declarar al ganador.
@@ -233,6 +247,7 @@ Al finalizar:
 - Solo la acción activa puede ser desafiada.
 - Cada jugador puede pasar una sola vez por ronda.
 - Los desafíos tienen prioridad sobre cualquier otra acción.
-- El Dudo no otorga dados al dudador (solo el Calzo exitoso fuera de turno otorga dados).
+- El Dudo no otorga dados al dudador.
+- El Calzo exitoso recupera dado según la regla de sala (solo fuera de turno, o también en turno).
 - El sentido de la ronda es bloqueado tras la primera acción del primer jugador.
 - Los jugadores eliminados siguen conectados pero no pueden actuar.

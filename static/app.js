@@ -187,6 +187,7 @@ const S = {
   roomId:         '',
   isHost:         false,
   isReady:        false,
+  rules:          null,
 
   // Game
   phase:          'lobby',
@@ -210,6 +211,12 @@ const S = {
   // UI bid inputs
   bidQty:         1,
   bidFace:        2,
+};
+
+const DEFAULT_RULES = {
+  elimination_mode: 'winner',
+  allow_gavilan: true,
+  calzo_recovers_on_turn: false,
 };
 
 // ══════════════════════════════════  SOUND  ═══════════════════════════════════
@@ -338,6 +345,7 @@ function handleMsg(msg) {
     player_joined:      onPlayerJoined,
     player_ready:       onPlayerReady,
     player_disconnected:onPlayerDisc,
+    rules_updated:       onRulesUpdated,
     game_started:       onGameStarted,
     your_dice:          onYourDice,
     turn:               onTurn,
@@ -365,6 +373,7 @@ function onJoined(msg) {
   S.isHost      = msg.is_host;
   S.players     = msg.players;
   S.playerOrder = msg.player_order;
+  S.rules       = normalizeRules(msg.rules);
 
   document.getElementById('disp-room-code').textContent = S.roomId;
   document.getElementById('lobby-form').style.display = 'none';
@@ -374,8 +383,24 @@ function onJoined(msg) {
 
   if (S.isHost) {
     document.getElementById('btn-start').style.display = 'inline-flex';
+    updateStartButton();
   }
+  renderLobbyRules();
   log(`Unido a la sala ${S.roomId}`, 'system');
+}
+
+function onRulesUpdated(msg) {
+  S.rules = normalizeRules(msg.rules);
+  // El backend reseteó ready de todos; sincronizamos localmente
+  if (msg.players) {
+    Object.assign(S.players, msg.players);
+  }
+  S.isReady = false;
+  updateReadyButton(false);
+  renderLobbyPlayers();
+  updateStartButton();
+  renderLobbyRules();
+  log('Reglas actualizadas — estado listo reiniciado', 'system');
 }
 
 function onPlayerJoined(msg) {
@@ -389,6 +414,7 @@ function onPlayerReady(msg) {
   if (S.players[msg.player_id])
     S.players[msg.player_id].ready = msg.ready;
   renderLobbyPlayers();
+  updateStartButton();
 }
 
 function onPlayerDisc(msg) {
@@ -402,6 +428,7 @@ function onPlayerDisc(msg) {
 function onGameStarted(msg) {
   S.phase       = 'playing';
   S.playerOrder = msg.player_order;
+  S.rules       = normalizeRules(msg.rules || S.rules);
   S.currentBid      = null;
   S.activePaso      = null;
   S.hasPassed       = false;
@@ -631,18 +658,29 @@ function onEliminated(msg) {
 
 function onGameOver(msg) {
   S.phase = 'game_over';
-  log(`═══ ${msg.winner_name} GANÓ ═══`, 'win');
+  const isLoserMode = msg.result_mode === 'loser';
+  const titleText = isLoserMode
+    ? `═══ ${msg.loser_name} PERDIÓ ═══`
+    : `═══ ${msg.winner_name} GANÓ ═══`;
+  log(titleText, isLoserMode ? 'lose' : 'win');
 
-  const isWinner = msg.winner_id === S.playerId;
+  const isWinner = !isLoserMode && msg.winner_id === S.playerId;
+  const isLoser = isLoserMode && msg.loser_id === S.playerId;
 
   // Preparar el overlay ya, pero mostrarlo al terminar el countdown de reveal (7 s)
   const overlay = document.getElementById('game-over-overlay');
-  document.getElementById('go-title').textContent  = isWinner ? '¡Ganaste!' : 'Fin de la partida';
-  document.getElementById('go-winner').textContent = `${msg.winner_name} es el ganador`;
+  if (isLoserMode) {
+    document.getElementById('go-title').textContent = isLoser ? 'Perdiste' : 'Fin de la partida';
+    document.getElementById('go-winner').textContent = `${msg.loser_name} quedó como perdedor`;
+  } else {
+    document.getElementById('go-title').textContent = isWinner ? '¡Ganaste!' : 'Fin de la partida';
+    document.getElementById('go-winner').textContent = `${msg.winner_name} es el ganador`;
+  }
 
   setTimeout(() => {
     hideReveal();
-    playSfx(isWinner ? 'win' : 'lose');
+    const endSfx = isLoserMode ? (isLoser ? 'lose' : 'win') : (isWinner ? 'win' : 'lose');
+    playSfx(endSfx);
     overlay.style.display = 'flex';
   }, 7000);
 }
@@ -659,7 +697,7 @@ function closeGameOver() {
   document.getElementById('lobby-form').style.display = 'none';
   document.getElementById('lobby-room').style.display = 'block';
   renderLobbyPlayers();
-  document.getElementById('btn-ready').textContent = '¡Listo!';
+  updateReadyButton(false);
   document.getElementById('btn-ready').classList.remove('btn-start');
 }
 
@@ -902,13 +940,16 @@ function updateControls() {
   const hasBid        = S.currentBid != null;
   const myOwnBid      = S.currentBid?.player_id === S.playerId;
 
+  // Gavilán habilita acciones fuera de turno (dudo/calzo).
+  const canOutOfTurn = !!S.rules?.allow_gavilan;
+
   // Dudo: disponible si hay acción activa (paso o apuesta) que no sea propia y no estoy eliminado
   const canDudo = playing && !amEliminated && (
-    (hasActivePaso && !myOwnPaso) ||
-    (!hasActivePaso && hasBid && !myOwnBid)
+    (hasActivePaso && !myOwnPaso && (isMyTurn || canOutOfTurn)) ||
+    (!hasActivePaso && hasBid && !myOwnBid && (isMyTurn || canOutOfTurn))
   );
   // Calzo: solo si la acción activa es una apuesta (no paso) y no estoy eliminado
-  const canCalzo = playing && !amEliminated && !hasActivePaso && hasBid && !myOwnBid;
+  const canCalzo = playing && !amEliminated && !hasActivePaso && hasBid && !myOwnBid && (isMyTurn || canOutOfTurn);
   // Paso: solo en mi turno y si no he pasado esta ronda
   const canPaso = isMyTurn && !S.hasPassed;
 
@@ -1048,14 +1089,112 @@ function joinRoom() {
 
 function toggleReady() {
   S.isReady = !S.isReady;
-  document.getElementById('btn-ready').textContent = S.isReady ? 'Cancelar' : '¡Listo!';
+  updateReadyButton(S.isReady);
   playSfx('click');
   send({ type: 'ready' });
+  if (S.isHost) renderLobbyRules(); // bloquea/desbloquea controles de reglas
+}
+
+function updateReadyButton(isReady) {
+  const btn = document.getElementById('btn-ready');
+  if (!btn) return;
+  btn.innerHTML = isReady
+    ? '<i class="fa-solid fa-ban" aria-hidden="true"></i><span>Cancelar</span>'
+    : '<i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>¡Listo!</span>';
+}
+
+function updateStartButton() {
+  const btn = document.getElementById('btn-start');
+  if (!btn) return;
+  const connected = Object.values(S.players).filter(p => p.connected);
+  const allReady = connected.length >= 2 && connected.every(p => p.ready);
+  btn.disabled = !allReady;
 }
 
 function startGame() {
   playSfx('click');
   send({ type: 'start' });
+}
+
+function normalizeRules(rules) {
+  const src = (rules && typeof rules === 'object') ? rules : {};
+  const mode = src.elimination_mode === 'loser' ? 'loser' : 'winner';
+  return {
+    elimination_mode: mode,
+    allow_gavilan: !!(src.allow_gavilan ?? DEFAULT_RULES.allow_gavilan),
+    calzo_recovers_on_turn: !!(src.calzo_recovers_on_turn ?? DEFAULT_RULES.calzo_recovers_on_turn),
+  };
+}
+
+function rulesSummaryItems() {
+  const rules = normalizeRules(S.rules);
+  return [
+    {
+      label: `Modo de partida: ${rules.elimination_mode === 'loser' ? 'Perdedor' : 'Ganador'}`,
+      detail: 'Modo perdedor: termina cuando alguien pierde todos sus dados.\nModo ganador: gana el ultimo jugador con dados.',
+    },
+    {
+      label: `Permitir Gavilan: ${rules.allow_gavilan ? 'Si' : 'No'}`,
+      detail: rules.allow_gavilan
+        ? 'Permite dudar o calzar fuera de turno.'
+        : 'Solo puedes dudar o calzar en tu turno.',
+    },
+    {
+      label: `Calzo recupera en mi turno: ${rules.calzo_recovers_on_turn ? 'Si' : 'No'}`,
+      detail: rules.calzo_recovers_on_turn
+        ? 'Un calzo correcto recupera dado incluso en tu turno.'
+        : 'Un calzo correcto solo recupera dado fuera de turno.',
+    },
+  ];
+}
+
+function renderLobbyRules() {
+  const hostControls = document.getElementById('host-rules-controls');
+  const summary = document.getElementById('rules-summary');
+  if (!hostControls || !summary) return;
+
+  const rules = normalizeRules(S.rules);
+  S.rules = rules;
+  const hostCanEdit = S.isHost && !S.isReady;
+  hostControls.style.display = S.isHost ? 'grid' : 'none';
+
+  const modeEl = document.getElementById('rule-elimination-loser');
+  const gavilanEl = document.getElementById('rule-allow-gavilan');
+  const calzoEl = document.getElementById('rule-calzo-on-turn');
+  if (modeEl)    { modeEl.checked = rules.elimination_mode === 'loser'; modeEl.disabled = !hostCanEdit; }
+  if (gavilanEl) { gavilanEl.checked = rules.allow_gavilan;             gavilanEl.disabled = !hostCanEdit; }
+  if (calzoEl)   { calzoEl.checked = rules.calzo_recovers_on_turn;     calzoEl.disabled = !hostCanEdit; }
+
+  // Opacidad reducida cuando el anfitrión no puede editar
+  hostControls.style.opacity = hostCanEdit ? '1' : '0.45';
+  hostControls.style.pointerEvents = hostCanEdit ? '' : 'none';
+
+  summary.innerHTML = '';
+  for (const item of rulesSummaryItems()) {
+    const li = document.createElement('li');
+    li.textContent = item.label;
+    const help = document.createElement('button');
+    help.type = 'button';
+    help.className = 'rule-help';
+    help.innerHTML = '<i class="fa-regular fa-circle-question" aria-hidden="true"></i>';
+    help.setAttribute('data-tooltip', item.detail);
+    help.setAttribute('aria-label', `Detalle: ${item.label}`);
+    li.appendChild(document.createTextNode(' '));
+    li.appendChild(help);
+    summary.appendChild(li);
+  }
+}
+
+function onHostRulesChanged() {
+  if (!S.isHost) return;
+  const next = {
+    elimination_mode: document.getElementById('rule-elimination-loser')?.checked ? 'loser' : 'winner',
+    allow_gavilan: !!document.getElementById('rule-allow-gavilan')?.checked,
+    calzo_recovers_on_turn: !!document.getElementById('rule-calzo-on-turn')?.checked,
+  };
+  S.rules = normalizeRules(next);
+  renderLobbyRules();
+  send({ type: 'set_rules', rules: S.rules });
 }
 
 function copyRoomCode() {
@@ -1181,6 +1320,7 @@ function playerColor(pid) {
 refreshBidInputUI();
 updateSoundButton();
 window.toggleSound = toggleSound;
+window.onHostRulesChanged = onHostRulesChanged;
 
 // Desbloquea audio en la primera interacción del usuario (requisito del navegador).
 ['pointerdown', 'keydown'].forEach(evt => {

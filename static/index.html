@@ -11,17 +11,18 @@
   <meta property="og:locale" content="es_ES" />
   <meta property="og:title" content="Dudo — El Juego de los Cachos" />
   <meta property="og:description" content="Juega Dudo online con amigos: apuesta, duda, calza y sobrevive hasta el final." />
-  <meta property="og:image" content="/static/og-cover.svg" />
+  <meta property="og:image" content="/static/og-cover.png" />
   <meta property="og:image:alt" content="Dudo, el juego de los cachos" />
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Dudo — El Juego de los Cachos" />
   <meta name="twitter:description" content="Juega Dudo online con amigos: apuesta, duda, calza y sobrevive hasta el final." />
-  <meta name="twitter:image" content="/static/og-cover.svg" />
+  <meta name="twitter:image" content="/static/og-cover.png" />
 
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -70,7 +71,7 @@
         <div class="row-group">
           <input id="inp-room" type="text" placeholder="ej: sala1" maxlength="20"
                  onkeydown="if(event.key==='Enter') joinRoom()" />
-          <button class="btn btn-gold" onclick="joinRoom()">Unirse</button>
+          <button class="btn btn-gold" onclick="joinRoom()"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>Unirse</button>
         </div>
       </div>
     </div>
@@ -79,13 +80,33 @@
       <div class="room-header">
         <span class="room-label">Sala:</span>
         <strong id="disp-room-code" class="room-code"></strong>
-        <button class="btn btn-sm" onclick="copyRoomCode()">Copiar</button>
+        <button class="btn btn-sm" onclick="copyRoomCode()"><i class="fa-regular fa-copy" aria-hidden="true"></i>Copiar</button>
       </div>
       <div id="lobby-player-list" class="lobby-player-list"></div>
+
+      <div class="rules-panel">
+        <div class="rules-title">Reglas de sala</div>
+        <div id="host-rules-controls" class="rules-controls" style="display:none">
+          <label class="check-row">
+            <input id="rule-elimination-loser" type="checkbox" onchange="onHostRulesChanged()" />
+            <span class="rule-line">Modo perdedor <button type="button" class="rule-help" data-tooltip="Modo perdedor: termina cuando alguien pierde todos sus dados.&#10;Modo ganador: gana el ultimo jugador con dados." aria-label="Detalle de modo de partida"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
+          </label>
+          <label class="check-row">
+            <input id="rule-allow-gavilan" type="checkbox" onchange="onHostRulesChanged()" />
+            <span class="rule-line">Permitir Gavilan <button type="button" class="rule-help" data-tooltip="Permite dudar o calzar fuera de turno." aria-label="Detalle de Gavilan"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
+          </label>
+          <label class="check-row">
+            <input id="rule-calzo-on-turn" type="checkbox" onchange="onHostRulesChanged()" />
+            <span class="rule-line">Calzo recupera en mi turno <button type="button" class="rule-help" data-tooltip="Si esta activo, un calzo correcto recupera dado tambien en tu turno. Si esta desactivado, solo recupera fuera de turno." aria-label="Detalle de recuperacion por calzo"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
+          </label>
+        </div>
+        <ul id="rules-summary" class="rules-summary"></ul>
+      </div>
+
       <div class="lobby-actions">
-        <button id="btn-ready" class="btn btn-gold" onclick="toggleReady()">¡Listo!</button>
+        <button id="btn-ready" class="btn btn-gold" onclick="toggleReady()"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>¡Listo!</span></button>
         <button id="btn-start" class="btn btn-start" onclick="startGame()" style="display:none">
-          Iniciar Juego
+          <i class="fa-solid fa-play" aria-hidden="true"></i>Iniciar Juego
         </button>
       </div>
       <p class="hint">Mínimo 2 jugadores · El juego comienza cuando todos estén listos.<br/>
@@ -168,10 +189,10 @@
           </div>
         </div>
         <div class="action-btns">
-          <button id="btn-bid"   class="btn btn-primary"  onclick="sendBid()">Apostar</button>
-          <button id="btn-paso"  class="btn btn-secondary" onclick="sendPaso()">Pasar</button>
-          <button id="btn-dudo"  class="btn btn-danger"   onclick="sendDudo()">¡Dudo!</button>
-          <button id="btn-calzo" class="btn btn-warning"  onclick="sendCalzo()">¡Calzo!</button>
+          <button id="btn-bid"   class="btn btn-primary"  onclick="sendBid()"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i>Apostar</button>
+          <button id="btn-paso"  class="btn btn-secondary" onclick="sendPaso()"><i class="fa-solid fa-forward" aria-hidden="true"></i>Pasar</button>
+          <button id="btn-dudo"  class="btn btn-danger"   onclick="sendDudo()"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>¡Dudo!</button>
+          <button id="btn-calzo" class="btn btn-warning"  onclick="sendCalzo()"><i class="fa-solid fa-bullseye" aria-hidden="true"></i>¡Calzo!</button>
         </div>
         <p id="wait-msg" class="wait-msg">Esperando tu turno…</p>
       </div>
@@ -203,7 +224,7 @@
     <div class="go-dice-row">⚄ ⚅ ⚂</div>
     <h2 id="go-title" class="go-title"></h2>
     <p id="go-winner" class="go-winner"></p>
-    <button class="btn btn-gold go-btn" onclick="closeGameOver()">Volver al lobby</button>
+    <button class="btn btn-gold go-btn" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i>Volver al lobby</button>
   </div>
 </div>
 
