@@ -210,6 +210,12 @@ const S = {
   direction:           1,   // 1 = horario, -1 = antihorario
   roundFirstPlayer:    '',
   hasFirstAction:      false,
+  pendingStats: {
+    dudoOk: 0,
+    dudoFail: 0,
+    calzoOk: 0,
+    calzoFail: 0,
+  },
 
   // UI bid inputs
   bidQty:         1,
@@ -285,6 +291,17 @@ const AVATAR_OPTIONS = [
 // ══════════════════════════════════  SOUND  ═══════════════════════════════════
 const AUDIO_STORAGE_KEY = 'dudoMuted';
 const RULES_STORAGE_KEY = 'dudoRules';
+const STATS_STORAGE_KEY = 'dudoStats';
+
+const EMPTY_STATS = {
+  gamesPlayed: 0,
+  gamesWon: 0,
+  roundsPlayed: 0,
+  dudoOk: 0,
+  dudoFail: 0,
+  calzoOk: 0,
+  calzoFail: 0,
+};
 
 function saveRulesToStorage(rules) {
   try { localStorage.setItem(RULES_STORAGE_KEY, JSON.stringify(rules)); } catch (_) {}
@@ -320,6 +337,62 @@ function loadSession() {
 
 function clearSession() {
   try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch (_) {}
+}
+
+function loadStats() {
+  try {
+    const raw = localStorage.getItem(STATS_STORAGE_KEY);
+    return raw ? { ...EMPTY_STATS, ...JSON.parse(raw) } : { ...EMPTY_STATS };
+  } catch (_) {
+    return { ...EMPTY_STATS };
+  }
+}
+
+function saveStats(stats) {
+  try { localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(stats)); } catch (_) {}
+}
+
+function ratio(ok, fail) {
+  const total = ok + fail;
+  if (!total) return '0%';
+  return `${Math.round((ok / total) * 100)}%`;
+}
+
+function renderStatsModal() {
+  const body = document.getElementById('stats-table-body');
+  if (!body) return;
+  const s = loadStats();
+  const rows = [
+    ['Partidas jugadas', String(s.gamesPlayed)],
+    ['Partidas ganadas / no-perdedor', String(s.gamesWon)],
+    ['Rondas jugadas', String(s.roundsPlayed)],
+    ['Dudos acertados', `${s.dudoOk} (${ratio(s.dudoOk, s.dudoFail)})`],
+    ['Dudos fallados', String(s.dudoFail)],
+    ['Calzos acertados', `${s.calzoOk} (${ratio(s.calzoOk, s.calzoFail)})`],
+    ['Calzos fallados', String(s.calzoFail)],
+  ];
+  body.innerHTML = '';
+  for (const [label, value] of rows) {
+    const tr = document.createElement('tr');
+    const tdLabel = document.createElement('td');
+    const tdValue = document.createElement('td');
+    tdLabel.textContent = label;
+    tdValue.textContent = value;
+    tr.appendChild(tdLabel);
+    tr.appendChild(tdValue);
+    body.appendChild(tr);
+  }
+}
+
+function openStatsModal() {
+  renderStatsModal();
+  const modal = document.getElementById('stats-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeStatsModal() {
+  const modal = document.getElementById('stats-modal');
+  if (modal) modal.style.display = 'none';
 }
 const AudioState = {
   ctx: null,
@@ -736,6 +809,7 @@ function onGameStarted(msg) {
   S.direction         = 1;
   S.roundFirstPlayer  = '';
   S.hasFirstAction    = false;
+  S.pendingStats = { dudoOk: 0, dudoFail: 0, calzoOk: 0, calzoFail: 0 };
   showScreen('game');
   applySpectatorMode();
   renderOtherPlayers();
@@ -901,6 +975,19 @@ function onReveal(msg) {
   const face = bid?.face;
   const isCalzo = msg.action === 'calzo';
 
+  if (msg.challenger_id === S.playerId) {
+    if (msg.action === 'calzo') {
+      if (msg.calzo_success) S.pendingStats.calzoOk += 1;
+      else S.pendingStats.calzoFail += 1;
+    } else if (msg.action === 'dudo') {
+      if (msg.bid_holds) S.pendingStats.dudoFail += 1;
+      else S.pendingStats.dudoOk += 1;
+    } else if (msg.action === 'paso') {
+      if (msg.paso_valid) S.pendingStats.dudoFail += 1;
+      else S.pendingStats.dudoOk += 1;
+    }
+  }
+
   let resultText, resultClass;
   if (msg.action === 'paso') {
     const gavilan = msg.is_gavilan;
@@ -990,6 +1077,18 @@ function onGameOver(msg) {
 
   const isWinner = !isLoserMode && msg.winner_id === S.playerId;
   const isLoser = isLoserMode && msg.loser_id === S.playerId;
+
+  const stats = loadStats();
+  stats.gamesPlayed += 1;
+  stats.roundsPlayed += Math.max(1, S.roundNum || 0);
+  if ((!isLoserMode && isWinner) || (isLoserMode && !isLoser)) {
+    stats.gamesWon += 1;
+  }
+  stats.dudoOk += S.pendingStats.dudoOk;
+  stats.dudoFail += S.pendingStats.dudoFail;
+  stats.calzoOk += S.pendingStats.calzoOk;
+  stats.calzoFail += S.pendingStats.calzoFail;
+  saveStats(stats);
 
   // Preparar el overlay ya, pero mostrarlo al terminar el countdown de reveal (7 s)
   const overlay = document.getElementById('game-over-overlay');
@@ -1729,6 +1828,8 @@ refreshBidInputUI();
 updateSoundButton();
 window.toggleSound = toggleSound;
 window.onHostRulesChanged = onHostRulesChanged;
+window.openStatsModal = openStatsModal;
+window.closeStatsModal = closeStatsModal;
 
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (function () {

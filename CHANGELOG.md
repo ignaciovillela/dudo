@@ -15,6 +15,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 - Avatar de jugador por emoji, con selector en lobby, persistencia local y sincronizacion en payload publico de `Player`.
 - Modo espectador para entradas tardias a partidas en curso, con vista completa de mesa y bloqueo de acciones.
 - Timeout de turno configurable (0/30/60/90s) con countdown en UI y acción automática conservadora en backend al expirar.
+- Historial local de jugador (`dudoStats`) con modal de stats en lobby y métricas de dudo/calzo/partidas.
 
 ### Changed
 - `game/manager.py` ahora usa `MAX_PLAYERS` para validar cupo de sala y `REVEAL_SECONDS` para la espera entre rondas.

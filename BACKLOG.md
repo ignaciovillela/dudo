@@ -20,19 +20,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ## 🟡 Prioridad media
 
-### 6. Historial / estadísticas de jugador
-**Por qué:** da contexto de rendimiento. Solo lado cliente, sin backend.
-- Al terminar cada partida (`game_over`), guardar en `dudoStats` en localStorage:
-    - Partidas jugadas / ganadas (o no-perdedor en modo loser).
-    - Rondas totales jugadas.
-    - Dudos acertados / fallados.
-    - Calzos acertados / fallados.
-    - El frontend contabiliza los eventos `reveal` donde el jugador fue `challenger_id`.
-- Modal accesible desde el lobby (`📊 Mis stats`).
-- Formato: tabla con totales y porcentajes.
-
----
-
 ### 9. Animación de revelación mejorada
 **Propuesta concreta (reutiliza infraestructura existente):**
 - Flip de dados uno por uno con delay escalonado (la clase `revealed` + `flip-in` ya existe, solo orquestar delays).
@@ -58,6 +45,5 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Impacto |
 |---|--------|-------------------|------------|---------|
-| 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |
 | 9 | Animación revelación | `app.js`, `style.css` | ⭐⭐ | 🔥 |
 | 10 | Sonidos adicionales | `app.js` | ⭐⭐ | 🔥 |

@@ -145,6 +145,9 @@
           <i class="fa-solid fa-play" aria-hidden="true"></i>Iniciar Juego
         </button>
       </div>
+      <div class="lobby-subactions">
+        <button class="btn btn-sm" type="button" onclick="openStatsModal()">📊 Mis stats</button>
+      </div>
       <p class="hint">Mínimo 2 jugadores · El juego comienza cuando todos estén listos.<br/>
         Los <strong>unos</strong> son comodines (cuentan para cualquier cara).</p>
     </div>
@@ -267,6 +270,16 @@
     <h2 id="go-title" class="go-title"></h2>
     <p id="go-winner" class="go-winner"></p>
     <button class="btn btn-gold go-btn" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i>Volver al lobby</button>
+  </div>
+</div>
+
+<div id="stats-modal" class="stats-modal" style="display:none">
+  <div class="stats-box">
+    <h2>📊 Mis stats</h2>
+    <table class="stats-table">
+      <tbody id="stats-table-body"></tbody>
+    </table>
+    <button class="btn btn-gold" type="button" onclick="closeStatsModal()">Cerrar</button>
   </div>
 </div>
 
