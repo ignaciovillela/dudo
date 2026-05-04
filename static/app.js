@@ -1295,9 +1295,10 @@ function onHostRulesChanged() {
 
 function copyRoomCode() {
   playSfx('click');
-  navigator.clipboard.writeText(S.roomId)
-    .then(() => showToast('Código copiado'))
-    .catch(() => showToast(S.roomId));
+  const shareUrl = `${location.origin}/?sala=${encodeURIComponent(S.roomId)}`;
+  navigator.clipboard.writeText(shareUrl)
+    .then(() => showToast('Enlace de sala copiado'))
+    .catch(() => showToast(shareUrl));
 }
 
 // ══════════════════════════════════  UTILS  ══════════════════════════════════
@@ -1421,10 +1422,13 @@ window.onHostRulesChanged = onHostRulesChanged;
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (function () {
   const session = loadSession();
+  const roomFromUrl = new URLSearchParams(window.location.search).get('sala');
   const nameEl = document.getElementById('inp-name');
   const roomEl = document.getElementById('inp-room');
   if (nameEl && session?.name) nameEl.value = session.name;
-  if (roomEl && session?.room) roomEl.value = session.room;
+  if (roomEl) {
+    roomEl.value = roomFromUrl || session?.room || '';
+  }
 
   // Guardar nombre en tiempo real al escribir
   if (nameEl) {
