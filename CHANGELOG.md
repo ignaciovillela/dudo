@@ -5,6 +5,27 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.2] - 2026-05-04
+
+### Added
+- Flujo de consentimiento para notificaciones de turno con modal explicativo previo, preferencia persistida en `localStorage` y boton de reactivacion junto al control de volumen.
+- Modal de confirmacion para expulsar jugadores y accion de moderacion disponible para el anfitrion.
+- Indicadores visuales mas notorios para jugadores inactivos/desconectados en lobby y mesa.
+- Nueva variable `DISCONNECT_GRACE_SECONDS` para dar margen a reconexiones temporales antes de resolver una salida definitiva.
+- Metadata Open Graph/Twitter dinamica por `?sala=...`, incluyendo datos de jugadores de la sala para previsualizacion al compartir en WhatsApp.
+
+### Changed
+- Selector de avatar reemplazado por un picker horizontal de emojis, expandible/contraible, sin nombres visibles y priorizando el avatar seleccionado al inicio.
+- Selector de tiempo por turno cambiado de `select` a opciones inline tipo texto seleccionable.
+- El sentido de ronda elegido (horario/anti-horario) ahora persiste entre rondas hasta que el primer jugador de una ronda lo cambie otra vez.
+- El boton de expulsar se reubico a la izquierda del nombre del jugador y se elimino el texto visible `Dados: N` en las cartas de oponentes.
+
+### Fixed
+- Reconexion robustecida en lobby y partida usando takeover seguro del websocket aunque la desconexion anterior aun no se haya procesado completamente.
+- El endpoint WebSocket ahora resuelve el `player_id` real asociado al socket para evitar desincronizacion de identidad despues de reconectar.
+- En partidas de 2 jugadores (o cuando queda uno conectado), una desconexion breve ya no declara ganador inmediatamente: se espera la ventana de gracia antes de cerrar la partida.
+- El countdown de reveal y la aparicion del overlay de victoria/derrota ahora respetan el `REVEAL_SECONDS` real enviado por backend.
+
 ## [0.3.1] - 2026-05-04
 
 ### Added
