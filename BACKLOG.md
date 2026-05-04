@@ -26,13 +26,6 @@ Referencia completa en `CHANGELOG.md`.
 - Frontend: `onReconnected` ya maneja `phase: "lobby"`.
 
 
-### 2. Notificación de turno (pestaña en segundo plano)
-**Por qué:** los jugadores a menudo tienen otras pestañas abiertas; sin esto el juego se detiene.
-- Pedir permiso con `Notification.requestPermission()` en la primera interacción.
-- En `onTurn`, si `isMe && document.hidden`, disparar `new Notification("¡Tu turno en Dudo!", { icon: "/static/favicon.svg" })`.
-- Hacer parpadear `document.title` alternando `"⚡ ¡TU TURNO! — Dudo"` / `"Dudo"` hasta que el usuario enfoque la pestaña.
-
-
 ### 3. Rate limiting de mensajes WS
 **Por qué:** un cliente malicioso o buggy podría saturar el servidor.
 - En `GameManager`, mantener un `dict[str, float]` con el timestamp del último mensaje por `player_id`.
@@ -111,7 +104,6 @@ Referencia completa en `CHANGELOG.md`.
 | # | Mejora | Archivos afectados | Dificultad | Impacto |
 |---|--------|-------------------|------------|---------|
 | 1 | Reconexión en lobby | `manager.py`, `app.js` | ⭐⭐ | 🔥🔥 |
-| 2 | Notificación de turno | `app.js` | ⭐ | 🔥🔥 |
 | 3 | Rate limiting | `manager.py` | ⭐⭐ | 🔥🔥 |
 | 5 | Avatar de jugador | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥🔥 |
 | 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |

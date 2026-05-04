@@ -220,6 +220,51 @@ const S = {
 };
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
+const BASE_TITLE = document.title || 'Dudo';
+const TURN_ALERT_TITLE = '⚡ ¡TU TURNO! — Dudo';
+const TURN_IDLE_TITLE = 'Dudo';
+
+let titleBlinkTimer = null;
+let titleBlinkState = false;
+let notificationPrompted = false;
+
+function requestTurnNotificationPermission() {
+  if (notificationPrompted) return;
+  notificationPrompted = true;
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {});
+  }
+}
+
+function startTurnTitleBlink() {
+  if (titleBlinkTimer) return;
+  titleBlinkState = false;
+  titleBlinkTimer = setInterval(() => {
+    titleBlinkState = !titleBlinkState;
+    document.title = titleBlinkState ? TURN_ALERT_TITLE : TURN_IDLE_TITLE;
+  }, 700);
+}
+
+function stopTurnTitleBlink() {
+  if (titleBlinkTimer) {
+    clearInterval(titleBlinkTimer);
+    titleBlinkTimer = null;
+  }
+  document.title = BASE_TITLE;
+}
+
+function notifyTurnIfHidden() {
+  if (!document.hidden) {
+    stopTurnTitleBlink();
+    return;
+  }
+  startTurnTitleBlink();
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    new Notification('¡Tu turno en Dudo!', { icon: '/static/favicon.svg' });
+  } catch (_) {}
+}
 
 const DEFAULT_RULES = {
   elimination_mode: 'winner',
@@ -681,6 +726,9 @@ function onTurn(msg) {
   if (isMe) {
     playSfx('yourTurn');
     resetBidInputs();
+    notifyTurnIfHidden();
+  } else {
+    stopTurnTitleBlink();
   }
 }
 
@@ -1531,9 +1579,17 @@ window.onHostRulesChanged = onHostRulesChanged;
 // Desbloquea audio en la primera interacción del usuario (requisito del navegador).
 ['pointerdown', 'keydown'].forEach(evt => {
   window.addEventListener(evt, unlockAudio, { once: true });
+  window.addEventListener(evt, requestTurnNotificationPermission, { once: true });
 });
 
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) stopTurnTitleBlink();
+});
+
+window.addEventListener('focus', stopTurnTitleBlink);
+
 window.addEventListener('beforeunload', () => {
+  stopTurnTitleBlink();
   S.manualClose = true;
   if (S.ws && S.ws.readyState === WebSocket.OPEN) {
     S.ws.close();
