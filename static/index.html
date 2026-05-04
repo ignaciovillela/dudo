@@ -4,6 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dudo — El Juego de los Cachos</title>
+  <meta name="description" content="Juega Dudo online con amigos: apuesta, duda, calza y sobrevive hasta el final." />
+  <meta name="theme-color" content="#0d2b18" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:title" content="Dudo — El Juego de los Cachos" />
+  <meta property="og:description" content="Juega Dudo online con amigos: apuesta, duda, calza y sobrevive hasta el final." />
+  <meta property="og:image" content="/static/og-cover.svg" />
+  <meta property="og:image:alt" content="Dudo, el juego de los cachos" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Dudo — El Juego de los Cachos" />
+  <meta name="twitter:description" content="Juega Dudo online con amigos: apuesta, duda, calza y sobrevive hasta el final." />
+  <meta name="twitter:image" content="/static/og-cover.svg" />
+
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
@@ -16,6 +32,22 @@
 
 <!-- ═══════════════════════════════  LOBBY  ══════════════════════════════ -->
 <div id="lobby-screen" class="screen active">
+  <div class="lobby-decor" aria-hidden="true">
+    <div class="decor-die face-5 d1"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="decor-die face-3 d2"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="decor-die face-6 d3"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="decor-die face-4 d4"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="decor-die face-2 d5"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="decor-die face-1 d6"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="decor-die face-5 d7"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+
+    <div class="decor-cup c1"></div>
+    <div class="decor-cup c2"></div>
+    <div class="decor-cup c3"></div>
+
+    <div class="decor-beer b1"></div>
+    <div class="decor-beer b2"></div>
+  </div>
   <div class="lobby-wrap">
     <div class="lobby-logo">
       <div class="logo-dice-row">

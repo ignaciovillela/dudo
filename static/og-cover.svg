@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="Dudo: El Juego de los Cachos">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f2f1d"/>
+      <stop offset="55%" stop-color="#124128"/>
+      <stop offset="100%" stop-color="#07130d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#3a8f5d" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#3a8f5d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="die" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8f4ee"/>
+      <stop offset="100%" stop-color="#dbd2c4"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <ellipse cx="600" cy="300" rx="430" ry="180" fill="url(#glow)"/>
+
+  <g opacity="0.2" stroke="#ffffff" stroke-width="2" fill="none">
+    <ellipse cx="600" cy="315" rx="470" ry="205"/>
+    <ellipse cx="600" cy="315" rx="455" ry="190"/>
+  </g>
+
+  <g transform="translate(235 168)">
+    <rect x="0" y="0" width="132" height="132" rx="20" fill="url(#die)" stroke="#d4be98" stroke-width="3"/>
+    <circle cx="38" cy="38" r="8" fill="#1c2b3a"/>
+    <circle cx="94" cy="38" r="8" fill="#1c2b3a"/>
+    <circle cx="66" cy="66" r="8" fill="#1c2b3a"/>
+    <circle cx="38" cy="94" r="8" fill="#1c2b3a"/>
+    <circle cx="94" cy="94" r="8" fill="#1c2b3a"/>
+  </g>
+
+  <text x="410" y="245" fill="#e8b86d" font-family="Cinzel, Georgia, serif" font-size="112" font-weight="700" letter-spacing="12">DUDO</text>
+  <text x="413" y="308" fill="#d8deea" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="500" letter-spacing="1.2">EL JUEGO DE LOS CACHOS</text>
+  <text x="413" y="362" fill="#9fb3c6" font-family="Inter, Arial, sans-serif" font-size="28">Apuesta, duda, calza y sobrevive hasta el final.</text>
+
+  <g fill="#e8b86d" opacity="0.75" font-family="Inter, Arial, sans-serif" font-size="24">
+    <text x="414" y="432">2–6 jugadores · En tiempo real</text>
+  </g>
+</svg>
+
