@@ -188,6 +188,7 @@ const S = {
   roomId:         '',
   hostId:         null,
   isHost:         false,
+  isSpectator:    false,
   isReady:        false,
   rules:          null,
 
@@ -512,6 +513,10 @@ function handleMsg(msg) {
     new_round:          onNewRound,
     player_eliminated:  onEliminated,
     game_over:          onGameOver,
+    joined_spectator:   onJoinedSpectator,
+    spectator_state:    onSpectatorState,
+    spectator_joined:   onSpectatorJoined,
+    spectator_left:     onSpectatorLeft,
     error:              onError,
   };
   const fn = H[msg.type];
@@ -531,6 +536,7 @@ function onConnected(msg) {
 }
 
 function onJoined(msg) {
+  S.isSpectator = false;
   S.hostId      = msg.host_id || msg.player_order?.[0] || null;
   S.isHost      = msg.is_host;
   S.players     = msg.players;
@@ -556,11 +562,58 @@ function onJoined(msg) {
     }
   }
   renderLobbyRules();
+  applySpectatorMode();
   log(`Unido a la sala ${S.roomId}`, 'system');
+}
+
+function onJoinedSpectator(msg) {
+  S.isSpectator = true;
+  S.phase = msg.phase || 'playing';
+  S.hostId = msg.host_id || null;
+  S.players = msg.players || {};
+  S.playerOrder = msg.player_order || [];
+  S.rules = normalizeRules(msg.rules || S.rules);
+  S.roundNum = msg.round_number || 0;
+  S.totalDice = msg.total_dice || 0;
+  S.myDice = [];
+  if (msg.turn) onTurn(msg.turn);
+  showScreen('game');
+  applySpectatorMode();
+  renderOtherPlayers();
+  renderMyDice();
+  updateBidDisplay();
+  document.getElementById('disp-round').textContent = S.roundNum;
+  document.getElementById('disp-total').textContent = S.totalDice;
+  log(`${msg.spectator_name || 'Espectador'} está observando la partida`, 'system');
+}
+
+function onSpectatorState(msg) {
+  if (!S.isSpectator) return;
+  S.phase = msg.phase || S.phase;
+  S.players = msg.players || S.players;
+  S.playerOrder = msg.player_order || S.playerOrder;
+  S.rules = normalizeRules(msg.rules || S.rules);
+  S.roundNum = msg.round_number || S.roundNum;
+  S.totalDice = msg.total_dice || S.totalDice;
+  if (msg.turn) onTurn(msg.turn);
+  renderOtherPlayers();
+  renderMyDice();
+  updateBidDisplay();
+  document.getElementById('disp-round').textContent = S.roundNum;
+  document.getElementById('disp-total').textContent = S.totalDice;
+}
+
+function onSpectatorJoined(msg) {
+  log(`${msg.spectator_name} se unió como espectador`, 'system');
+}
+
+function onSpectatorLeft(msg) {
+  log(`${msg.spectator_name} dejó de observar`, 'system');
 }
 
 function onReconnected(msg) {
   // El backend reasignó el WS al player_id original
+  S.isSpectator = false;
   S.playerId    = msg.player_id;
   S.hostId      = msg.host_id || msg.player_order?.[0] || null;
   S.isHost      = msg.is_host;
@@ -588,6 +641,7 @@ function onReconnected(msg) {
   }
 
   showScreen('game');
+  applySpectatorMode();
   renderOtherPlayers();
   updateBidDisplay();
   log('Reconectado a la partida en curso', 'system');
@@ -665,6 +719,7 @@ function onPlayerDisc(msg) {
 }
 
 function onGameStarted(msg) {
+  S.isSpectator = false;
   S.phase       = 'playing';
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules || S.rules);
@@ -679,6 +734,7 @@ function onGameStarted(msg) {
   S.roundFirstPlayer  = '';
   S.hasFirstAction    = false;
   showScreen('game');
+  applySpectatorMode();
   renderOtherPlayers();
   updateBidDisplay();
   // Limpiar log de partidas anteriores
@@ -732,7 +788,7 @@ function onTurn(msg) {
 
   banner.textContent = isMe ? '¡Tu turno!' : `Turno de ${name}`;
 
-  if (isMe) {
+  if (isMe && !S.isSpectator) {
     banner.classList.remove('my-turn', 'my-turn-entry');
     // Trigger reflow para reiniciar la animación de entrada
     void banner.offsetWidth;
@@ -754,7 +810,7 @@ function onTurn(msg) {
   updateControls();
   renderOtherPlayers();
 
-  if (isMe) {
+  if (isMe && !S.isSpectator) {
     playSfx('yourTurn');
     resetBidInputs();
     notifyTurnIfHidden();
@@ -951,6 +1007,7 @@ function closeGameOver() {
   document.getElementById('lobby-form').style.display = 'none';
   document.getElementById('lobby-room').style.display = 'block';
   renderLobbyPlayers();
+  applySpectatorMode();
   updateReadyButton(false);
   document.getElementById('btn-ready').classList.remove('btn-start');
 }
@@ -1191,6 +1248,14 @@ function updateDirectionIndicator() {
 }
 
 function updateControls() {
+  if (S.isSpectator) {
+    hideControls();
+    document.getElementById('bid-panel').style.opacity = '0.45';
+    document.getElementById('wait-msg').style.display = 'block';
+    document.getElementById('wait-msg').textContent = 'Modo espectador: solo observas.';
+    return;
+  }
+
   const isMyTurn      = S.currentPid === S.playerId && S.phase === 'playing';
   const playing       = S.phase === 'playing';
   const amEliminated  = (S.players[S.playerId]?.dice_count ?? 1) <= 0;
@@ -1218,6 +1283,7 @@ function updateControls() {
   document.getElementById('btn-dudo').disabled         = !canDudo;
   document.getElementById('btn-calzo').disabled        = !canCalzo;
   document.getElementById('wait-msg').style.display   = isMyTurn ? 'none' : 'block';
+  document.getElementById('wait-msg').textContent = 'Esperando tu turno…';
 
   // Stepper cantidad y face picker
   document.querySelectorAll('.stepper-qty button').forEach(b => b.disabled = !isMyTurn);
@@ -1311,28 +1377,44 @@ function refreshBidInputUI() {
 
 // ══════════════════════════════════  ACTIONS  ════════════════════════════════
 function sendBid() {
+  if (S.isSpectator) return;
   playSfx('click');
   send({ type: 'bid', quantity: S.bidQty, face: S.bidFace });
 }
 
 function sendDirection(value) {
+  if (S.isSpectator) return;
   playSfx('click');
   send({ type: 'direction', value });
 }
 
 function sendPaso() {
+  if (S.isSpectator) return;
   playSfx('click');
   send({ type: 'paso' });
 }
 
 function sendDudo() {
+  if (S.isSpectator) return;
   playSfx('click');
   send({ type: 'dudo' });
 }
 
 function sendCalzo() {
+  if (S.isSpectator) return;
   playSfx('click');
   send({ type: 'calzo' });
+}
+
+function applySpectatorMode() {
+  const badge = document.getElementById('spectator-badge');
+  const sidebar = document.querySelector('.sidebar');
+  const myArea = document.querySelector('.my-area');
+  const myLost = document.getElementById('my-lost-dice');
+  if (badge) badge.style.display = S.isSpectator ? 'inline-flex' : 'none';
+  sidebar?.classList.toggle('spectator-mode', S.isSpectator);
+  if (myArea) myArea.style.display = S.isSpectator ? 'none' : 'flex';
+  if (myLost) myLost.style.display = S.isSpectator ? 'none' : '';
 }
 
 // ══════════════════════════════════  LOBBY ACTIONS  ════════════════════════════

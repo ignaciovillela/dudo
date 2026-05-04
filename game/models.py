@@ -82,6 +82,7 @@ class RuleConfig:
 class Game:
     room_id: str
     players: dict = field(default_factory=dict)
+    spectators: dict = field(default_factory=dict)  # spectator_id -> nombre
     phase: str = "lobby"  # lobby | playing | reveal
     player_order: list = field(default_factory=list)
     current_player_idx: int = 0

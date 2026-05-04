@@ -46,7 +46,19 @@ class GameManager:
             self.hosts.pop(room_id, None)
             return
 
-        if not game or player_id not in game.players:
+        if not game:
+            return
+
+        if player_id in game.spectators:
+            spectator_name = game.spectators.pop(player_id, "Espectador")
+            await self._broadcast(room_id, {
+                "type": "spectator_left",
+                "spectator_id": player_id,
+                "spectator_name": spectator_name,
+            })
+            return
+
+        if player_id not in game.players:
             return
 
         player = game.players[player_id]
@@ -87,6 +99,8 @@ class GameManager:
         if not game:
             return
         msg_type = msg.get("type")
+        if player_id in game.spectators and msg_type != "join":
+            return
         if msg_type not in {"join", "connected"} and not self._allow_message(player_id):
             return
         handlers = {
@@ -126,6 +140,20 @@ class GameManager:
     async def _h_join(self, room_id, player_id, game, msg):
         # ── Intento de reconexión ─────────────────────────────────────────────
         reconnect_id = msg.get("reconnect_id")
+        if reconnect_id and reconnect_id in game.spectators:
+            old_name = game.spectators[reconnect_id]
+            ws = self.connections[room_id].pop(player_id, None)
+            if ws:
+                self.connections[room_id][reconnect_id] = ws
+            game.spectators[reconnect_id] = old_name
+            await self._send(room_id, reconnect_id, {
+                "type": "joined_spectator",
+                "spectator_id": reconnect_id,
+                "spectator_name": old_name,
+                **self._spectator_state_payload(game),
+            })
+            return
+
         if reconnect_id and reconnect_id in game.players and game.phase in {"playing", "lobby"}:
             old = game.players[reconnect_id]
             if not old.connected:
@@ -176,10 +204,25 @@ class GameManager:
                     await self._announce_turn(room_id, game)
                 return
 
+        if game.phase == "lobby" and player_id in game.spectators:
+            game.spectators.pop(player_id, None)
+
         # ── Unirse nuevo ──────────────────────────────────────────────────────
         if game.phase != "lobby":
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "Partida en curso"})
+            spectator_name = (msg.get("name") or "Espectador").strip()[:20] or "Espectador"
+            game.spectators[player_id] = spectator_name
+            await self._send(room_id, player_id, {
+                "type": "joined_spectator",
+                "spectator_id": player_id,
+                "spectator_name": spectator_name,
+                **self._spectator_state_payload(game),
+            })
+            await self._broadcast_except(room_id, player_id, {
+                "type": "spectator_joined",
+                "spectator_id": player_id,
+                "spectator_name": spectator_name,
+            })
+            return
         if len(game.players) >= MAX_PLAYERS:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
@@ -540,6 +583,32 @@ class GameManager:
     def _rules_engine(self, game: Game) -> RuleEngine:
         return RuleEngine.from_config(game.rules)
 
+    @staticmethod
+    def _turn_payload(game: Game) -> dict:
+        current = game.current_player_id()
+        return {
+            "type": "turn",
+            "player_id": current,
+            "player_name": game.players[current].name if current in game.players else "?",
+            "current_bid": game.current_bid.to_dict() if game.current_bid else None,
+            "active_paso": game.last_paso,
+            "direction": game.direction,
+            "round_first_player": game.round_first_player,
+            "has_first_action": game.current_bid is not None or game.last_paso is not None,
+        }
+
+    def _spectator_state_payload(self, game: Game) -> dict:
+        return {
+            "phase": game.phase,
+            "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
+            "player_order": game.player_order,
+            "rules": game.rules.to_dict(),
+            "round_number": game.round_number,
+            "total_dice": game.total_dice(),
+            "host_id": self._host_id(game.room_id, game),
+            "turn": self._turn_payload(game) if game.phase in {"playing", "reveal"} else None,
+        }
+
     def _pick_connected_host(self, game: Game) -> str | None:
         for pid in game.player_order:
             player = game.players.get(pid)
@@ -568,19 +637,14 @@ class GameManager:
                     "total_dice": game.total_dice(),
                     "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
                 })
+        for spectator_id in list(game.spectators.keys()):
+            await self._send(room_id, spectator_id, {
+                "type": "spectator_state",
+                **self._spectator_state_payload(game),
+            })
 
     async def _announce_turn(self, room_id: str, game: Game):
-        current = game.current_player_id()
-        await self._broadcast(room_id, {
-            "type": "turn",
-            "player_id": current,
-            "player_name": game.players[current].name if current in game.players else "?",
-            "current_bid": game.current_bid.to_dict() if game.current_bid else None,
-            "active_paso": game.last_paso,
-            "direction": game.direction,
-            "round_first_player": game.round_first_player,
-            "has_first_action": game.current_bid is not None or game.last_paso is not None,
-        })
+        await self._broadcast(room_id, self._turn_payload(game))
 
     # ------------------------------------------------------------------ transport
 

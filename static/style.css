@@ -915,6 +915,21 @@ select:focus { border-color: var(--gold); }
   flex-shrink: 0;
 }
 
+.spectator-badge {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #7ec8e3;
+  border: 1px solid rgba(126, 200, 227, 0.5);
+  background: rgba(100, 180, 255, 0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.sidebar.spectator-mode #bid-panel {
+  opacity: 0.45;
+}
+
 /* Flecha de turno activo sobre la carta del jugador */
 .active-turn-arrow {
   position: absolute;

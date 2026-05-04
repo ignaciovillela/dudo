@@ -44,15 +44,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ---
 
-### 8. Espectadores
-**Por qué:** permite unirse tarde a observar o que eliminados sigan viendo con info completa.
-- Al unirse a una sala en curso sin `reconnect_id` válido → entrar como espectador.
-- Backend: lista separada `spectators: dict[str, str]` en `Game`.
-- Los espectadores reciben todos los broadcasts incluyendo `all_dice` en `reveal`, pero no pueden enviar acciones.
-- Frontend: pantalla de espectador muestra la mesa y el log sin panel de acciones; badge "ESPECTADOR".
-
----
-
 ### 9. Animación de revelación mejorada
 **Propuesta concreta (reutiliza infraestructura existente):**
 - Flip de dados uno por uno con delay escalonado (la clase `revealed` + `flip-in` ya existe, solo orquestar delays).
@@ -80,6 +71,5 @@ Referencia completa en `CHANGELOG.md`.
 |---|--------|-------------------|------------|---------|
 | 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |
 | 7 | Límite de tiempo por turno | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐⭐ | 🔥🔥 |
-| 8 | Espectadores | `models.py`, `manager.py`, `app.js`, `index.html` | ⭐⭐⭐ | 🔥🔥 |
 | 9 | Animación revelación | `app.js`, `style.css` | ⭐⭐ | 🔥 |
 | 10 | Sonidos adicionales | `app.js` | ⭐⭐ | 🔥 |

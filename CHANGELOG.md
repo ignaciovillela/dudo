@@ -13,6 +13,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 - Reconexion de jugador en fase `lobby` usando `reconnect_id`, conservando identidad y orden original en sala.
 - Rate limiting de mensajes WebSocket por jugador en backend (1 mensaje cada `RATE_LIMIT_MS`), con excepcion para `join` y `connected`.
 - Avatar de jugador por emoji, con selector en lobby, persistencia local y sincronizacion en payload publico de `Player`.
+- Modo espectador para entradas tardias a partidas en curso, con vista completa de mesa y bloqueo de acciones.
 
 ### Changed
 - `game/manager.py` ahora usa `MAX_PLAYERS` para validar cupo de sala y `REVEAL_SECONDS` para la espera entre rondas.
