@@ -91,6 +91,94 @@ function animateRoll(container) {
   });
 }
 
+/**
+ * Anima un dado saliendo (exit) o entrando (enter) desde/hacia el punto de los dados del jugador,
+ * viajando hacia/desde el centro de la mesa.
+ * @param {string} pid   id del jugador
+ * @param {'exit'|'enter'} type
+ */
+function animateDieCup(pid, type) {
+  const isMe = pid === S.playerId;
+  let refEl;
+
+  if (isMe) {
+    // Para mí: usar my-dice-row como referencia
+    refEl = document.querySelector('#my-dice-row');
+  } else {
+    // Para otros: usar la zona de dados perdidos (entre jugador y centro)
+    const card = document.querySelector(`.player-card[data-pid="${pid}"]`);
+    refEl = document.querySelector(`.player-lost-dice[data-for="${pid}"]`) ||
+      card?.querySelector('.player-card-dice') || card;
+  }
+  if (!refEl) return;
+
+  const rect = refEl.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+
+  // Centro de la mesa
+  const table = document.querySelector('.game-table');
+  const tableRect = table ? table.getBoundingClientRect()
+    : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  const tcx = tableRect.left + tableRect.width  / 2;
+  const tcy = tableRect.top  + tableRect.height / 2;
+
+  // Vector normalizado
+  const dx = tcx - cx;
+  const dy = tcy - cy;
+  const dist = Math.hypot(dx, dy) || 1;
+  const nx = dx / dist;
+  const ny = dy / dist;
+
+  const travel = Math.min(dist * 0.85, 260);
+
+  const face = Math.ceil(Math.random() * 6);
+  const size = isMe ? null : 'sm';
+  const die = makeDie(face, { size });
+
+  Object.assign(die.style, {
+    position:      'fixed',
+    left:          `${cx}px`,
+    top:           `${cy}px`,
+    margin:        '0',
+    zIndex:        '9999',
+    pointerEvents: 'none',
+    transition:    'none',
+  });
+
+  document.body.appendChild(die);
+
+  const tx = nx * travel;
+  const ty = ny * travel;
+
+  let keyframes, options;
+
+  if (type === 'exit') {
+    die.style.boxShadow = '0 0 14px rgba(192,57,43,0.85), 0 0 28px rgba(192,57,43,0.4)';
+    keyframes = [
+      { transform: 'translate(-50%, -50%) scale(0.55) rotate(0deg)',                                      opacity: 0.5, offset: 0    },
+      { transform: `translate(calc(-50% + ${tx*0.18}px), calc(-50% + ${ty*0.18}px)) scale(1.15) rotate(-12deg)`, opacity: 1,   offset: 0.18 },
+      { transform: `translate(calc(-50% + ${tx*0.6}px),  calc(-50% + ${ty*0.6}px))  scale(0.7)  rotate(28deg)`,  opacity: 0.7, offset: 0.6  },
+      { transform: `translate(calc(-50% + ${tx}px),      calc(-50% + ${ty}px))       scale(0.05) rotate(65deg)`,  opacity: 0,   offset: 1    },
+    ];
+    options = { duration: 1320, easing: 'cubic-bezier(0.4, 0, 0.7, 1)', fill: 'forwards' };
+  } else {
+    die.style.boxShadow = '0 0 16px rgba(46,204,113,0.9), 0 0 32px rgba(46,204,113,0.5)';
+    keyframes = [
+      { transform: `translate(calc(-50% + ${tx}px),       calc(-50% + ${ty}px))       scale(0.08) rotate(-45deg)`, opacity: 0,   offset: 0    },
+      { transform: `translate(calc(-50% + ${tx*0.35}px),  calc(-50% + ${ty*0.35}px))  scale(1.0)  rotate(10deg)`,  opacity: 1,   offset: 0.38 },
+      { transform: `translate(calc(-50% + ${tx*0.05}px),  calc(-50% + ${ty*0.05}px))  scale(1.18) rotate(-5deg)`,  opacity: 1,   offset: 0.58 },
+      { transform: 'translate(-50%, -50%) scale(0.7)  rotate(0deg)',                                       opacity: 0.8, offset: 0.80 },
+      { transform: 'translate(-50%, -50%) scale(0.15) rotate(0deg)',                                       opacity: 0,   offset: 1    },
+    ];
+    options = { duration: 1220, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'forwards' };
+  }
+
+  const anim = die.animate(keyframes, options);
+  anim.onfinish = () => die.remove();
+  setTimeout(() => { if (die.parentNode) die.remove(); }, 3600); // safety
+}
+
 // ══════════════════════════════════  STATE  ═══════════════════════════════════
 const S = {
   ws:             null,
@@ -346,7 +434,6 @@ function onYourDice(msg) {
   document.getElementById('disp-round').textContent = S.roundNum;
   document.getElementById('disp-total').textContent = S.totalDice;
   document.getElementById('my-name-disp').textContent = S.playerName;
-  document.getElementById('my-count-disp').textContent = '●'.repeat(S.myDice.length);
 }
 
 function onTurn(msg) {
@@ -447,19 +534,18 @@ function onReveal(msg) {
   renderMyDice();
   renderOtherPlayers();
   showReveal(msg);
-  // Animar pérdida de dado (con un breve delay para que el flip termine)
-  if (msg.loser_id) setTimeout(() => animateDieLoss(msg.loser_id), 600);
-  // Actualizar conteo y animar dado recuperado (calzo exitoso)
+  // Animar dado saliendo del cacho (pérdida)
+  if (msg.loser_id) setTimeout(() => animateDieCup(msg.loser_id, 'exit'), 400);
+  // Actualizar conteo y animar dado entrando al cacho (recuperación)
   if (msg.challenger_gained && msg.challenger_id) {
     if (S.players[msg.challenger_id]) {
       S.players[msg.challenger_id].dice_count += 1;
       renderOtherPlayers();
       if (msg.challenger_id === S.playerId) {
-        document.getElementById('my-count-disp').textContent =
-          '●'.repeat(S.players[S.playerId].dice_count);
+        renderMyDice();
       }
     }
-    setTimeout(() => animateDieGain(msg.challenger_id), 700);
+    setTimeout(() => animateDieCup(msg.challenger_id, 'enter'), 750);
   }
 
   const bid = msg.bid || null;
@@ -545,15 +631,20 @@ function onEliminated(msg) {
 
 function onGameOver(msg) {
   S.phase = 'game_over';
-  hideReveal();
   log(`═══ ${msg.winner_name} GANÓ ═══`, 'win');
 
   const isWinner = msg.winner_id === S.playerId;
-  playSfx(isWinner ? 'win' : 'lose');
-  const overlay  = document.getElementById('game-over-overlay');
+
+  // Preparar el overlay ya, pero mostrarlo al terminar el countdown de reveal (7 s)
+  const overlay = document.getElementById('game-over-overlay');
   document.getElementById('go-title').textContent  = isWinner ? '¡Ganaste!' : 'Fin de la partida';
   document.getElementById('go-winner').textContent = `${msg.winner_name} es el ganador`;
-  overlay.style.display = 'flex';
+
+  setTimeout(() => {
+    hideReveal();
+    playSfx(isWinner ? 'win' : 'lose');
+    overlay.style.display = 'flex';
+  }, 7000);
 }
 
 function closeGameOver() {
@@ -688,10 +779,6 @@ function renderOtherPlayers() {
     nameEl.className = 'player-card-name';
     nameEl.textContent = p.name;
 
-    const countEl = document.createElement('div');
-    countEl.className = 'player-card-count';
-    countEl.textContent = p.dice_count > 0 ? `${p.dice_count} dado${p.dice_count !== 1 ? 's' : ''}` : 'Eliminado';
-
     const actionBadge = actionType ? document.createElement('div') : null;
     if (actionBadge) {
       actionBadge.className = `player-action-badge action-${actionType}`;
@@ -712,10 +799,19 @@ function renderOtherPlayers() {
     }
 
     card.appendChild(nameEl);
-    card.appendChild(countEl);
     card.appendChild(diceRow);
     if (actionBadge) card.appendChild(actionBadge);
     container.appendChild(card);
+
+    // Dados perdidos del oponente, colocados entre su carta y el centro de la mesa
+    const lostWrap = document.createElement('div');
+    lostWrap.className = 'player-lost-dice';
+    lostWrap.dataset.for = pid;
+    const lostCount = Math.max(0, 5 - (p.dice_count || 0));
+    if (lostCount > 0) {
+      lostWrap.appendChild(buildDiceRows(lostCount, { size: 'sm' }));
+    }
+    container.appendChild(lostWrap);
   }
 
   positionPlayers();
@@ -729,6 +825,15 @@ function renderMyDice(animate = false) {
   const wrap = buildDiceRows(S.myDice, { size: null, matchFace, revealed: inReveal });
   row.appendChild(wrap);
   if (animate && !inReveal) animateRoll(row);
+
+  // Mostrar dados perdidos fuera del my-area, entre éste y el centro
+  const totalDice = 5;
+  const lostCount = totalDice - S.myDice.length;
+  const lostDiceEl = document.getElementById('my-lost-dice');
+  lostDiceEl.innerHTML = '';
+  if (lostCount > 0) {
+    lostDiceEl.appendChild(buildDiceRows(lostCount, { size: 'sm' }));
+  }
 }
 
 function updateBidDisplay() {
@@ -1033,6 +1138,16 @@ function positionPlayers() {
     const y = cy + ry * Math.sin(rad);
     card.style.left = `${x}px`;
     card.style.top  = `${y}px`;
+
+    const pid = card.dataset.pid;
+    const lost = table.querySelector(`.player-lost-dice[data-for="${pid}"]`);
+    if (!lost) return;
+    // Interpolar hacia el centro para que quede entre la carta y la mesa
+    const t = 0.34;
+    const lx = x + (cx - x) * t;
+    const ly = y + (cy - y) * t;
+    lost.style.left = `${lx}px`;
+    lost.style.top = `${ly}px`;
   });
 }
 
@@ -1040,13 +1155,16 @@ window.addEventListener('resize', () => {
   if (S.phase === 'playing' || S.phase === 'reveal') positionPlayers();
 });
 
-/** Devuelve S.playerOrder empezando desde startId (inclusive), de forma circular. */
+/** Devuelve S.playerOrder empezando desde startId (inclusive), de forma circular,
+ *  respetando S.direction (1 = horario, -1 = antihorario). */
 function turnOrderFrom(startId) {
   const idx = S.playerOrder.indexOf(startId);
   if (idx === -1) return [...S.playerOrder];
+  const n   = S.playerOrder.length;
+  const dir = S.direction ?? 1;
   const result = [];
-  for (let i = 0; i < S.playerOrder.length; i++) {
-    result.push(S.playerOrder[(idx + i) % S.playerOrder.length]);
+  for (let i = 0; i < n; i++) {
+    result.push(S.playerOrder[((idx + i * dir) % n + n) % n]);
   }
   return result;
 }
