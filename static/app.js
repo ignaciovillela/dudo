@@ -212,7 +212,14 @@ const S = {
   // UI bid inputs
   bidQty:         1,
   bidFace:        2,
+
+  // Reconnect
+  manualClose:    false,
+  reconnectTimer: null,
+  reconnectAttempt: 0,
 };
+
+const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
 
 const DEFAULT_RULES = {
   elimination_mode: 'winner',
@@ -362,13 +369,67 @@ function toggleSound() {
 
 // ══════════════════════════════════  WEBSOCKET  ════════════════════════════════
 function connect(roomId) {
+  S.manualClose = false;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  if (S.reconnectTimer) {
+    clearTimeout(S.reconnectTimer);
+    S.reconnectTimer = null;
+  }
   S.ws = new WebSocket(`${proto}://${location.host}/ws/${roomId}`);
 
-  S.ws.onopen    = () => log('Conectado al servidor', 'system');
-  S.ws.onclose   = () => { log('Desconectado', 'system'); showToast('Conexión cerrada', true); };
+  S.ws.onopen = () => {
+    if (S.reconnectAttempt > 0) {
+      showToast('Reconectado');
+    }
+    hideReconnectBanner();
+    S.reconnectAttempt = 0;
+    log('Conectado al servidor', 'system');
+  };
+  S.ws.onclose = () => {
+    log('Desconectado', 'system');
+    if (!S.manualClose && S.roomId) {
+      scheduleReconnect();
+      return;
+    }
+    showToast('Conexión cerrada', true);
+  };
   S.ws.onerror   = () => showToast('Error de conexión', true);
   S.ws.onmessage = (e) => handleMsg(JSON.parse(e.data));
+}
+
+function scheduleReconnect() {
+  if (S.reconnectTimer) return;
+
+  if (S.reconnectAttempt >= RECONNECT_DELAYS_MS.length) {
+    showReconnectBanner('No se pudo reconectar. Recarga la pagina.', true);
+    showToast('No se pudo reconectar', true);
+    return;
+  }
+
+  const attempt = S.reconnectAttempt + 1;
+  const delay = RECONNECT_DELAYS_MS[S.reconnectAttempt];
+  S.reconnectAttempt = attempt;
+  showReconnectBanner(`Reconectando... intento ${attempt}/${RECONNECT_DELAYS_MS.length}`);
+
+  S.reconnectTimer = setTimeout(() => {
+    S.reconnectTimer = null;
+    connect(S.roomId);
+  }, delay);
+}
+
+function showReconnectBanner(text, isError = false) {
+  const el = document.getElementById('reconnect-banner');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('error', !!isError);
+  el.style.display = 'block';
+}
+
+function hideReconnectBanner() {
+  const el = document.getElementById('reconnect-banner');
+  if (!el) return;
+  el.style.display = 'none';
+  el.classList.remove('error');
 }
 
 function send(obj) {
@@ -1202,6 +1263,7 @@ function joinRoom() {
   if (!name) { showToast('Ingresa tu nombre', true); return; }
   if (!room) { showToast('Ingresa el código de sala', true); return; }
   S.playerName = name;
+  S.roomId = room;
   // Guardar nombre inmediatamente, antes de conectar
   try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ ...loadSession(), name })); } catch (_) {}
   playSfx('click');
@@ -1470,3 +1532,11 @@ window.onHostRulesChanged = onHostRulesChanged;
 ['pointerdown', 'keydown'].forEach(evt => {
   window.addEventListener(evt, unlockAudio, { once: true });
 });
+
+window.addEventListener('beforeunload', () => {
+  S.manualClose = true;
+  if (S.ws && S.ws.readyState === WebSocket.OPEN) {
+    S.ws.close();
+  }
+});
+
