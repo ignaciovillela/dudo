@@ -184,6 +184,7 @@ const S = {
   ws:             null,
   playerId:       null,
   playerName:     '',
+  playerAvatar:   '🎲',
   roomId:         '',
   hostId:         null,
   isHost:         false,
@@ -272,6 +273,11 @@ const DEFAULT_RULES = {
   calzo_recovers_on_turn: false,
 };
 
+const AVATAR_OPTIONS = [
+  '🎲', '🦅', '🐺', '🦁', '🐯', '🦊', '💀', '👑', '🎭', '🃏',
+  '🏹', '⚔️', '🛡️', '🌙', '⚡', '🔥', '💎', '🎯', '🍀', '🎪',
+];
+
 // ══════════════════════════════════  SOUND  ═══════════════════════════════════
 const AUDIO_STORAGE_KEY = 'dudoMuted';
 const RULES_STORAGE_KEY = 'dudoRules';
@@ -295,6 +301,7 @@ function saveSession() {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
       room: S.roomId,
       name: S.playerName,
+      avatar: S.playerAvatar,
       playerId: S.playerId,
     }));
   } catch (_) {}
@@ -516,8 +523,11 @@ function onConnected(msg) {
   S.roomId   = msg.room_id;
   // Enviar join con posible reconnect_id si la sala coincide
   const session = loadSession();
+  if (session?.avatar && AVATAR_OPTIONS.includes(session.avatar)) {
+    S.playerAvatar = session.avatar;
+  }
   const reconnect_id = (session && session.room === S.roomId) ? session.playerId : null;
-  send({ type: 'join', name: S.playerName, reconnect_id });
+  send({ type: 'join', name: S.playerName, avatar: S.playerAvatar, reconnect_id });
 }
 
 function onJoined(msg) {
@@ -526,6 +536,7 @@ function onJoined(msg) {
   S.players     = msg.players;
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules);
+  S.playerAvatar = S.players[S.playerId]?.avatar || S.playerAvatar;
   saveSession();
 
   document.getElementById('disp-room-code').textContent = S.roomId;
@@ -557,6 +568,7 @@ function onReconnected(msg) {
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules);
   S.phase       = msg.phase;
+  S.playerAvatar = S.players[S.playerId]?.avatar || S.playerAvatar;
   saveSession();
 
   if (S.phase === 'lobby') {
@@ -697,6 +709,9 @@ function onYourDice(msg) {
   document.getElementById('disp-round').textContent = S.roundNum;
   document.getElementById('disp-total').textContent = S.totalDice;
   document.getElementById('my-name-disp').textContent = S.playerName;
+  if (S.playerAvatar) {
+    document.getElementById('my-name-disp').textContent = `${S.playerAvatar} ${S.playerName}`;
+  }
 }
 
 function onTurn(msg) {
@@ -1017,7 +1032,7 @@ function renderLobbyPlayers() {
 
     const av = document.createElement('div');
     av.className = 'player-avatar';
-    av.textContent = p.name.charAt(0).toUpperCase();
+    av.textContent = p.avatar || '🎲';
     av.style.background = playerColor(pid);
 
     const name = document.createElement('div');
@@ -1057,7 +1072,7 @@ function renderOtherPlayers() {
 
     const nameEl = document.createElement('div');
     nameEl.className = 'player-card-name';
-    nameEl.textContent = p.name;
+    nameEl.textContent = `${p.avatar || '🎲'} ${p.name}`;
 
     const actionBadge = actionType ? document.createElement('div') : null;
     if (actionBadge) {
@@ -1324,12 +1339,20 @@ function sendCalzo() {
 function joinRoom() {
   const name = document.getElementById('inp-name').value.trim();
   const room = document.getElementById('inp-room').value.trim();
+  const avatar = document.getElementById('inp-avatar')?.value || '🎲';
   if (!name) { showToast('Ingresa tu nombre', true); return; }
   if (!room) { showToast('Ingresa el código de sala', true); return; }
   S.playerName = name;
+  S.playerAvatar = AVATAR_OPTIONS.includes(avatar) ? avatar : '🎲';
   S.roomId = room;
   // Guardar nombre inmediatamente, antes de conectar
-  try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ ...loadSession(), name })); } catch (_) {}
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+      ...loadSession(),
+      name,
+      avatar: S.playerAvatar,
+    }));
+  } catch (_) {}
   playSfx('click');
   connect(room);
 }
@@ -1577,9 +1600,14 @@ window.onHostRulesChanged = onHostRulesChanged;
   const roomFromUrl = new URLSearchParams(window.location.search).get('sala');
   const nameEl = document.getElementById('inp-name');
   const roomEl = document.getElementById('inp-room');
+  const avatarEl = document.getElementById('inp-avatar');
   if (nameEl && session?.name) nameEl.value = session.name;
   if (roomEl) {
     roomEl.value = roomFromUrl || session?.room || '';
+  }
+  if (avatarEl && session?.avatar && AVATAR_OPTIONS.includes(session.avatar)) {
+    avatarEl.value = session.avatar;
+    S.playerAvatar = session.avatar;
   }
 
   // Guardar nombre en tiempo real al escribir
@@ -1587,7 +1615,27 @@ window.onHostRulesChanged = onHostRulesChanged;
     nameEl.addEventListener('input', () => {
       const name = nameEl.value.trim();
       if (!name) return;
-      try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ ...loadSession(), name })); } catch (_) {}
+      try {
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+          ...loadSession(),
+          name,
+          avatar: avatarEl?.value || S.playerAvatar || '🎲',
+        }));
+      } catch (_) {}
+    });
+  }
+
+  if (avatarEl) {
+    avatarEl.addEventListener('change', () => {
+      const avatar = AVATAR_OPTIONS.includes(avatarEl.value) ? avatarEl.value : '🎲';
+      S.playerAvatar = avatar;
+      try {
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+          ...loadSession(),
+          name: nameEl?.value?.trim() || session?.name || '',
+          avatar,
+        }));
+      } catch (_) {}
     });
   }
 })();

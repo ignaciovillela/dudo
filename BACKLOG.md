@@ -20,16 +20,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ## 🟡 Prioridad media
 
-### 5. Avatar de jugador (emoji)
-**Por qué:** humaniza la partida, visualmente diferenciador.
-- Selector de emoji en el formulario (~20 opciones: 🎲 🦅 🐺 🦁 🐯 🦊 💀 👑 🎭 🃏 🏹 ⚔️ 🛡️ 🌙 ⚡ 🔥 💎 🎯 🍀 🎪).
-- El emoji se envía en `join` como campo `avatar`.
-- Backend: añadir `avatar: str = "🎲"` al dataclass `Player`; incluirlo en `to_public_dict()`.
-- Frontend: mostrar emoji en la carta del jugador y en el lobby en lugar de la inicial.
-- Guardar la elección en localStorage junto al nombre.
-
----
-
 ### 6. Historial / estadísticas de jugador
 **Por qué:** da contexto de rendimiento. Solo lado cliente, sin backend.
 - Al terminar cada partida (`game_over`), guardar en `dudoStats` en localStorage:
@@ -88,7 +78,6 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Impacto |
 |---|--------|-------------------|------------|---------|
-| 5 | Avatar de jugador | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥🔥 |
 | 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |
 | 7 | Límite de tiempo por turno | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐⭐ | 🔥🔥 |
 | 8 | Espectadores | `models.py`, `manager.py`, `app.js`, `index.html` | ⭐⭐⭐ | 🔥🔥 |

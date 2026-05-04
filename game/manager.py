@@ -9,6 +9,11 @@ from game.config import MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 
+ALLOWED_AVATARS = {
+    "🎲", "🦅", "🐺", "🦁", "🐯", "🦊", "💀", "👑", "🎭", "🃏",
+    "🏹", "⚔️", "🛡️", "🌙", "⚡", "🔥", "💎", "🎯", "🍀", "🎪",
+}
+
 
 class GameManager:
     def __init__(self):
@@ -110,6 +115,12 @@ class GameManager:
         self.last_message_at[player_id] = now
         return True
 
+    @staticmethod
+    def _normalize_avatar(value) -> str:
+        if isinstance(value, str) and value in ALLOWED_AVATARS:
+            return value
+        return "🎲"
+
     # ------------------------------------------------------------------ handlers
 
     async def _h_join(self, room_id, player_id, game, msg):
@@ -174,7 +185,8 @@ class GameManager:
                                     {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
 
         name = (msg.get("name") or f"Jugador {len(game.players) + 1}").strip()[:20]
-        player = Player(id=player_id, name=name)
+        avatar = self._normalize_avatar(msg.get("avatar"))
+        player = Player(id=player_id, name=name, avatar=avatar)
         game.players[player_id] = player
         game.player_order.append(player_id)
         if room_id not in self.hosts or self.hosts[room_id] not in game.players:

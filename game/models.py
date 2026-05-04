@@ -9,6 +9,7 @@ from typing import Optional
 class Player:
     id: str
     name: str
+    avatar: str = "🎲"
     dice: list = field(default_factory=list)
     dice_count: int = 5
     connected: bool = True
@@ -18,6 +19,7 @@ class Player:
         return {
             "id": self.id,
             "name": self.name,
+            "avatar": self.avatar,
             "dice_count": self.dice_count,
             "connected": self.connected,
             "ready": self.ready,

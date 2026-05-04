@@ -376,6 +376,21 @@ input[type="text"] {
 input[type="text"]:focus { border-color: var(--gold); }
 input[type="text"]::placeholder { color: var(--text-dim); }
 
+select {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 1rem;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+select:focus { border-color: var(--gold); }
+
 .row-group {
   display: flex;
   gap: 8px;
