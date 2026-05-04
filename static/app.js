@@ -437,6 +437,55 @@ function playTone(freq, duration = 0.08, opts = {}) {
   osc.stop(when + duration + 0.02);
 }
 
+function playSweep(startFreq, endFreq, duration = 0.12, opts = {}) {
+  if (AudioState.muted) return;
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  const when = ctx.currentTime + (opts.delay || 0);
+  const gain = ctx.createGain();
+  const osc = ctx.createOscillator();
+  osc.type = opts.type || 'sine';
+  osc.frequency.setValueAtTime(startFreq, when);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), when + duration);
+  const volume = opts.volume ?? 0.05;
+  gain.gain.setValueAtTime(0.0001, when);
+  gain.gain.exponentialRampToValueAtTime(volume, when + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(when);
+  osc.stop(when + duration + 0.02);
+}
+
+function playNoiseBurst(duration = 0.12, opts = {}) {
+  if (AudioState.muted) return;
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  const when = ctx.currentTime + (opts.delay || 0);
+  const sampleRate = ctx.sampleRate;
+  const frameCount = Math.max(1, Math.floor(sampleRate * duration));
+  const buffer = ctx.createBuffer(1, frameCount, sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < frameCount; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / frameCount);
+  }
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = opts.freq || 1200;
+  filter.Q.value = opts.q || 1.4;
+  const gain = ctx.createGain();
+  const volume = opts.volume ?? 0.045;
+  gain.gain.setValueAtTime(0.0001, when);
+  gain.gain.exponentialRampToValueAtTime(volume, when + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(when);
+}
+
 const SFX = {
   click() {
     playTone(620, 0.05, { type: 'square', volume: 0.03 });
@@ -468,6 +517,25 @@ const SFX = {
   error() {
     playTone(220, 0.08, { type: 'sawtooth', volume: 0.045 });
     playTone(180, 0.12, { type: 'sawtooth', delay: 0.07, volume: 0.04 });
+  },
+  roll() {
+    playNoiseBurst(0.13, { freq: 980, q: 1.2, volume: 0.05 });
+    playNoiseBurst(0.1, { freq: 620, q: 1.1, delay: 0.03, volume: 0.04 });
+  },
+  gavilan() {
+    playSweep(900, 1800, 0.11, { type: 'triangle', volume: 0.04 });
+  },
+  eliminated() {
+    playTone(420, 0.16, { type: 'sawtooth', volume: 0.05 });
+    playTone(300, 0.2, { type: 'sawtooth', delay: 0.14, volume: 0.045 });
+    playTone(210, 0.24, { type: 'sawtooth', delay: 0.32, volume: 0.04 });
+  },
+  reconnect() {
+    playTone(880, 0.06, { type: 'sine', volume: 0.035 });
+    playTone(1040, 0.1, { type: 'triangle', delay: 0.06, volume: 0.03 });
+  },
+  tick() {
+    playTone(1450, 0.03, { type: 'square', volume: 0.025 });
   },
 };
 
@@ -510,6 +578,7 @@ function connect(roomId) {
   S.ws.onopen = () => {
     if (S.reconnectAttempt > 0) {
       showToast('Reconectado');
+      playSfx('reconnect');
     }
     hideReconnectBanner();
     S.reconnectAttempt = 0;
@@ -713,6 +782,7 @@ function onReconnected(msg) {
     renderLobbyPlayers();
     renderLobbyRules();
     updateStartButton();
+    playSfx('reconnect');
     log('Reconectado al lobby', 'system');
     return;
   }
@@ -721,6 +791,7 @@ function onReconnected(msg) {
   applySpectatorMode();
   renderOtherPlayers();
   updateBidDisplay();
+  playSfx('reconnect');
   log('Reconectado a la partida en curso', 'system');
 }
 
@@ -830,6 +901,7 @@ function onGameStarted(msg) {
   log(`  • Calzo recupera en turno: ${rules.calzo_recovers_on_turn ? 'sí' : 'no'}`, 'system');
   log(`  • Tiempo por turno: ${rules.turn_timeout_seconds > 0 ? `${rules.turn_timeout_seconds}s` : 'sin límite'}`, 'system');
   log('─── Juego iniciado ───', 'round');
+  playSfx('roll');
 }
 
 function onYourDice(msg) {
@@ -995,6 +1067,10 @@ function onReveal(msg) {
     }
   }
 
+  if (msg.is_gavilan) {
+    playSfx('gavilan');
+  }
+
   let resultText, resultClass;
   if (msg.action === 'paso') {
     const gavilan = msg.is_gavilan;
@@ -1065,11 +1141,13 @@ function onNewRound(msg) {
   updateDirectionIndicator();
   updateBidDisplay();
   log(`─── Ronda ${S.roundNum} ───`, 'round');
+  playSfx('roll');
 }
 
 function onEliminated(msg) {
   if (S.players[msg.player_id])
     S.players[msg.player_id].dice_count = 0;
+  playSfx('eliminated');
   log(`${msg.player_name} fue eliminado`, 'elim');
   renderOtherPlayers();
 }
@@ -1193,6 +1271,7 @@ function startRevealCountdown(seconds) {
       clearInterval(countdownTimer);
       el.textContent = '';
     } else {
+      if (remaining <= 3) playSfx('tick');
       el.textContent = `Nueva ronda en ${remaining}…`;
     }
   }, 1000);
