@@ -12,6 +12,7 @@ class GameManager:
     def __init__(self):
         self.games: dict[str, Game] = {}
         self.connections: dict[str, dict[str, WebSocket]] = {}
+        self.hosts: dict[str, str] = {}
 
     # ------------------------------------------------------------------ connect
 
@@ -33,6 +34,7 @@ class GameManager:
         if not self.connections.get(room_id):
             self.games.pop(room_id, None)
             self.connections.pop(room_id, None)
+            self.hosts.pop(room_id, None)
             return
 
         if not game or player_id not in game.players:
@@ -40,17 +42,34 @@ class GameManager:
 
         player = game.players[player_id]
         player.connected = False
+        previous_host_id = self._host_id(room_id, game)
 
         if game.phase == "lobby":
             del game.players[player_id]
             if player_id in game.player_order:
                 game.player_order.remove(player_id)
 
+        host_changed_msg = None
+        if previous_host_id == player_id:
+            new_host_id = self._pick_connected_host(game)
+            if new_host_id:
+                self.hosts[room_id] = new_host_id
+                host_changed_msg = {
+                    "type": "host_changed",
+                    "new_host_id": new_host_id,
+                    "new_host_name": game.players[new_host_id].name,
+                }
+            else:
+                self.hosts.pop(room_id, None)
+
         await self._broadcast(room_id, {
             "type": "player_disconnected",
             "player_id": player_id,
             "player_name": player.name,
         })
+
+        if host_changed_msg:
+            await self._broadcast(room_id, host_changed_msg)
 
         if game.phase == "playing":
             outcome = self._rules_engine(game).resolve_outcome(game, player_id)
@@ -94,7 +113,8 @@ class GameManager:
                 await self._send(room_id, reconnect_id, {
                     "type": "reconnected",
                     "player_id": reconnect_id,
-                    "is_host": bool(game.player_order) and game.player_order[0] == reconnect_id,
+                    "host_id": self._host_id(room_id, game),
+                    "is_host": self._host_id(room_id, game) == reconnect_id,
                     "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
                     "player_order": game.player_order,
                     "phase": game.phase,
@@ -128,11 +148,14 @@ class GameManager:
         player = Player(id=player_id, name=name)
         game.players[player_id] = player
         game.player_order.append(player_id)
+        if room_id not in self.hosts or self.hosts[room_id] not in game.players:
+            self.hosts[room_id] = game.player_order[0]
 
         await self._send(room_id, player_id, {
             "type": "joined",
             "player_id": player_id,
-            "is_host": game.player_order[0] == player_id,
+            "host_id": self._host_id(room_id, game),
+            "is_host": self._host_id(room_id, game) == player_id,
             "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
             "player_order": game.player_order,
             "rules": game.rules.to_dict(),
@@ -157,7 +180,7 @@ class GameManager:
             })
 
     async def _h_start(self, room_id, player_id, game, msg):
-        is_host = game.player_order and game.player_order[0] == player_id
+        is_host = self._host_id(room_id, game) == player_id
         connected = [p for p in game.players.values() if p.connected]
         if is_host and len(connected) >= 2:
             await self._begin_game(room_id, game)
@@ -166,7 +189,7 @@ class GameManager:
         if game.phase != "lobby":
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Solo puedes cambiar reglas en el lobby"})
-        is_host = bool(game.player_order) and game.player_order[0] == player_id
+        is_host = self._host_id(room_id, game) == player_id
         if not is_host:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Solo el anfitrión puede cambiar reglas"})
@@ -475,6 +498,24 @@ class GameManager:
 
     def _rules_engine(self, game: Game) -> RuleEngine:
         return RuleEngine.from_config(game.rules)
+
+    def _pick_connected_host(self, game: Game) -> str | None:
+        for pid in game.player_order:
+            player = game.players.get(pid)
+            if player and player.connected:
+                return pid
+        return None
+
+    def _host_id(self, room_id: str, game: Game) -> str | None:
+        host_id = self.hosts.get(room_id)
+        if host_id in game.players and game.players[host_id].connected:
+            return host_id
+        fallback = self._pick_connected_host(game)
+        if fallback:
+            self.hosts[room_id] = fallback
+            return fallback
+        self.hosts.pop(room_id, None)
+        return None
 
     async def _send_dice(self, room_id: str, game: Game):
         for pid, player in game.players.items():

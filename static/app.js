@@ -185,6 +185,7 @@ const S = {
   playerId:       null,
   playerName:     '',
   roomId:         '',
+  hostId:         null,
   isHost:         false,
   isReady:        false,
   rules:          null,
@@ -385,6 +386,7 @@ function handleMsg(msg) {
     player_ready:       onPlayerReady,
     player_disconnected:onPlayerDisc,
     player_reconnected: onPlayerReconnected,
+    host_changed:       onHostChanged,
     all_ready:          onAllReady,
     rules_updated:      onRulesUpdated,
     game_started:       onGameStarted,
@@ -413,6 +415,7 @@ function onConnected(msg) {
 }
 
 function onJoined(msg) {
+  S.hostId      = msg.host_id || msg.player_order?.[0] || null;
   S.isHost      = msg.is_host;
   S.players     = msg.players;
   S.playerOrder = msg.player_order;
@@ -442,6 +445,7 @@ function onJoined(msg) {
 function onReconnected(msg) {
   // El backend reasignó el WS al player_id original
   S.playerId    = msg.player_id;
+  S.hostId      = msg.host_id || msg.player_order?.[0] || null;
   S.isHost      = msg.is_host;
   S.players     = msg.players;
   S.playerOrder = msg.player_order;
@@ -462,6 +466,27 @@ function onPlayerReconnected(msg) {
   renderOtherPlayers();
   renderLobbyPlayers();
   log(`${msg.player_name} se reconectó`, 'system');
+}
+
+function onHostChanged(msg) {
+  S.hostId = msg.new_host_id || S.hostId;
+  S.isHost = S.playerId === S.hostId;
+
+  const startBtn = document.getElementById('btn-start');
+  if (startBtn) {
+    startBtn.style.display = S.isHost ? 'inline-flex' : 'none';
+  }
+
+  if (S.phase === 'lobby') {
+    renderLobbyRules();
+    updateStartButton();
+    renderLobbyPlayers();
+  }
+
+  if (S.isHost) {
+    showToast('Ahora eres el anfitrión');
+  }
+  log(`Nuevo anfitrión: ${msg.new_host_name}`, 'system');
 }
 
 function onAllReady() {
@@ -858,11 +883,12 @@ function startRevealCountdown(seconds) {
 function renderLobbyPlayers() {
   const list = document.getElementById('lobby-player-list');
   list.innerHTML = '';
+  const hostId = S.hostId || S.playerOrder[0];
   for (const pid of S.playerOrder) {
     const p = S.players[pid];
     if (!p) continue;
     const row = document.createElement('div');
-    row.className = 'lobby-player-row' + (S.playerOrder[0] === pid ? ' is-host' : '');
+    row.className = 'lobby-player-row' + (hostId === pid ? ' is-host' : '');
 
     const av = document.createElement('div');
     av.className = 'player-avatar';
