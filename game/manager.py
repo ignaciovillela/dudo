@@ -45,11 +45,6 @@ class GameManager:
         player.connected = False
         previous_host_id = self._host_id(room_id, game)
 
-        if game.phase == "lobby":
-            del game.players[player_id]
-            if player_id in game.player_order:
-                game.player_order.remove(player_id)
-
         host_changed_msg = None
         if previous_host_id == player_id:
             new_host_id = self._pick_connected_host(game)
@@ -103,7 +98,7 @@ class GameManager:
     async def _h_join(self, room_id, player_id, game, msg):
         # ── Intento de reconexión ─────────────────────────────────────────────
         reconnect_id = msg.get("reconnect_id")
-        if reconnect_id and reconnect_id in game.players and game.phase == "playing":
+        if reconnect_id and reconnect_id in game.players and game.phase in {"playing", "lobby"}:
             old = game.players[reconnect_id]
             if not old.connected:
                 # Reasignar el websocket al player_id original
@@ -111,6 +106,17 @@ class GameManager:
                 if ws:
                     self.connections[room_id][reconnect_id] = ws
                 old.connected = True
+
+                host_changed_msg = None
+                if game.phase == "lobby" and game.player_order and game.player_order[0] == reconnect_id:
+                    if self.hosts.get(room_id) != reconnect_id:
+                        self.hosts[room_id] = reconnect_id
+                        host_changed_msg = {
+                            "type": "host_changed",
+                            "new_host_id": reconnect_id,
+                            "new_host_name": old.name,
+                        }
+
                 await self._send(room_id, reconnect_id, {
                     "type": "reconnected",
                     "player_id": reconnect_id,
@@ -126,15 +132,20 @@ class GameManager:
                     "player_id": reconnect_id,
                     "player_name": old.name,
                 })
-                # Reenviar estado actual de la partida al jugador reconectado
-                await self._send(room_id, reconnect_id, {
-                    "type": "your_dice",
-                    "dice": old.dice,
-                    "round_number": game.round_number,
-                    "total_dice": game.total_dice(),
-                    "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
-                })
-                await self._announce_turn(room_id, game)
+
+                if host_changed_msg:
+                    await self._broadcast(room_id, host_changed_msg)
+
+                if game.phase == "playing":
+                    # Reenviar estado actual de la partida al jugador reconectado
+                    await self._send(room_id, reconnect_id, {
+                        "type": "your_dice",
+                        "dice": old.dice,
+                        "round_number": game.round_number,
+                        "total_dice": game.total_dice(),
+                        "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
+                    })
+                    await self._announce_turn(room_id, game)
                 return
 
         # ── Unirse nuevo ──────────────────────────────────────────────────────

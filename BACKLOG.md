@@ -18,14 +18,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ## 🔴 Alta prioridad
 
-### 1. Reconexión en lobby
-**Por qué:** actualmente solo funciona durante partida; si el host se va del lobby y vuelve, pierde su rol.
-- Backend: en `_h_join`, si `reconnect_id` existe y la sala está en `lobby`, reincorporar al jugador con el mismo ID y nombre sin añadirlo como nuevo jugador.
-- Si el reconectado era el host (`player_order[0]`), mantener esa posición.
-- Emitir `reconnected` con `phase: "lobby"`.
-- Frontend: `onReconnected` ya maneja `phase: "lobby"`.
-
-
 ### 3. Rate limiting de mensajes WS
 **Por qué:** un cliente malicioso o buggy podría saturar el servidor.
 - En `GameManager`, mantener un `dict[str, float]` con el timestamp del último mensaje por `player_id`.
@@ -103,7 +95,6 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Impacto |
 |---|--------|-------------------|------------|---------|
-| 1 | Reconexión en lobby | `manager.py`, `app.js` | ⭐⭐ | 🔥🔥 |
 | 3 | Rate limiting | `manager.py` | ⭐⭐ | 🔥🔥 |
 | 5 | Avatar de jugador | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥🔥 |
 | 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |

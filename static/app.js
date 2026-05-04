@@ -559,6 +559,22 @@ function onReconnected(msg) {
   S.phase       = msg.phase;
   saveSession();
 
+  if (S.phase === 'lobby') {
+    showScreen('lobby');
+    document.getElementById('lobby-form').style.display = 'none';
+    document.getElementById('lobby-room').style.display = 'block';
+    document.getElementById('disp-room-code').textContent = S.roomId;
+    const startBtn = document.getElementById('btn-start');
+    if (startBtn) {
+      startBtn.style.display = S.isHost ? 'inline-flex' : 'none';
+    }
+    renderLobbyPlayers();
+    renderLobbyRules();
+    updateStartButton();
+    log('Reconectado al lobby', 'system');
+    return;
+  }
+
   showScreen('game');
   renderOtherPlayers();
   updateBidDisplay();

@@ -10,9 +10,11 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 ### Added
 - Nuevo modulo `game/config.py` para centralizar configuraciones por entorno (`REVEAL_SECONDS`, `MAX_PLAYERS`, `RATE_LIMIT_MS`).
 - Notificacion de turno en segundo plano en frontend, con `Notification` y parpadeo de `document.title` hasta recuperar foco.
+- Reconexion de jugador en fase `lobby` usando `reconnect_id`, conservando identidad y orden original en sala.
 
 ### Changed
 - `game/manager.py` ahora usa `MAX_PLAYERS` para validar cupo de sala y `REVEAL_SECONDS` para la espera entre rondas.
+- Si el jugador reconectado en lobby corresponde al primer lugar de `player_order`, recupera el rol de anfitrion y se notifica `host_changed`.
 
 ### Docs
 - `README.md` documenta las variables de entorno disponibles y sus valores por defecto.
