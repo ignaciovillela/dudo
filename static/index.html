@@ -273,6 +273,17 @@
   </div>
 </div>
 
+<div id="kick-confirm-modal" class="stats-modal" style="display:none">
+  <div class="stats-box">
+    <h2><i class="fa-solid fa-user-slash" aria-hidden="true"></i> Expulsar jugador</h2>
+    <p id="kick-confirm-text">¿Seguro que deseas expulsar a este jugador?</p>
+    <div class="lobby-actions">
+      <button class="btn btn-danger" type="button" onclick="confirmKickPlayer()">Expulsar</button>
+      <button class="btn btn-sm" type="button" onclick="closeKickConfirm()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="notif-modal" class="stats-modal" style="display:none">
   <div class="stats-box notif-box">
     <h2><i class="fa-regular fa-bell" aria-hidden="true"></i> Notificaciones de turno</h2>

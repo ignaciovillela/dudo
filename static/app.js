@@ -226,6 +226,8 @@ const S = {
   manualClose:    false,
   reconnectTimer: null,
   reconnectAttempt: 0,
+  pendingKickTargetId: null,
+  pendingKickTargetName: '',
 };
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
@@ -778,6 +780,8 @@ function handleMsg(msg) {
     spectator_state:    onSpectatorState,
     spectator_joined:   onSpectatorJoined,
     spectator_left:     onSpectatorLeft,
+    player_kicked:      onPlayerKicked,
+    kicked:             onKicked,
     error:              onError,
   };
   const fn = H[msg.type];
@@ -870,6 +874,33 @@ function onSpectatorJoined(msg) {
 
 function onSpectatorLeft(msg) {
   log(`${msg.spectator_name} dejó de observar`, 'system');
+}
+
+function onPlayerKicked(msg) {
+  delete S.players[msg.player_id];
+  S.playerOrder = S.playerOrder.filter(pid => pid !== msg.player_id);
+  if (S.currentPid === msg.player_id) S.currentPid = null;
+  renderLobbyPlayers();
+  renderOtherPlayers();
+  updateStartButton();
+  log(`${msg.player_name} fue expulsado por ${msg.kicked_by_name}`, 'system');
+}
+
+function onKicked(msg) {
+  showToast(msg.message || 'Fuiste expulsado de la sala', true);
+  log(msg.message || 'Fuiste expulsado de la sala', 'system');
+  closeKickConfirm();
+  clearSession();
+  S.manualClose = true;
+  if (S.ws && S.ws.readyState === WebSocket.OPEN) S.ws.close();
+  S.roomId = '';
+  S.players = {};
+  S.playerOrder = [];
+  showScreen('lobby');
+  const form = document.getElementById('lobby-form');
+  const room = document.getElementById('lobby-room');
+  if (form) form.style.display = 'block';
+  if (room) room.style.display = 'none';
 }
 
 function onReconnected(msg) {
@@ -1234,7 +1265,7 @@ function onReveal(msg) {
   if (resultClass === 'win') playSfx('win');
   if (resultClass === 'lose') playSfx('lose');
 
-  startRevealCountdown(7);
+  startRevealCountdown(Number(msg.reveal_seconds || 7));
 }
 
 function onNewRound(msg) {
@@ -1247,7 +1278,6 @@ function onNewRound(msg) {
   S.revealBidFace    = null;
   S.lastActionPlayerId = null;
   S.lastActionType = null;
-  S.direction          = 1;
   S.roundFirstPlayer   = '';
   S.hasFirstAction     = false;
   S.lastLossPlayerId   = null;
@@ -1301,12 +1331,13 @@ function onGameOver(msg) {
     document.getElementById('go-winner').textContent = `${msg.winner_name} es el ganador`;
   }
 
+  const revealSeconds = Number(msg.reveal_seconds || 7);
   setTimeout(() => {
     hideReveal();
     const endSfx = isLoserMode ? (isLoser ? 'lose' : 'win') : (isWinner ? 'win' : 'lose');
     playSfx(endSfx);
     overlay.style.display = 'flex';
-  }, 7000);
+  }, Math.max(0, revealSeconds) * 1000);
 }
 
 function closeGameOver() {
@@ -1430,7 +1461,7 @@ function renderLobbyPlayers() {
     const p = S.players[pid];
     if (!p) continue;
     const row = document.createElement('div');
-    row.className = 'lobby-player-row' + (hostId === pid ? ' is-host' : '');
+    row.className = 'lobby-player-row' + (hostId === pid ? ' is-host' : '') + (p.connected ? '' : ' inactive');
 
     const av = document.createElement('div');
     av.className = 'player-avatar';
@@ -1442,14 +1473,30 @@ function renderLobbyPlayers() {
     name.textContent = p.name;
 
     const badge = document.createElement('div');
-    badge.className = 'ready-badge' + (p.ready ? ' ready' : '');
-    badge.innerHTML = p.ready
-      ? '<i class="fa-solid fa-check" aria-hidden="true"></i> Listo'
-      : '<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando';
+    badge.className = 'ready-badge' + (p.connected ? (p.ready ? ' ready' : '') : ' inactive');
+    badge.innerHTML = !p.connected
+      ? '<i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i> Inactivo'
+      : (p.ready
+        ? '<i class="fa-solid fa-check" aria-hidden="true"></i> Listo'
+        : '<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando');
 
-    row.appendChild(av);
-    row.appendChild(name);
-    row.appendChild(badge);
+    if (S.isHost && pid !== S.playerId) {
+      const kickBtn = document.createElement('button');
+      kickBtn.type = 'button';
+      kickBtn.className = 'kick-btn';
+      kickBtn.title = `Expulsar a ${p.name}`;
+      kickBtn.setAttribute('aria-label', `Expulsar a ${p.name}`);
+      kickBtn.innerHTML = '<i class="fa-solid fa-user-xmark" aria-hidden="true"></i>';
+      kickBtn.onclick = () => openKickConfirm(pid, p.name);
+      row.appendChild(av);
+      row.appendChild(kickBtn);
+      row.appendChild(name);
+      row.appendChild(badge);
+    } else {
+      row.appendChild(av);
+      row.appendChild(name);
+      row.appendChild(badge);
+    }
     list.appendChild(row);
   }
 }
@@ -1469,6 +1516,7 @@ function renderOtherPlayers() {
     card.className = 'player-card' +
       (pid === S.currentPid ? ' active-player' : '') +
       (actionType ? ` action-actor action-${actionType}` : '') +
+      (p.connected ? '' : ' inactive') +
       (p.dice_count <= 0 ? ' eliminated' : '');
     card.dataset.pid = pid;
 
@@ -1476,9 +1524,14 @@ function renderOtherPlayers() {
     nameEl.className = 'player-card-name';
     nameEl.textContent = `${p.avatar || '🎲'} ${p.name}`;
 
-    const countEl = document.createElement('div');
-    countEl.className = 'player-card-count' + (pid === S.lastLossPlayerId ? ' count-drop' : '');
-    countEl.textContent = `Dados: ${p.dice_count || 0}`;
+    const headerEl = document.createElement('div');
+    headerEl.className = 'player-card-header';
+
+    const offlineEl = !p.connected ? document.createElement('div') : null;
+    if (offlineEl) {
+      offlineEl.className = 'player-offline-tag';
+      offlineEl.innerHTML = '<i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i> INACTIVO';
+    }
 
     const actionBadge = actionType ? document.createElement('div') : null;
     if (actionBadge) {
@@ -1499,8 +1552,20 @@ function renderOtherPlayers() {
       card.appendChild(arrow);
     }
 
-    card.appendChild(nameEl);
-    card.appendChild(countEl);
+    if (S.isHost && pid !== S.playerId) {
+      const kickBtn = document.createElement('button');
+      kickBtn.type = 'button';
+      kickBtn.className = 'kick-btn';
+      kickBtn.title = `Expulsar a ${p.name}`;
+      kickBtn.setAttribute('aria-label', `Expulsar a ${p.name}`);
+      kickBtn.innerHTML = '<i class="fa-solid fa-user-xmark" aria-hidden="true"></i>';
+      kickBtn.onclick = () => openKickConfirm(pid, p.name);
+      headerEl.appendChild(kickBtn);
+    }
+    headerEl.appendChild(nameEl);
+
+    card.appendChild(headerEl);
+    if (offlineEl) card.appendChild(offlineEl);
     card.appendChild(diceRow);
     if (actionBadge) card.appendChild(actionBadge);
     container.appendChild(card);
@@ -1645,6 +1710,29 @@ function hideControls() {
   document.getElementById('btn-paso').disabled  = true;
   document.getElementById('btn-dudo').disabled  = true;
   document.getElementById('btn-calzo').disabled = true;
+}
+
+function openKickConfirm(playerId, playerName) {
+  if (!S.isHost || playerId === S.playerId) return;
+  S.pendingKickTargetId = playerId;
+  S.pendingKickTargetName = playerName || 'este jugador';
+  const text = document.getElementById('kick-confirm-text');
+  if (text) text.textContent = `¿Seguro que deseas expulsar a ${S.pendingKickTargetName}?`;
+  const modal = document.getElementById('kick-confirm-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeKickConfirm() {
+  S.pendingKickTargetId = null;
+  S.pendingKickTargetName = '';
+  const modal = document.getElementById('kick-confirm-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function confirmKickPlayer() {
+  if (!S.isHost || !S.pendingKickTargetId) return;
+  send({ type: 'kick_player', target_id: S.pendingKickTargetId });
+  closeKickConfirm();
 }
 
 /** Cantidad mínima válida para apostar la cara `face` dado el estado actual. */
@@ -2038,6 +2126,8 @@ window.openNotificationModal = openNotificationModal;
 window.acceptNotificationPrompt = acceptNotificationPrompt;
 window.rejectNotificationPrompt = rejectNotificationPrompt;
 window.toggleAvatarPicker = toggleAvatarPicker;
+window.closeKickConfirm = closeKickConfirm;
+window.confirmKickPlayer = confirmKickPlayer;
 
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (function () {

@@ -5,7 +5,7 @@ import time
 
 from fastapi import WebSocket
 
-from game.config import MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
+from game.config import DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 
@@ -22,6 +22,7 @@ class GameManager:
         self.hosts: dict[str, str] = {}
         self.last_message_at: dict[str, float] = {}
         self.turn_timeout_tasks: dict[str, asyncio.Task] = {}
+        self.disconnect_resolution_tasks: dict[tuple[str, str], asyncio.Task] = {}
 
     # ------------------------------------------------------------------ connect
 
@@ -35,6 +36,12 @@ class GameManager:
             "room_id": room_id,
         })
 
+    def resolve_player_id(self, room_id: str, websocket: WebSocket) -> str | None:
+        for pid, ws in self.connections.get(room_id, {}).items():
+            if ws is websocket:
+                return pid
+        return None
+
     async def disconnect(self, room_id: str, player_id: str):
         self.connections.get(room_id, {}).pop(player_id, None)
         self.last_message_at.pop(player_id, None)
@@ -43,6 +50,7 @@ class GameManager:
         # Liberar sala si no quedan conexiones activas
         if not self.connections.get(room_id):
             self._cancel_turn_timeout(room_id)
+            self._cancel_disconnect_resolution_for_room(room_id)
             self.games.pop(room_id, None)
             self.connections.pop(room_id, None)
             self.hosts.pop(room_id, None)
@@ -90,9 +98,7 @@ class GameManager:
             await self._broadcast(room_id, host_changed_msg)
 
         if game.phase == "playing":
-            outcome = self._rules_engine(game).resolve_outcome(game, player_id)
-            if outcome:
-                await self._end_game(room_id, game, outcome)
+            self._schedule_disconnect_resolution(room_id, player_id)
 
     # ------------------------------------------------------------------ dispatch
 
@@ -110,6 +116,7 @@ class GameManager:
             "ready":     self._h_ready,
             "start":     self._h_start,
             "set_rules": self._h_set_rules,
+            "kick_player": self._h_kick_player,
             "direction": self._h_direction,
             "bid":       self._h_bid,
             "paso":      self._h_paso,
@@ -158,53 +165,53 @@ class GameManager:
 
         if reconnect_id and reconnect_id in game.players and game.phase in {"playing", "lobby"}:
             old = game.players[reconnect_id]
-            if not old.connected:
-                # Reasignar el websocket al player_id original
-                ws = self.connections[room_id].pop(player_id, None)
-                if ws:
-                    self.connections[room_id][reconnect_id] = ws
-                old.connected = True
+            # Permitir takeover incluso si aún figura conectado (carrera de desconexión).
+            ws = self.connections[room_id].pop(player_id, None)
+            if ws:
+                self.connections[room_id][reconnect_id] = ws
+            old.connected = True
+            self._cancel_disconnect_resolution(room_id, reconnect_id)
 
-                host_changed_msg = None
-                if game.phase == "lobby" and game.player_order and game.player_order[0] == reconnect_id:
-                    if self.hosts.get(room_id) != reconnect_id:
-                        self.hosts[room_id] = reconnect_id
-                        host_changed_msg = {
-                            "type": "host_changed",
-                            "new_host_id": reconnect_id,
-                            "new_host_name": old.name,
-                        }
+            host_changed_msg = None
+            if game.phase == "lobby" and game.player_order and game.player_order[0] == reconnect_id:
+                if self.hosts.get(room_id) != reconnect_id:
+                    self.hosts[room_id] = reconnect_id
+                    host_changed_msg = {
+                        "type": "host_changed",
+                        "new_host_id": reconnect_id,
+                        "new_host_name": old.name,
+                    }
 
+            await self._send(room_id, reconnect_id, {
+                "type": "reconnected",
+                "player_id": reconnect_id,
+                "host_id": self._host_id(room_id, game),
+                "is_host": self._host_id(room_id, game) == reconnect_id,
+                "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
+                "player_order": game.player_order,
+                "phase": game.phase,
+                "rules": game.rules.to_dict(),
+            })
+            await self._broadcast_except(room_id, reconnect_id, {
+                "type": "player_reconnected",
+                "player_id": reconnect_id,
+                "player_name": old.name,
+            })
+
+            if host_changed_msg:
+                await self._broadcast(room_id, host_changed_msg)
+
+            if game.phase == "playing":
+                # Reenviar estado actual de la partida al jugador reconectado
                 await self._send(room_id, reconnect_id, {
-                    "type": "reconnected",
-                    "player_id": reconnect_id,
-                    "host_id": self._host_id(room_id, game),
-                    "is_host": self._host_id(room_id, game) == reconnect_id,
-                    "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
-                    "player_order": game.player_order,
-                    "phase": game.phase,
-                    "rules": game.rules.to_dict(),
+                    "type": "your_dice",
+                    "dice": old.dice,
+                    "round_number": game.round_number,
+                    "total_dice": game.total_dice(),
+                    "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
                 })
-                await self._broadcast_except(room_id, reconnect_id, {
-                    "type": "player_reconnected",
-                    "player_id": reconnect_id,
-                    "player_name": old.name,
-                })
-
-                if host_changed_msg:
-                    await self._broadcast(room_id, host_changed_msg)
-
-                if game.phase == "playing":
-                    # Reenviar estado actual de la partida al jugador reconectado
-                    await self._send(room_id, reconnect_id, {
-                        "type": "your_dice",
-                        "dice": old.dice,
-                        "round_number": game.round_number,
-                        "total_dice": game.total_dice(),
-                        "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
-                    })
-                    await self._announce_turn(room_id, game)
-                return
+                await self._announce_turn(room_id, game)
+            return
 
         if game.phase == "lobby" and player_id in game.spectators:
             game.spectators.pop(player_id, None)
@@ -293,6 +300,55 @@ class GameManager:
             "rules": game.rules.to_dict(),
             "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
         })
+
+    async def _h_kick_player(self, room_id, player_id, game, msg):
+        is_host = self._host_id(room_id, game) == player_id
+        if not is_host:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Solo el anfitrión puede expulsar jugadores"})
+
+        target_id = msg.get("target_id")
+        if not isinstance(target_id, str):
+            return
+        if target_id == player_id:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "No puedes expulsarte a ti mismo"})
+
+        target = game.players.get(target_id)
+        if not target:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Jugador no encontrado"})
+
+        self._cancel_disconnect_resolution(room_id, target_id)
+
+        await self._send(room_id, target_id, {
+            "type": "kicked",
+            "message": "El anfitrión te expulsó de la sala",
+        })
+        ws = self.connections.get(room_id, {}).pop(target_id, None)
+        if ws:
+            try:
+                await ws.close(code=1000)
+            except Exception:
+                pass
+
+        del game.players[target_id]
+        if target_id in game.player_order:
+            game.player_order.remove(target_id)
+
+        await self._broadcast(room_id, {
+            "type": "player_kicked",
+            "player_id": target_id,
+            "player_name": target.name,
+            "kicked_by_id": player_id,
+            "kicked_by_name": game.players[player_id].name if player_id in game.players else "Anfitrión",
+        })
+
+        if game.phase == "playing":
+            outcome = self._rules_engine(game).resolve_outcome(game, target_id)
+            if outcome:
+                return await self._end_game(room_id, game, outcome)
+            await self._announce_turn(room_id, game)
 
     async def _h_direction(self, room_id, player_id, game, msg):
         """Solo el primer jugador de la ronda puede cambiar sentido, y solo antes de su primera acción."""
@@ -413,6 +469,7 @@ class GameManager:
                 "loser_id": loser_id,
                 "challenger_gained": challenger_gained,
                 "all_dice": game.all_dice_reveal(),
+                "reveal_seconds": REVEAL_SECONDS,
             })
             await self._apply_loss(room_id, game, loser_id)
             return
@@ -443,6 +500,7 @@ class GameManager:
             "bid_holds": bid_holds,
             "loser_id": loser_id,
             "all_dice": game.all_dice_reveal(),
+            "reveal_seconds": REVEAL_SECONDS,
         })
         await self._apply_loss(room_id, game, loser_id)
 
@@ -496,6 +554,7 @@ class GameManager:
             "calzo_success": exact,
             "challenger_gained": challenger_gained,
             "all_dice": game.all_dice_reveal(),
+            "reveal_seconds": REVEAL_SECONDS,
         })
 
         if exact:
@@ -559,7 +618,6 @@ class GameManager:
         game.last_paso = None
         game.passed_players = set()
         game.bid_history = []
-        game.direction = 1
         game.roll_all_dice()
         game.set_current_player(first_player_id)
         game.round_first_player = first_player_id
@@ -574,7 +632,12 @@ class GameManager:
     async def _end_game(self, room_id: str, game: Game, outcome):
         game.phase = "lobby"
         self._cancel_turn_timeout(room_id)
-        payload = {"type": "game_over", "result_mode": outcome.kind, "rules": game.rules.to_dict()}
+        payload = {
+            "type": "game_over",
+            "result_mode": outcome.kind,
+            "rules": game.rules.to_dict(),
+            "reveal_seconds": REVEAL_SECONDS,
+        }
         if outcome.kind == "winner":
             payload.update({"winner_id": outcome.player_id, "winner_name": outcome.player_name})
         else:
@@ -660,6 +723,43 @@ class GameManager:
         task = self.turn_timeout_tasks.pop(room_id, None)
         if task and not task.done():
             task.cancel()
+
+    def _cancel_disconnect_resolution(self, room_id: str, player_id: str):
+        key = (room_id, player_id)
+        task = self.disconnect_resolution_tasks.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+
+    def _cancel_disconnect_resolution_for_room(self, room_id: str):
+        keys = [key for key in self.disconnect_resolution_tasks if key[0] == room_id]
+        for key in keys:
+            task = self.disconnect_resolution_tasks.pop(key, None)
+            if task and not task.done():
+                task.cancel()
+
+    def _schedule_disconnect_resolution(self, room_id: str, player_id: str):
+        self._cancel_disconnect_resolution(room_id, player_id)
+        if DISCONNECT_GRACE_SECONDS < 0:
+            return
+
+        async def _runner():
+            try:
+                await asyncio.sleep(DISCONNECT_GRACE_SECONDS)
+                game = self.games.get(room_id)
+                if not game or game.phase != "playing":
+                    return
+                player = game.players.get(player_id)
+                if not player or player.connected:
+                    return
+                outcome = self._rules_engine(game).resolve_outcome(game, player_id)
+                if outcome:
+                    await self._end_game(room_id, game, outcome)
+            except asyncio.CancelledError:
+                return
+            finally:
+                self.disconnect_resolution_tasks.pop((room_id, player_id), None)
+
+        self.disconnect_resolution_tasks[(room_id, player_id)] = asyncio.create_task(_runner())
 
     def _schedule_turn_timeout(self, room_id: str, game: Game):
         self._cancel_turn_timeout(room_id)

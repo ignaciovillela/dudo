@@ -20,15 +20,21 @@ async def root():
 
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
-    player_id = str(uuid.uuid4())[:8]
-    await manager.connect(websocket, room_id, player_id)
+    session_player_id = str(uuid.uuid4())[:8]
+    await manager.connect(websocket, room_id, session_player_id)
     try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
-            await manager.handle_message(room_id, player_id, message)
+            current_player_id = manager.resolve_player_id(room_id, websocket) or session_player_id
+            await manager.handle_message(room_id, current_player_id, message)
+            session_player_id = manager.resolve_player_id(room_id, websocket) or current_player_id
     except WebSocketDisconnect:
-        await manager.disconnect(room_id, player_id)
+        current_player_id = manager.resolve_player_id(room_id, websocket)
+        if current_player_id:
+            await manager.disconnect(room_id, current_player_id)
     except Exception as e:
-        print(f"Error [{player_id}]: {e}")
-        await manager.disconnect(room_id, player_id)
+        print(f"Error [{session_player_id}]: {e}")
+        current_player_id = manager.resolve_player_id(room_id, websocket)
+        if current_player_id:
+            await manager.disconnect(room_id, current_player_id)
