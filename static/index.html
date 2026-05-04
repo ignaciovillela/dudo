@@ -28,7 +28,7 @@
 <body>
 
 <button id="btn-sound" class="sound-toggle" type="button" onclick="toggleSound()" aria-pressed="false" aria-label="Silenciar sonido" title="Silenciar sonido">
-  🔊
+  <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
 </button>
 
 <!-- ═══════════════════════════════  LOBBY  ══════════════════════════════ -->
@@ -62,12 +62,12 @@
 
     <div class="lobby-card" id="lobby-form">
       <div class="field-group">
-        <label>Tu nombre</label>
+        <label><i class="fa-regular fa-user" aria-hidden="true"></i> Tu nombre</label>
         <input id="inp-name" type="text" placeholder="Ingresa tu nombre" maxlength="20"
                onkeydown="if(event.key==='Enter') joinRoom()" />
       </div>
       <div class="field-group">
-        <label>Código de sala</label>
+        <label><i class="fa-solid fa-hashtag" aria-hidden="true"></i> Código de sala</label>
         <div class="row-group">
           <input id="inp-room" type="text" placeholder="ej: sala1" maxlength="20"
                  onkeydown="if(event.key==='Enter') joinRoom()" />
@@ -78,14 +78,14 @@
 
     <div class="lobby-card" id="lobby-room" style="display:none">
       <div class="room-header">
-        <span class="room-label">Sala:</span>
+        <span class="room-label"><i class="fa-solid fa-door-open" aria-hidden="true"></i> Sala:</span>
         <strong id="disp-room-code" class="room-code"></strong>
         <button class="btn btn-sm" onclick="copyRoomCode()"><i class="fa-regular fa-copy" aria-hidden="true"></i>Copiar</button>
       </div>
       <div id="lobby-player-list" class="lobby-player-list"></div>
 
       <div class="rules-panel">
-        <div class="rules-title">Reglas de sala</div>
+        <div class="rules-title"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Reglas de sala</div>
         <div id="host-rules-controls" class="rules-controls" style="display:none">
           <label class="check-row">
             <input id="rule-elimination-loser" type="checkbox" onchange="onHostRulesChanged()" />
@@ -133,7 +133,7 @@
         </div>
 
         <div id="bid-area" class="bid-area">
-          <div id="no-bid-msg" class="no-bid-msg">Sin apuesta — primera ronda</div>
+          <div id="no-bid-msg" class="no-bid-msg"><i class="fa-solid fa-dice" aria-hidden="true"></i> Sin apuesta — primera ronda</div>
           <div id="paso-indicator" class="paso-indicator" style="display:none"></div>
           <div id="bid-visual" class="bid-visual" style="display:none">
             <span id="bv-qty" class="bv-qty">3</span>
@@ -172,10 +172,10 @@
       <!-- Bid panel -->
       <div class="panel" id="bid-panel">
         <div class="panel-title-row">
-          <h3 class="panel-title">Tu apuesta</h3>
+          <h3 class="panel-title"><i class="fa-solid fa-hand-fist" aria-hidden="true"></i> Tu apuesta</h3>
           <div class="dir-toggle">
-            <button id="btn-dir-ccw" class="dir-tog" onclick="sendDirection('ccw')" title="Anti-horario">↺</button>
-            <button id="btn-dir-cw"  class="dir-tog" onclick="sendDirection('cw')"  title="Horario">↻</button>
+            <button id="btn-dir-ccw" class="dir-tog" onclick="sendDirection('ccw')" title="Anti-horario"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>
+            <button id="btn-dir-cw"  class="dir-tog" onclick="sendDirection('cw')"  title="Horario"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
           </div>
         </div>
         <div class="bid-builder">
@@ -183,9 +183,9 @@
           <div id="face-picker" class="face-picker"></div>
           <label class="bb-label">Cantidad <span id="bb-min-hint" class="bb-min-hint"></span></label>
           <div class="stepper stepper-qty">
-            <button onclick="adjBid('q',-1)">−</button>
+            <button onclick="adjBid('q',-1)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
             <span id="bb-qty">1</span>
-            <button onclick="adjBid('q',1)">+</button>
+            <button onclick="adjBid('q',1)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
           </div>
         </div>
         <div class="action-btns">
@@ -194,24 +194,24 @@
           <button id="btn-dudo"  class="btn btn-danger"   onclick="sendDudo()"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>¡Dudo!</button>
           <button id="btn-calzo" class="btn btn-warning"  onclick="sendCalzo()"><i class="fa-solid fa-bullseye" aria-hidden="true"></i>¡Calzo!</button>
         </div>
-        <p id="wait-msg" class="wait-msg">Esperando tu turno…</p>
+        <p id="wait-msg" class="wait-msg"><i class="fa-regular fa-hourglass-half" aria-hidden="true"></i> Esperando tu turno…</p>
       </div>
 
       <!-- Stats -->
       <div class="panel panel-stats">
         <div class="stat">
-          <span class="stat-lbl">Ronda</span>
+          <span class="stat-lbl"><i class="fa-solid fa-trophy" aria-hidden="true"></i> Ronda</span>
           <span id="disp-round" class="stat-val">—</span>
         </div>
         <div class="stat">
-          <span class="stat-lbl">Dados en mesa</span>
+          <span class="stat-lbl"><i class="fa-solid fa-dice" aria-hidden="true"></i> Dados en mesa</span>
           <span id="disp-total" class="stat-val">—</span>
         </div>
       </div>
 
       <!-- Log -->
       <div class="panel panel-log">
-        <h3 class="panel-title">Registro</h3>
+        <h3 class="panel-title"><i class="fa-solid fa-scroll" aria-hidden="true"></i> Registro</h3>
         <div id="game-log" class="game-log"></div>
       </div>
     </aside>
@@ -221,7 +221,11 @@
 <!-- Game Over Overlay -->
 <div id="game-over-overlay" class="game-over-overlay" style="display:none">
   <div class="game-over-box">
-    <div class="go-dice-row">⚄ ⚅ ⚂</div>
+    <div class="go-dice-row">
+      <i class="fa-solid fa-dice-five" aria-hidden="true"></i>
+      <i class="fa-solid fa-dice-six" aria-hidden="true"></i>
+      <i class="fa-solid fa-dice-three" aria-hidden="true"></i>
+    </div>
     <h2 id="go-title" class="go-title"></h2>
     <p id="go-winner" class="go-winner"></p>
     <button class="btn btn-gold go-btn" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i>Volver al lobby</button>

@@ -221,6 +221,42 @@ const DEFAULT_RULES = {
 
 // ══════════════════════════════════  SOUND  ═══════════════════════════════════
 const AUDIO_STORAGE_KEY = 'dudoMuted';
+const RULES_STORAGE_KEY = 'dudoRules';
+
+function saveRulesToStorage(rules) {
+  try { localStorage.setItem(RULES_STORAGE_KEY, JSON.stringify(rules)); } catch (_) {}
+}
+
+function loadRulesFromStorage() {
+  try {
+    const raw = localStorage.getItem(RULES_STORAGE_KEY);
+    return raw ? normalizeRules(JSON.parse(raw)) : null;
+  } catch (_) { return null; }
+}
+
+// ── Sesión de sala ─────────────────────────────────────────────────────────────
+const SESSION_STORAGE_KEY = 'dudoSession';
+
+function saveSession() {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+      room: S.roomId,
+      name: S.playerName,
+      playerId: S.playerId,
+    }));
+  } catch (_) {}
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch (_) {}
+}
 const AudioState = {
   ctx: null,
   muted: localStorage.getItem(AUDIO_STORAGE_KEY) === '1',
@@ -307,7 +343,9 @@ function updateSoundButton() {
   const btn = document.getElementById('btn-sound');
   if (!btn) return;
   btn.classList.toggle('muted', AudioState.muted);
-  btn.textContent = AudioState.muted ? '🔇' : '🔊';
+  btn.innerHTML = AudioState.muted
+    ? '<i class="fa-solid fa-volume-xmark" aria-hidden="true"></i>'
+    : '<i class="fa-solid fa-volume-high" aria-hidden="true"></i>';
   btn.setAttribute('aria-pressed', AudioState.muted ? 'true' : 'false');
   const label = AudioState.muted ? 'Activar sonido' : 'Silenciar sonido';
   btn.title = label;
@@ -342,10 +380,13 @@ function handleMsg(msg) {
   const H = {
     connected:          onConnected,
     joined:             onJoined,
+    reconnected:        onReconnected,
     player_joined:      onPlayerJoined,
     player_ready:       onPlayerReady,
     player_disconnected:onPlayerDisc,
-    rules_updated:       onRulesUpdated,
+    player_reconnected: onPlayerReconnected,
+    all_ready:          onAllReady,
+    rules_updated:      onRulesUpdated,
     game_started:       onGameStarted,
     your_dice:          onYourDice,
     turn:               onTurn,
@@ -365,8 +406,10 @@ function handleMsg(msg) {
 function onConnected(msg) {
   S.playerId = msg.player_id;
   S.roomId   = msg.room_id;
-  // Now send join with the name
-  send({ type: 'join', name: S.playerName });
+  // Enviar join con posible reconnect_id si la sala coincide
+  const session = loadSession();
+  const reconnect_id = (session && session.room === S.roomId) ? session.playerId : null;
+  send({ type: 'join', name: S.playerName, reconnect_id });
 }
 
 function onJoined(msg) {
@@ -374,6 +417,7 @@ function onJoined(msg) {
   S.players     = msg.players;
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules);
+  saveSession();
 
   document.getElementById('disp-room-code').textContent = S.roomId;
   document.getElementById('lobby-form').style.display = 'none';
@@ -384,9 +428,45 @@ function onJoined(msg) {
   if (S.isHost) {
     document.getElementById('btn-start').style.display = 'inline-flex';
     updateStartButton();
+    // Restaurar reglas guardadas en localStorage y aplicarlas a la sala
+    const saved = loadRulesFromStorage();
+    if (saved) {
+      S.rules = saved;
+      send({ type: 'set_rules', rules: S.rules });
+    }
   }
   renderLobbyRules();
   log(`Unido a la sala ${S.roomId}`, 'system');
+}
+
+function onReconnected(msg) {
+  // El backend reasignó el WS al player_id original
+  S.playerId    = msg.player_id;
+  S.isHost      = msg.is_host;
+  S.players     = msg.players;
+  S.playerOrder = msg.player_order;
+  S.rules       = normalizeRules(msg.rules);
+  S.phase       = msg.phase;
+  saveSession();
+
+  showScreen('game');
+  renderOtherPlayers();
+  updateBidDisplay();
+  log('Reconectado a la partida en curso', 'system');
+}
+
+function onPlayerReconnected(msg) {
+  if (S.players[msg.player_id]) {
+    S.players[msg.player_id].connected = true;
+  }
+  renderOtherPlayers();
+  renderLobbyPlayers();
+  log(`${msg.player_name} se reconectó`, 'system');
+}
+
+function onAllReady() {
+  if (S.isHost) showToast('¡Todos listos! Pulsa Iniciar Juego cuando quieras.');
+  log('Todos los jugadores están listos', 'system');
 }
 
 function onRulesUpdated(msg) {
@@ -445,6 +525,15 @@ function onGameStarted(msg) {
   // Limpiar log de partidas anteriores
   const logEl = document.getElementById('game-log');
   if (logEl) logEl.innerHTML = '';
+  // Mostrar reglas activas al inicio del registro
+  const rules = normalizeRules(S.rules);
+  log('⚙ Reglas de esta partida:', 'system');
+  const modeLabel = rules.elimination_mode === 'loser'
+    ? 'Modo perdedor (termina al primer eliminado)'
+    : 'Modo ganador (gana el último con dados)';
+  log(`  • ${modeLabel}`, 'system');
+  log(`  • Gavilán: ${rules.allow_gavilan ? 'activado' : 'desactivado'}`, 'system');
+  log(`  • Calzo recupera en turno: ${rules.calzo_recovers_on_turn ? 'sí' : 'no'}`, 'system');
   log('─── Juego iniciado ───', 'round');
 }
 
@@ -786,7 +875,9 @@ function renderLobbyPlayers() {
 
     const badge = document.createElement('div');
     badge.className = 'ready-badge' + (p.ready ? ' ready' : '');
-    badge.textContent = p.ready ? 'Listo' : 'Esperando';
+    badge.innerHTML = p.ready
+      ? '<i class="fa-solid fa-check" aria-hidden="true"></i> Listo'
+      : '<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando';
 
     row.appendChild(av);
     row.appendChild(name);
@@ -882,7 +973,7 @@ function updateBidDisplay() {
   // Paso indicator
   if (S.activePaso) {
     const name = S.players[S.activePaso.player_id]?.name || S.activePaso.player_name;
-    pasoEl.textContent = `PASO de ${name}`;
+    pasoEl.innerHTML = `<i class="fa-solid fa-forward" aria-hidden="true"></i> PASO de ${name}`;
     pasoEl.style.display = 'block';
   } else {
     pasoEl.style.display = 'none';
@@ -925,7 +1016,9 @@ function updateDirectionIndicator() {
   // Indicador en la mesa (junto al banner)
   const ind = document.getElementById('direction-indicator');
   if (ind) {
-    ind.textContent = S.direction === 1 ? '↻' : '↺';
+    ind.innerHTML = S.direction === 1
+      ? '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>'
+      : '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>';
     ind.title = S.direction === 1 ? 'Sentido horario' : 'Sentido antihorario';
     ind.style.display = 'inline-flex';
   }
@@ -1193,6 +1286,7 @@ function onHostRulesChanged() {
     calzo_recovers_on_turn: !!document.getElementById('rule-calzo-on-turn')?.checked,
   };
   S.rules = normalizeRules(next);
+  saveRulesToStorage(S.rules);
   renderLobbyRules();
   send({ type: 'set_rules', rules: S.rules });
 }
@@ -1321,6 +1415,16 @@ refreshBidInputUI();
 updateSoundButton();
 window.toggleSound = toggleSound;
 window.onHostRulesChanged = onHostRulesChanged;
+
+// Pre-rellenar formulario con la sesión guardada
+(function () {
+  const session = loadSession();
+  if (!session) return;
+  const nameEl = document.getElementById('inp-name');
+  const roomEl = document.getElementById('inp-room');
+  if (nameEl && session.name) nameEl.value = session.name;
+  if (roomEl && session.room) roomEl.value = session.room;
+})();
 
 // Desbloquea audio en la primera interacción del usuario (requisito del navegador).
 ['pointerdown', 'keydown'].forEach(evt => {

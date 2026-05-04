@@ -28,6 +28,13 @@ class GameManager:
     async def disconnect(self, room_id: str, player_id: str):
         self.connections.get(room_id, {}).pop(player_id, None)
         game = self.games.get(room_id)
+
+        # Liberar sala si no quedan conexiones activas
+        if not self.connections.get(room_id):
+            self.games.pop(room_id, None)
+            self.connections.pop(room_id, None)
+            return
+
         if not game or player_id not in game.players:
             return
 
@@ -74,6 +81,42 @@ class GameManager:
     # ------------------------------------------------------------------ handlers
 
     async def _h_join(self, room_id, player_id, game, msg):
+        # ── Intento de reconexión ─────────────────────────────────────────────
+        reconnect_id = msg.get("reconnect_id")
+        if reconnect_id and reconnect_id in game.players and game.phase == "playing":
+            old = game.players[reconnect_id]
+            if not old.connected:
+                # Reasignar el websocket al player_id original
+                ws = self.connections[room_id].pop(player_id, None)
+                if ws:
+                    self.connections[room_id][reconnect_id] = ws
+                old.connected = True
+                await self._send(room_id, reconnect_id, {
+                    "type": "reconnected",
+                    "player_id": reconnect_id,
+                    "is_host": bool(game.player_order) and game.player_order[0] == reconnect_id,
+                    "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
+                    "player_order": game.player_order,
+                    "phase": game.phase,
+                    "rules": game.rules.to_dict(),
+                })
+                await self._broadcast_except(room_id, reconnect_id, {
+                    "type": "player_reconnected",
+                    "player_id": reconnect_id,
+                    "player_name": old.name,
+                })
+                # Reenviar estado actual de la partida al jugador reconectado
+                await self._send(room_id, reconnect_id, {
+                    "type": "your_dice",
+                    "dice": old.dice,
+                    "round_number": game.round_number,
+                    "total_dice": game.total_dice(),
+                    "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
+                })
+                await self._announce_turn(room_id, game)
+                return
+
+        # ── Unirse nuevo ──────────────────────────────────────────────────────
         if game.phase != "lobby":
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Partida en curso"})
@@ -109,7 +152,9 @@ class GameManager:
             "ready": game.players[player_id].ready,
         })
         if game.all_ready():
-            await self._begin_game(room_id, game)
+            await self._broadcast(room_id, {
+                "type": "all_ready",
+            })
 
     async def _h_start(self, room_id, player_id, game, msg):
         is_host = game.player_order and game.player_order[0] == player_id
