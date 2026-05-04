@@ -74,28 +74,10 @@
       </div>
       <div class="field-group">
         <label><i class="fa-regular fa-face-smile" aria-hidden="true"></i> Tu avatar</label>
-        <select id="inp-avatar">
-          <option value="🎲">🎲 Dado</option>
-          <option value="🦅">🦅 Aguila</option>
-          <option value="🐺">🐺 Lobo</option>
-          <option value="🦁">🦁 Leon</option>
-          <option value="🐯">🐯 Tigre</option>
-          <option value="🦊">🦊 Zorro</option>
-          <option value="💀">💀 Calavera</option>
-          <option value="👑">👑 Corona</option>
-          <option value="🎭">🎭 Mascara</option>
-          <option value="🃏">🃏 Joker</option>
-          <option value="🏹">🏹 Arco</option>
-          <option value="⚔️">⚔️ Espadas</option>
-          <option value="🛡️">🛡️ Escudo</option>
-          <option value="🌙">🌙 Luna</option>
-          <option value="⚡">⚡ Rayo</option>
-          <option value="🔥">🔥 Fuego</option>
-          <option value="💎">💎 Diamante</option>
-          <option value="🎯">🎯 Diana</option>
-          <option value="🍀">🍀 Trebol</option>
-          <option value="🎪">🎪 Carpa</option>
-        </select>
+        <div class="avatar-picker-wrap">
+          <div id="avatar-picker" class="avatar-picker-row" aria-label="Selector de avatar"></div>
+          <button id="btn-avatar-toggle" class="btn btn-sm avatar-toggle" type="button" onclick="toggleAvatarPicker()">Ver todos</button>
+        </div>
       </div>
       <div class="field-group">
         <label><i class="fa-solid fa-hashtag" aria-hidden="true"></i> Código de sala</label>
@@ -132,12 +114,16 @@
           </label>
           <label class="check-row timeout-row">
             <span class="rule-line">Tiempo por turno</span>
-            <select id="rule-turn-timeout" onchange="onHostRulesChanged()">
-              <option value="0">Sin limite</option>
-              <option value="30">30 s</option>
-              <option value="60">60 s</option>
-              <option value="90">90 s</option>
-            </select>
+            <div id="rule-turn-timeout" class="timeout-options" role="radiogroup" aria-label="Tiempo por turno">
+              <input class="timeout-input" type="radio" id="timeout-0" name="turn-timeout" value="0" onchange="onHostRulesChanged()" checked />
+              <label class="timeout-opt" for="timeout-0">Sin limite</label>
+              <input class="timeout-input" type="radio" id="timeout-30" name="turn-timeout" value="30" onchange="onHostRulesChanged()" />
+              <label class="timeout-opt" for="timeout-30">30s</label>
+              <input class="timeout-input" type="radio" id="timeout-60" name="turn-timeout" value="60" onchange="onHostRulesChanged()" />
+              <label class="timeout-opt" for="timeout-60">60s</label>
+              <input class="timeout-input" type="radio" id="timeout-90" name="turn-timeout" value="90" onchange="onHostRulesChanged()" />
+              <label class="timeout-opt" for="timeout-90">90s</label>
+            </div>
           </label>
         </div>
         <ul id="rules-summary" class="rules-summary"></ul>

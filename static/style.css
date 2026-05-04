@@ -422,6 +422,58 @@ select {
 
 select:focus { border-color: var(--gold); }
 
+.avatar-picker-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.avatar-picker-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  flex-wrap: nowrap;
+}
+
+.avatar-picker-row.expanded {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.avatar-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  font-size: 1.15rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.avatar-chip:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.avatar-chip.selected {
+  border-color: var(--gold);
+  background: rgba(232,184,109,0.18);
+  box-shadow: 0 0 0 1px rgba(232,184,109,0.18);
+}
+
+.avatar-chip.hidden-chip {
+  display: none;
+}
+
+.avatar-toggle {
+  justify-self: end;
+}
+
 .row-group {
   display: flex;
   gap: 8px;
@@ -540,11 +592,44 @@ select:focus { border-color: var(--gold); }
   justify-content: space-between;
 }
 
-.timeout-row select {
-  width: auto;
-  min-width: 128px;
-  padding: 6px 8px;
-  font-size: 0.82rem;
+.timeout-options {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.timeout-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.timeout-opt {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.timeout-opt:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.08);
+}
+
+.timeout-input:checked + .timeout-opt {
+  color: var(--gold);
+  border-color: rgba(232,184,109,0.45);
+  background: rgba(232,184,109,0.14);
+}
+
+.timeout-input:disabled + .timeout-opt {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .rule-line {

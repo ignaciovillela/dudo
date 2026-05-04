@@ -351,6 +351,57 @@ const AVATAR_OPTIONS = [
   '🎲', '🦅', '🐺', '🦁', '🐯', '🦊', '💀', '👑', '🎭', '🃏',
   '🏹', '⚔️', '🛡️', '🌙', '⚡', '🔥', '💎', '🎯', '🍀', '🎪',
 ];
+const AVATAR_VISIBLE_LIMIT = 8;
+let avatarPickerExpanded = false;
+
+function orderedAvatars(selected) {
+  const picked = AVATAR_OPTIONS.includes(selected) ? selected : '🎲';
+  return [picked, ...AVATAR_OPTIONS.filter(a => a !== picked)];
+}
+
+function persistLobbyIdentity(name) {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+      ...loadSession(),
+      name,
+      avatar: S.playerAvatar || '🎲',
+    }));
+  } catch (_) {}
+}
+
+function selectAvatar(avatar) {
+  if (!AVATAR_OPTIONS.includes(avatar)) return;
+  S.playerAvatar = avatar;
+  const name = document.getElementById('inp-name')?.value?.trim() || S.playerName || '';
+  persistLobbyIdentity(name);
+  renderAvatarPicker();
+}
+
+function toggleAvatarPicker() {
+  avatarPickerExpanded = !avatarPickerExpanded;
+  renderAvatarPicker();
+}
+
+function renderAvatarPicker() {
+  const row = document.getElementById('avatar-picker');
+  const toggle = document.getElementById('btn-avatar-toggle');
+  if (!row || !toggle) return;
+
+  row.innerHTML = '';
+  const ordered = orderedAvatars(S.playerAvatar);
+  ordered.forEach((avatar, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'avatar-chip' + (avatar === S.playerAvatar ? ' selected' : '') + (!avatarPickerExpanded && idx >= AVATAR_VISIBLE_LIMIT ? ' hidden-chip' : '');
+    btn.textContent = avatar;
+    btn.setAttribute('aria-label', `Seleccionar avatar ${avatar}`);
+    btn.onclick = () => selectAvatar(avatar);
+    row.appendChild(btn);
+  });
+
+  row.classList.toggle('expanded', avatarPickerExpanded);
+  toggle.textContent = avatarPickerExpanded ? 'Contraer' : 'Ver todos';
+}
 
 // ══════════════════════════════════  SOUND  ═══════════════════════════════════
 const AUDIO_STORAGE_KEY = 'dudoMuted';
@@ -1720,20 +1771,13 @@ function applySpectatorMode() {
 function joinRoom() {
   const name = document.getElementById('inp-name').value.trim();
   const room = document.getElementById('inp-room').value.trim();
-  const avatar = document.getElementById('inp-avatar')?.value || '🎲';
   if (!name) { showToast('Ingresa tu nombre', true); return; }
   if (!room) { showToast('Ingresa el código de sala', true); return; }
   S.playerName = name;
-  S.playerAvatar = AVATAR_OPTIONS.includes(avatar) ? avatar : '🎲';
+  S.playerAvatar = AVATAR_OPTIONS.includes(S.playerAvatar) ? S.playerAvatar : '🎲';
   S.roomId = room;
   // Guardar nombre inmediatamente, antes de conectar
-  try {
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
-      ...loadSession(),
-      name,
-      avatar: S.playerAvatar,
-    }));
-  } catch (_) {}
+  persistLobbyIdentity(name);
   playSfx('click');
   connect(room);
 }
@@ -1819,11 +1863,14 @@ function renderLobbyRules() {
   const modeEl = document.getElementById('rule-elimination-loser');
   const gavilanEl = document.getElementById('rule-allow-gavilan');
   const calzoEl = document.getElementById('rule-calzo-on-turn');
-  const timeoutEl = document.getElementById('rule-turn-timeout');
+  const timeoutInputs = document.querySelectorAll('#rule-turn-timeout input[name="turn-timeout"]');
   if (modeEl)    { modeEl.checked = rules.elimination_mode === 'loser'; modeEl.disabled = !hostCanEdit; }
   if (gavilanEl) { gavilanEl.checked = rules.allow_gavilan;             gavilanEl.disabled = !hostCanEdit; }
   if (calzoEl)   { calzoEl.checked = rules.calzo_recovers_on_turn;     calzoEl.disabled = !hostCanEdit; }
-  if (timeoutEl) { timeoutEl.value = String(rules.turn_timeout_seconds); timeoutEl.disabled = !hostCanEdit; }
+  timeoutInputs.forEach((input) => {
+    input.checked = Number(input.value) === rules.turn_timeout_seconds;
+    input.disabled = !hostCanEdit;
+  });
 
   // Opacidad reducida cuando el anfitrión no puede editar
   hostControls.style.opacity = hostCanEdit ? '1' : '0.45';
@@ -1847,11 +1894,12 @@ function renderLobbyRules() {
 
 function onHostRulesChanged() {
   if (!S.isHost) return;
+  const timeoutSelected = document.querySelector('#rule-turn-timeout input[name="turn-timeout"]:checked');
   const next = {
     elimination_mode: document.getElementById('rule-elimination-loser')?.checked ? 'loser' : 'winner',
     allow_gavilan: !!document.getElementById('rule-allow-gavilan')?.checked,
     calzo_recovers_on_turn: !!document.getElementById('rule-calzo-on-turn')?.checked,
-    turn_timeout_seconds: Number(document.getElementById('rule-turn-timeout')?.value || 0),
+    turn_timeout_seconds: Number(timeoutSelected?.value || 0),
   };
   S.rules = normalizeRules(next);
   saveRulesToStorage(S.rules);
@@ -1989,6 +2037,7 @@ window.closeStatsModal = closeStatsModal;
 window.openNotificationModal = openNotificationModal;
 window.acceptNotificationPrompt = acceptNotificationPrompt;
 window.rejectNotificationPrompt = rejectNotificationPrompt;
+window.toggleAvatarPicker = toggleAvatarPicker;
 
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (function () {
@@ -1996,42 +2045,21 @@ window.rejectNotificationPrompt = rejectNotificationPrompt;
   const roomFromUrl = new URLSearchParams(window.location.search).get('sala');
   const nameEl = document.getElementById('inp-name');
   const roomEl = document.getElementById('inp-room');
-  const avatarEl = document.getElementById('inp-avatar');
   if (nameEl && session?.name) nameEl.value = session.name;
   if (roomEl) {
     roomEl.value = roomFromUrl || session?.room || '';
   }
-  if (avatarEl && session?.avatar && AVATAR_OPTIONS.includes(session.avatar)) {
-    avatarEl.value = session.avatar;
+  if (session?.avatar && AVATAR_OPTIONS.includes(session.avatar)) {
     S.playerAvatar = session.avatar;
   }
+  renderAvatarPicker();
 
   // Guardar nombre en tiempo real al escribir
   if (nameEl) {
     nameEl.addEventListener('input', () => {
       const name = nameEl.value.trim();
       if (!name) return;
-      try {
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
-          ...loadSession(),
-          name,
-          avatar: avatarEl?.value || S.playerAvatar || '🎲',
-        }));
-      } catch (_) {}
-    });
-  }
-
-  if (avatarEl) {
-    avatarEl.addEventListener('change', () => {
-      const avatar = AVATAR_OPTIONS.includes(avatarEl.value) ? avatarEl.value : '🎲';
-      S.playerAvatar = avatar;
-      try {
-        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
-          ...loadSession(),
-          name: nameEl?.value?.trim() || session?.name || '',
-          avatar,
-        }));
-      } catch (_) {}
+      persistLobbyIdentity(name);
     });
   }
 })();
