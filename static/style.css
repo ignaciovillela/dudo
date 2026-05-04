@@ -504,6 +504,18 @@ select:focus { border-color: var(--gold); }
   color: var(--text);
 }
 
+.timeout-row {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.timeout-row select {
+  width: auto;
+  min-width: 128px;
+  padding: 6px 8px;
+  font-size: 0.82rem;
+}
+
 .rule-line {
   display: inline-flex;
   align-items: center;
@@ -924,6 +936,17 @@ select:focus { border-color: var(--gold); }
   background: rgba(100, 180, 255, 0.12);
   border-radius: 999px;
   padding: 4px 10px;
+}
+
+.turn-countdown {
+  font-size: 0.8rem;
+  color: #ffd28a;
+  border: 1px solid rgba(232, 184, 109, 0.4);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.35);
+  min-width: 74px;
+  text-align: center;
 }
 
 .sidebar.spectator-mode #bid-panel {

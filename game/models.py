@@ -47,12 +47,14 @@ class RuleConfig:
     elimination_mode: str = "winner"  # winner | loser
     allow_gavilan: bool = True
     calzo_recovers_on_turn: bool = False
+    turn_timeout_seconds: int = 0
 
     def to_dict(self) -> dict:
         return {
             "elimination_mode": self.elimination_mode,
             "allow_gavilan": self.allow_gavilan,
             "calzo_recovers_on_turn": self.calzo_recovers_on_turn,
+            "turn_timeout_seconds": self.turn_timeout_seconds,
         }
 
     @classmethod
@@ -63,11 +65,20 @@ class RuleConfig:
                 elimination_mode=base.elimination_mode,
                 allow_gavilan=base.allow_gavilan,
                 calzo_recovers_on_turn=base.calzo_recovers_on_turn,
+                turn_timeout_seconds=base.turn_timeout_seconds,
             )
 
         elimination_mode = payload.get("elimination_mode", base.elimination_mode)
         if elimination_mode not in {"winner", "loser"}:
             elimination_mode = base.elimination_mode
+
+        timeout_seconds = payload.get("turn_timeout_seconds", base.turn_timeout_seconds)
+        try:
+            timeout_seconds = int(timeout_seconds)
+        except (TypeError, ValueError):
+            timeout_seconds = base.turn_timeout_seconds
+        if timeout_seconds not in {0, 30, 60, 90}:
+            timeout_seconds = base.turn_timeout_seconds
 
         return cls(
             elimination_mode=elimination_mode,
@@ -75,6 +86,7 @@ class RuleConfig:
             calzo_recovers_on_turn=bool(
                 payload.get("calzo_recovers_on_turn", base.calzo_recovers_on_turn)
             ),
+            turn_timeout_seconds=timeout_seconds,
         )
 
 

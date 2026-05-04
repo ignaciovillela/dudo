@@ -33,17 +33,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ---
 
-### 7. Límite de tiempo por turno
-**Por qué:** evita partidas muertas. Requiere diseño cuidadoso de la acción automática.
-- Regla configurable por anfitrión: `turn_timeout_seconds` (0 = sin límite; opciones: 30/60/90 s).
-- Cuando expira, el servidor ejecuta la acción más conservadora:
-    - Si hay apuesta activa y el jugador no ha pasado → **pasar** (neutral).
-    - Si es la primera acción de la ronda → **apostar la mínima válida con cara 2**.
-- Backend: `asyncio.Task` por turno, cancelada al recibir cualquier acción del jugador.
-- Frontend: countdown numérico junto al banner de turno.
-
----
-
 ### 9. Animación de revelación mejorada
 **Propuesta concreta (reutiliza infraestructura existente):**
 - Flip de dados uno por uno con delay escalonado (la clase `revealed` + `flip-in` ya existe, solo orquestar delays).
@@ -70,6 +59,5 @@ Referencia completa en `CHANGELOG.md`.
 | # | Mejora | Archivos afectados | Dificultad | Impacto |
 |---|--------|-------------------|------------|---------|
 | 6 | Estadísticas de jugador | `app.js`, `index.html`, `style.css` | ⭐⭐ | 🔥 |
-| 7 | Límite de tiempo por turno | `models.py`, `manager.py`, `app.js`, `index.html`, `style.css` | ⭐⭐⭐ | 🔥🔥 |
 | 9 | Animación revelación | `app.js`, `style.css` | ⭐⭐ | 🔥 |
 | 10 | Sonidos adicionales | `app.js` | ⭐⭐ | 🔥 |

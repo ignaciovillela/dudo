@@ -21,6 +21,7 @@ class GameManager:
         self.connections: dict[str, dict[str, WebSocket]] = {}
         self.hosts: dict[str, str] = {}
         self.last_message_at: dict[str, float] = {}
+        self.turn_timeout_tasks: dict[str, asyncio.Task] = {}
 
     # ------------------------------------------------------------------ connect
 
@@ -41,6 +42,7 @@ class GameManager:
 
         # Liberar sala si no quedan conexiones activas
         if not self.connections.get(room_id):
+            self._cancel_turn_timeout(room_id)
             self.games.pop(room_id, None)
             self.connections.pop(room_id, None)
             self.hosts.pop(room_id, None)
@@ -317,6 +319,7 @@ class GameManager:
         if game.current_player_id() != player_id:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "No es tu turno"})
+        self._cancel_turn_timeout(room_id)
         try:
             bid = Bid(
                 quantity=int(msg["quantity"]),
@@ -347,6 +350,7 @@ class GameManager:
         if game.current_player_id() != player_id:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "No es tu turno"})
+        self._cancel_turn_timeout(room_id)
         if player_id in game.passed_players:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Ya pasaste en esta ronda"})
@@ -365,6 +369,7 @@ class GameManager:
     async def _h_dudo(self, room_id, player_id, game, msg):
         if game.phase != "playing":
             return
+        self._cancel_turn_timeout(room_id)
         if player_id in game.players and game.players[player_id].dice_count <= 0:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Estás eliminado"})
@@ -444,6 +449,7 @@ class GameManager:
     async def _h_calzo(self, room_id, player_id, game, msg):
         if game.phase != "playing":
             return
+        self._cancel_turn_timeout(room_id)
         if player_id in game.players and game.players[player_id].dice_count <= 0:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Estás eliminado"})
@@ -544,6 +550,7 @@ class GameManager:
 
     async def _new_round(self, room_id: str, game: Game, first_player_id: str):
         game.phase = "reveal"
+        self._cancel_turn_timeout(room_id)
         await asyncio.sleep(REVEAL_SECONDS)
 
         game.phase = "playing"
@@ -566,6 +573,7 @@ class GameManager:
 
     async def _end_game(self, room_id: str, game: Game, outcome):
         game.phase = "lobby"
+        self._cancel_turn_timeout(room_id)
         payload = {"type": "game_over", "result_mode": outcome.kind, "rules": game.rules.to_dict()}
         if outcome.kind == "winner":
             payload.update({"winner_id": outcome.player_id, "winner_name": outcome.player_name})
@@ -595,6 +603,7 @@ class GameManager:
             "direction": game.direction,
             "round_first_player": game.round_first_player,
             "has_first_action": game.current_bid is not None or game.last_paso is not None,
+            "turn_timeout_seconds": game.rules.turn_timeout_seconds,
         }
 
     def _spectator_state_payload(self, game: Game) -> dict:
@@ -645,6 +654,84 @@ class GameManager:
 
     async def _announce_turn(self, room_id: str, game: Game):
         await self._broadcast(room_id, self._turn_payload(game))
+        self._schedule_turn_timeout(room_id, game)
+
+    def _cancel_turn_timeout(self, room_id: str):
+        task = self.turn_timeout_tasks.pop(room_id, None)
+        if task and not task.done():
+            task.cancel()
+
+    def _schedule_turn_timeout(self, room_id: str, game: Game):
+        self._cancel_turn_timeout(room_id)
+        seconds = game.rules.turn_timeout_seconds
+        if game.phase != "playing" or seconds <= 0:
+            return
+        current = game.current_player_id()
+        if not current:
+            return
+
+        async def _runner():
+            try:
+                await asyncio.sleep(seconds)
+                current_game = self.games.get(room_id)
+                if not current_game or current_game.phase != "playing":
+                    return
+                if current_game.current_player_id() != current:
+                    return
+                await self._run_timeout_action(room_id, current_game, current)
+            except asyncio.CancelledError:
+                return
+
+        self.turn_timeout_tasks[room_id] = asyncio.create_task(_runner())
+
+    async def _run_timeout_action(self, room_id: str, game: Game, player_id: str):
+        player = game.players.get(player_id)
+        if not player:
+            return
+
+        if game.current_bid is not None and player_id not in game.passed_players:
+            game.passed_players.add(player_id)
+            game.last_paso = {"player_id": player_id, "player_name": player.name}
+            game.advance_turn()
+            await self._broadcast(room_id, {
+                "type": "paso_made",
+                "passer_id": player_id,
+                "passer_name": player.name,
+            })
+            await self._announce_turn(room_id, game)
+            return
+
+        bid = self._min_timeout_bid(game, player_id)
+        game.current_bid = bid
+        game.last_paso = None
+        game.bid_history.append(bid)
+        game.advance_turn()
+        await self._broadcast(room_id, {"type": "bid_made", "bid": bid.to_dict()})
+        await self._announce_turn(room_id, game)
+
+    @staticmethod
+    def _min_timeout_bid(game: Game, player_id: str) -> Bid:
+        face = 2
+        qty = 1
+        current = game.current_bid
+        if current:
+            if current.face == 1:
+                qty = current.quantity * 2 + 1
+            elif face > current.face:
+                qty = current.quantity
+            else:
+                qty = current.quantity + 1
+
+        while True:
+            bid = Bid(
+                quantity=qty,
+                face=face,
+                player_id=player_id,
+                player_name=game.players[player_id].name,
+            )
+            if game.is_valid_bid(bid):
+                return bid
+            qty += 1
 
     # ------------------------------------------------------------------ transport
 

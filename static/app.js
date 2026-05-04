@@ -229,6 +229,8 @@ const TURN_IDLE_TITLE = 'Dudo';
 let titleBlinkTimer = null;
 let titleBlinkState = false;
 let notificationPrompted = false;
+let turnCountdownTimer = null;
+let turnCountdownDeadline = 0;
 
 function requestTurnNotificationPermission() {
   if (notificationPrompted) return;
@@ -272,6 +274,7 @@ const DEFAULT_RULES = {
   elimination_mode: 'winner',
   allow_gavilan: true,
   calzo_recovers_on_turn: false,
+  turn_timeout_seconds: 0,
 };
 
 const AVATAR_OPTIONS = [
@@ -749,6 +752,7 @@ function onGameStarted(msg) {
   log(`  • ${modeLabel}`, 'system');
   log(`  • Gavilán: ${rules.allow_gavilan ? 'activado' : 'desactivado'}`, 'system');
   log(`  • Calzo recupera en turno: ${rules.calzo_recovers_on_turn ? 'sí' : 'no'}`, 'system');
+  log(`  • Tiempo por turno: ${rules.turn_timeout_seconds > 0 ? `${rules.turn_timeout_seconds}s` : 'sin límite'}`, 'system');
   log('─── Juego iniciado ───', 'round');
 }
 
@@ -778,6 +782,13 @@ function onTurn(msg) {
   S.roundFirstPlayer = msg.round_first_player ?? '';
   S.hasFirstAction   = msg.has_first_action ?? false;
   S.phase            = 'playing';
+
+  const timeoutSeconds = Number(msg.turn_timeout_seconds || 0);
+  if (timeoutSeconds > 0) {
+    startTurnCountdown(timeoutSeconds);
+  } else {
+    stopTurnCountdown();
+  }
 
   const isMe = S.currentPid === S.playerId;
   const name = S.players[S.currentPid]?.name || msg.player_name;
@@ -851,6 +862,7 @@ function onDirectionSet(msg) {
 
 function onReveal(msg) {
   playSfx('reveal');
+  stopTurnCountdown();
   S.phase = 'reveal';
   if (msg.action === 'dudo' || msg.action === 'calzo') {
     S.lastActionPlayerId = msg.challenger_id || null;
@@ -941,6 +953,7 @@ function onReveal(msg) {
 }
 
 function onNewRound(msg) {
+  stopTurnCountdown();
   S.roundNum      = msg.round_number;
   S.currentBid       = null;
   S.activePaso       = null;
@@ -967,6 +980,7 @@ function onEliminated(msg) {
 }
 
 function onGameOver(msg) {
+  stopTurnCountdown();
   S.phase = 'game_over';
   const isLoserMode = msg.result_mode === 'loser';
   const titleText = isLoserMode
@@ -996,6 +1010,7 @@ function onGameOver(msg) {
 }
 
 function closeGameOver() {
+  stopTurnCountdown();
   document.getElementById('game-over-overlay').style.display = 'none';
   S.phase = 'lobby';
   for (const p of Object.values(S.players)) {
@@ -1074,6 +1089,35 @@ function startRevealCountdown(seconds) {
       el.textContent = `Nueva ronda en ${remaining}…`;
     }
   }, 1000);
+}
+
+function stopTurnCountdown() {
+  if (turnCountdownTimer) {
+    clearInterval(turnCountdownTimer);
+    turnCountdownTimer = null;
+  }
+  const el = document.getElementById('turn-countdown');
+  if (!el) return;
+  el.style.display = 'none';
+  el.textContent = '';
+}
+
+function startTurnCountdown(seconds) {
+  stopTurnCountdown();
+  const el = document.getElementById('turn-countdown');
+  if (!el) return;
+  turnCountdownDeadline = Date.now() + (seconds * 1000);
+  const render = () => {
+    const left = Math.max(0, Math.ceil((turnCountdownDeadline - Date.now()) / 1000));
+    if (left <= 0 || S.phase !== 'playing') {
+      stopTurnCountdown();
+      return;
+    }
+    el.textContent = `⏳ ${left}s`;
+    el.style.display = 'inline-flex';
+  };
+  render();
+  turnCountdownTimer = setInterval(render, 250);
 }
 
 // ══════════════════════════════════  RENDER  ══════════════════════════════════
@@ -1471,10 +1515,13 @@ function startGame() {
 function normalizeRules(rules) {
   const src = (rules && typeof rules === 'object') ? rules : {};
   const mode = src.elimination_mode === 'loser' ? 'loser' : 'winner';
+  const timeoutRaw = Number(src.turn_timeout_seconds ?? DEFAULT_RULES.turn_timeout_seconds);
+  const timeout = [0, 30, 60, 90].includes(timeoutRaw) ? timeoutRaw : DEFAULT_RULES.turn_timeout_seconds;
   return {
     elimination_mode: mode,
     allow_gavilan: !!(src.allow_gavilan ?? DEFAULT_RULES.allow_gavilan),
     calzo_recovers_on_turn: !!(src.calzo_recovers_on_turn ?? DEFAULT_RULES.calzo_recovers_on_turn),
+    turn_timeout_seconds: timeout,
   };
 }
 
@@ -1497,6 +1544,10 @@ function rulesSummaryItems() {
         ? 'Un calzo correcto recupera dado incluso en tu turno.'
         : 'Un calzo correcto solo recupera dado fuera de turno.',
     },
+    {
+      label: `Tiempo por turno: ${rules.turn_timeout_seconds > 0 ? `${rules.turn_timeout_seconds}s` : 'Sin limite'}`,
+      detail: 'Al expirar el tiempo, el servidor ejecuta una accion automatica conservadora.',
+    },
   ];
 }
 
@@ -1513,9 +1564,11 @@ function renderLobbyRules() {
   const modeEl = document.getElementById('rule-elimination-loser');
   const gavilanEl = document.getElementById('rule-allow-gavilan');
   const calzoEl = document.getElementById('rule-calzo-on-turn');
+  const timeoutEl = document.getElementById('rule-turn-timeout');
   if (modeEl)    { modeEl.checked = rules.elimination_mode === 'loser'; modeEl.disabled = !hostCanEdit; }
   if (gavilanEl) { gavilanEl.checked = rules.allow_gavilan;             gavilanEl.disabled = !hostCanEdit; }
   if (calzoEl)   { calzoEl.checked = rules.calzo_recovers_on_turn;     calzoEl.disabled = !hostCanEdit; }
+  if (timeoutEl) { timeoutEl.value = String(rules.turn_timeout_seconds); timeoutEl.disabled = !hostCanEdit; }
 
   // Opacidad reducida cuando el anfitrión no puede editar
   hostControls.style.opacity = hostCanEdit ? '1' : '0.45';
@@ -1543,6 +1596,7 @@ function onHostRulesChanged() {
     elimination_mode: document.getElementById('rule-elimination-loser')?.checked ? 'loser' : 'winner',
     allow_gavilan: !!document.getElementById('rule-allow-gavilan')?.checked,
     calzo_recovers_on_turn: !!document.getElementById('rule-calzo-on-turn')?.checked,
+    turn_timeout_seconds: Number(document.getElementById('rule-turn-timeout')?.value || 0),
   };
   S.rules = normalizeRules(next);
   saveRulesToStorage(S.rules);

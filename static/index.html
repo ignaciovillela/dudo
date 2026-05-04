@@ -126,6 +126,15 @@
             <input id="rule-calzo-on-turn" type="checkbox" onchange="onHostRulesChanged()" />
             <span class="rule-line">Calzo recupera en mi turno <button type="button" class="rule-help" data-tooltip="Si esta activo, un calzo correcto recupera dado tambien en tu turno. Si esta desactivado, solo recupera fuera de turno." aria-label="Detalle de recuperacion por calzo"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
           </label>
+          <label class="check-row timeout-row">
+            <span class="rule-line">Tiempo por turno</span>
+            <select id="rule-turn-timeout" onchange="onHostRulesChanged()">
+              <option value="0">Sin limite</option>
+              <option value="30">30 s</option>
+              <option value="60">60 s</option>
+              <option value="90">90 s</option>
+            </select>
+          </label>
         </div>
         <ul id="rules-summary" class="rules-summary"></ul>
       </div>
@@ -157,6 +166,7 @@
         <div class="turn-banner-row">
           <div id="turn-banner" class="turn-banner">Esperando...</div>
           <span id="spectator-badge" class="spectator-badge" style="display:none">ESPECTADOR</span>
+          <span id="turn-countdown" class="turn-countdown" style="display:none"></span>
           <span id="direction-indicator" class="direction-indicator" style="display:none" title=""></span>
         </div>
 
