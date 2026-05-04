@@ -46,10 +46,12 @@ def _share_description_for_room(room_id: str) -> str:
     if not ordered_names:
         return f"Sala {room_id} de Dudo. Entra y sumate a la partida en tiempo real."
 
-    preview = ordered_names[:4]
-    suffix = f" +{len(ordered_names) - 4}" if len(ordered_names) > 4 else ""
-    players_text = ", ".join(preview) + suffix
-    return f"Sala {room_id} de Dudo. Jugadores: {players_text}."
+    if len(ordered_names) == 1:
+        players_text = ordered_names[0]
+    else:
+        players_text = ", ".join(ordered_names[:-1]) + f" y {ordered_names[-1]}"
+
+    return f"Sala {room_id} de Dudo. Juega con {players_text}."
 
 
 def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None) -> str:
