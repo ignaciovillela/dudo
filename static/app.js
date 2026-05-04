@@ -1176,6 +1176,8 @@ function joinRoom() {
   if (!name) { showToast('Ingresa tu nombre', true); return; }
   if (!room) { showToast('Ingresa el código de sala', true); return; }
   S.playerName = name;
+  // Guardar nombre inmediatamente, antes de conectar
+  try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ ...loadSession(), name })); } catch (_) {}
   playSfx('click');
   connect(room);
 }
@@ -1416,14 +1418,22 @@ updateSoundButton();
 window.toggleSound = toggleSound;
 window.onHostRulesChanged = onHostRulesChanged;
 
-// Pre-rellenar formulario con la sesión guardada
+// Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (function () {
   const session = loadSession();
-  if (!session) return;
   const nameEl = document.getElementById('inp-name');
   const roomEl = document.getElementById('inp-room');
-  if (nameEl && session.name) nameEl.value = session.name;
-  if (roomEl && session.room) roomEl.value = session.room;
+  if (nameEl && session?.name) nameEl.value = session.name;
+  if (roomEl && session?.room) roomEl.value = session.room;
+
+  // Guardar nombre en tiempo real al escribir
+  if (nameEl) {
+    nameEl.addEventListener('input', () => {
+      const name = nameEl.value.trim();
+      if (!name) return;
+      try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({ ...loadSession(), name })); } catch (_) {}
+    });
+  }
 })();
 
 // Desbloquea audio en la primera interacción del usuario (requisito del navegador).
