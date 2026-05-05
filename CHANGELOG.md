@@ -5,6 +5,21 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.3] - 2026-05-05
+
+### Added
+- Sistema de niveles persistido en `localStorage` (`dudoLevel`): el jugador acumula XP durante las partidas y sube de nivel progresivamente.
+- Los 20 emojis del avatar picker ahora se desbloquean por nivel (del 1 al 10), ordenados de mas aburridos a mas llamativos. Los emojis bloqueados se muestran con candado, deshabilitados y con tooltip del nivel requerido.
+- XP otorgado de forma incremental e inmediata (nunca se pierde si la partida no termina):
+  - +1 XP por sobrevivir cada ronda.
+  - +5 XP por dudo, calzo o paso correcto.
+  - +1 XP por dudo, calzo o paso fallado (siempre positivo, nunca resta).
+  - +10 XP al terminar una partida.
+  - +20 XP adicional al ganar.
+- Badge de nivel con barra de progreso XP visible en el lobby.
+- El overlay de fin de partida muestra el XP ganado, si se subio de nivel y los emojis recien desbloqueados.
+- Toast en partida al desbloquear un emoji nuevo sin interrumpir el flujo de juego.
+
 ## [0.3.2] - 2026-05-04
 
 ### Added

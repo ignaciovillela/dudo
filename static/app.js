@@ -349,10 +349,151 @@ const DEFAULT_RULES = {
   turn_timeout_seconds: 0,
 };
 
-const AVATAR_OPTIONS = [
-  '🎲', '🦅', '🐺', '🦁', '🐯', '🦊', '💀', '👑', '🎭', '🃏',
-  '🏹', '⚔️', '🛡️', '🌙', '⚡', '🔥', '💎', '🎯', '🍀', '🎪',
+// ══════════════════════════════════  LEVELS  ══════════════════════════════════
+// Emojis ordered from "boring" to "exciting", each unlocked at a given level.
+const AVATAR_LEVEL_MAP = [
+  { emoji: '🎲', level: 1 },
+  { emoji: '🍀', level: 1 },
+  { emoji: '🃏', level: 1 },
+  { emoji: '🎭', level: 2 },
+  { emoji: '🌙', level: 2 },
+  { emoji: '🛡️', level: 3 },
+  { emoji: '🏹', level: 3 },
+  { emoji: '🐺', level: 4 },
+  { emoji: '🦊', level: 4 },
+  { emoji: '🦁', level: 5 },
+  { emoji: '🐯', level: 5 },
+  { emoji: '⚔️', level: 6 },
+  { emoji: '🔥', level: 6 },
+  { emoji: '⚡', level: 7 },
+  { emoji: '💎', level: 7 },
+  { emoji: '🎯', level: 8 },
+  { emoji: '🎪', level: 8 },
+  { emoji: '🦅', level: 9 },
+  { emoji: '👑', level: 9 },
+  { emoji: '💀', level: 10 },
 ];
+const AVATAR_OPTIONS = AVATAR_LEVEL_MAP.map(e => e.emoji);
+
+// XP thresholds per level (index = level - 1). Level 1 starts at 0 XP.
+const LEVEL_XP_THRESHOLDS = [
+  0,    // level 1
+  50,   // level 2
+  120,  // level 3
+  210,  // level 4
+  320,  // level 5
+  450,  // level 6
+  600,  // level 7
+  780,  // level 8
+  990,  // level 9
+  1230, // level 10
+];
+const MAX_LEVEL = LEVEL_XP_THRESHOLDS.length;
+
+const LEVEL_STORAGE_KEY = 'dudoLevel';
+
+const EMPTY_LEVEL_DATA = { xp: 0, level: 1 };
+
+function loadLevelData() {
+  try {
+    const raw = localStorage.getItem(LEVEL_STORAGE_KEY);
+    return raw ? { ...EMPTY_LEVEL_DATA, ...JSON.parse(raw) } : { ...EMPTY_LEVEL_DATA };
+  } catch (_) { return { ...EMPTY_LEVEL_DATA }; }
+}
+
+function saveLevelData(data) {
+  try { localStorage.setItem(LEVEL_STORAGE_KEY, JSON.stringify(data)); } catch (_) {}
+}
+
+function xpToLevel(xp) {
+  let level = 1;
+  for (let i = LEVEL_XP_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (xp >= LEVEL_XP_THRESHOLDS[i]) { level = i + 1; break; }
+  }
+  return Math.min(level, MAX_LEVEL);
+}
+
+function xpForNextLevel(level) {
+  if (level >= MAX_LEVEL) return null;
+  return LEVEL_XP_THRESHOLDS[level]; // index = level (next level threshold)
+}
+
+function isAvatarUnlocked(emoji) {
+  const entry = AVATAR_LEVEL_MAP.find(e => e.emoji === emoji);
+  if (!entry) return false;
+  const { level } = loadLevelData();
+  return level >= entry.level;
+}
+
+/**
+ * Add XP immediately and persist it. Returns { xpGained, oldLevel, newLevel, newXp, unlockedEmojis }.
+ * Safe to call multiple times during a game — each call commits to localStorage right away.
+ */
+function addXp(amount) {
+  if (amount === 0) return null;
+  const data = loadLevelData();
+  const oldLevel = data.level;
+  const newXp = data.xp + amount;
+  const newLevel = xpToLevel(newXp);
+  saveLevelData({ xp: newXp, level: newLevel });
+  const unlockedEmojis = AVATAR_LEVEL_MAP
+    .filter(e => e.level > oldLevel && e.level <= newLevel)
+    .map(e => e.emoji);
+  return { xpGained: amount, oldLevel, newLevel, newXp, unlockedEmojis };
+}
+
+/**
+ * Called on reveal: award XP for dudo/calzo outcome immediately.
+ * Always grants at least 1 XP — actions that fail give less, never negative.
+ *   dudo/calzo correcto: +5 XP
+ *   dudo/calzo fallado:  +1 XP
+ */
+function awardActionXp(action, success) {
+  const xp = success ? 5 : 1;
+  return addXp(xp);
+}
+
+/**
+ * Called on new_round: award a small XP bonus for surviving the round.
+ */
+function awardRoundXp() {
+  return addXp(1);
+}
+
+/**
+ * Called on game_over: award base XP + win bonus.
+ * Action XP was already saved during reveals, so we only add the game-completion portion.
+ * Returns { xpGained, oldLevel, newLevel, newXp, unlockedEmojis }.
+ */
+function awardGameOverXp({ won }) {
+  let xp = 10; // base for finishing a game
+  if (won) xp += 20;
+  return addXp(xp);
+}
+
+function renderLevelBadge() {
+  const badge = document.getElementById('level-badge');
+  if (!badge) return;
+  const { level, xp } = loadLevelData();
+  const nextThreshold = xpForNextLevel(level);
+  const prevThreshold = LEVEL_XP_THRESHOLDS[level - 1] || 0;
+  let progressHtml = '';
+  if (nextThreshold !== null) {
+    const range = nextThreshold - prevThreshold;
+    const progress = xp - prevThreshold;
+    const pct = Math.min(100, Math.round((progress / range) * 100));
+    progressHtml = `
+      <div class="level-xp-bar-wrap" title="${xp} XP · siguiente nivel en ${nextThreshold} XP">
+        <div class="level-xp-bar" style="width:${pct}%"></div>
+      </div>
+      <span class="level-xp-text">${xp} / ${nextThreshold} XP</span>`;
+  } else {
+    progressHtml = `<span class="level-xp-text">${xp} XP · ¡Nivel máximo!</span>`;
+  }
+  badge.innerHTML = `<span class="level-num">Nv. ${level}</span>${progressHtml}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 const AVATAR_VISIBLE_LIMIT = 8;
 let avatarPickerExpanded = false;
 
@@ -373,6 +514,7 @@ function persistLobbyIdentity(name) {
 
 function selectAvatar(avatar) {
   if (!AVATAR_OPTIONS.includes(avatar)) return;
+  if (!isAvatarUnlocked(avatar)) return; // locked avatars can't be selected
   S.playerAvatar = avatar;
   const name = document.getElementById('inp-name')?.value?.trim() || S.playerName || '';
   persistLobbyIdentity(name);
@@ -391,13 +533,27 @@ function renderAvatarPicker() {
 
   row.innerHTML = '';
   const ordered = orderedAvatars(S.playerAvatar);
+  const { level } = loadLevelData();
   ordered.forEach((avatar, idx) => {
+    const unlocked = isAvatarUnlocked(avatar);
+    const entry = AVATAR_LEVEL_MAP.find(e => e.emoji === avatar);
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'avatar-chip' + (avatar === S.playerAvatar ? ' selected' : '') + (!avatarPickerExpanded && idx >= AVATAR_VISIBLE_LIMIT ? ' hidden-chip' : '');
-    btn.textContent = avatar;
-    btn.setAttribute('aria-label', `Seleccionar avatar ${avatar}`);
-    btn.onclick = () => selectAvatar(avatar);
+    let cls = 'avatar-chip';
+    if (avatar === S.playerAvatar) cls += ' selected';
+    if (!unlocked) cls += ' locked';
+    if (!avatarPickerExpanded && idx >= AVATAR_VISIBLE_LIMIT) cls += ' hidden-chip';
+    btn.className = cls;
+    if (unlocked) {
+      btn.textContent = avatar;
+      btn.setAttribute('aria-label', `Seleccionar avatar ${avatar}`);
+      btn.onclick = () => selectAvatar(avatar);
+    } else {
+      btn.innerHTML = `<span class="avatar-locked-emoji">${avatar}</span><span class="avatar-lock-icon">🔒</span>`;
+      btn.setAttribute('aria-label', `Avatar ${avatar} bloqueado hasta nivel ${entry ? entry.level : '?'}`);
+      btn.title = `Se desbloquea en nivel ${entry ? entry.level : '?'}`;
+      btn.disabled = true;
+    }
     row.appendChild(btn);
   });
 
@@ -409,6 +565,7 @@ function renderAvatarPicker() {
 const AUDIO_STORAGE_KEY = 'dudoMuted';
 const RULES_STORAGE_KEY = 'dudoRules';
 const STATS_STORAGE_KEY = 'dudoStats';
+// LEVEL_STORAGE_KEY is defined above in the LEVELS section
 
 const EMPTY_STATS = {
   gamesPlayed: 0,
@@ -1201,15 +1358,24 @@ function onReveal(msg) {
   const isCalzo = msg.action === 'calzo';
 
   if (msg.challenger_id === S.playerId) {
+    let actionSuccess = false;
     if (msg.action === 'calzo') {
-      if (msg.calzo_success) S.pendingStats.calzoOk += 1;
+      actionSuccess = !!msg.calzo_success;
+      if (actionSuccess) S.pendingStats.calzoOk += 1;
       else S.pendingStats.calzoFail += 1;
     } else if (msg.action === 'dudo') {
-      if (msg.bid_holds) S.pendingStats.dudoFail += 1;
-      else S.pendingStats.dudoOk += 1;
+      actionSuccess = !msg.bid_holds;
+      if (actionSuccess) S.pendingStats.dudoOk += 1;
+      else S.pendingStats.dudoFail += 1;
     } else if (msg.action === 'paso') {
-      if (msg.paso_valid) S.pendingStats.dudoFail += 1;
-      else S.pendingStats.dudoOk += 1;
+      actionSuccess = !msg.paso_valid;
+      if (actionSuccess) S.pendingStats.dudoOk += 1;
+      else S.pendingStats.dudoFail += 1;
+    }
+    // Save XP immediately — always positive, just more if correct
+    const actionXpResult = awardActionXp(msg.action, actionSuccess);
+    if (actionXpResult && actionXpResult.unlockedEmojis.length > 0) {
+      showToast(`¡Desbloqueaste: ${actionXpResult.unlockedEmojis.join(' ')}! (Nv. ${actionXpResult.newLevel})`);
     }
   }
 
@@ -1270,6 +1436,8 @@ function onReveal(msg) {
 
 function onNewRound(msg) {
   stopTurnCountdown();
+  // Award 1 XP for surviving the previous round (skip on round 1 start)
+  if (S.roundNum > 0) awardRoundXp();
   S.roundNum      = msg.round_number;
   S.currentBid       = null;
   S.activePaso       = null;
@@ -1321,6 +1489,10 @@ function onGameOver(msg) {
   stats.calzoFail += S.pendingStats.calzoFail;
   saveStats(stats);
 
+  // Award XP: base + win bonus (action XP was already saved during reveals)
+  const won = (!isLoserMode && isWinner) || (isLoserMode && !isLoser);
+  const xpResult = awardGameOverXp({ won });
+
   // Preparar el overlay ya, pero mostrarlo al terminar el countdown de reveal (7 s)
   const overlay = document.getElementById('game-over-overlay');
   if (isLoserMode) {
@@ -1330,6 +1502,17 @@ function onGameOver(msg) {
     document.getElementById('go-title').textContent = isWinner ? '¡Ganaste!' : 'Fin de la partida';
     document.getElementById('go-winner').textContent = `${msg.winner_name} es el ganador`;
   }
+
+  // Build XP summary to show in overlay
+  let xpLines = `+${xpResult.xpGained} XP`;
+  if (xpResult.newLevel > xpResult.oldLevel) {
+    xpLines += ` · ¡Subiste al nivel ${xpResult.newLevel}!`;
+  }
+  if (xpResult.unlockedEmojis.length > 0) {
+    xpLines += ` · Desbloqueaste: ${xpResult.unlockedEmojis.join(' ')}`;
+  }
+  const goXp = document.getElementById('go-xp');
+  if (goXp) goXp.textContent = xpLines;
 
   const revealSeconds = Number(msg.reveal_seconds || 7);
   setTimeout(() => {
@@ -1353,6 +1536,8 @@ function closeGameOver() {
   document.getElementById('lobby-form').style.display = 'none';
   document.getElementById('lobby-room').style.display = 'block';
   renderLobbyPlayers();
+  renderAvatarPicker(); // refresh locked/unlocked state after XP gain
+  renderLevelBadge();
   applySpectatorMode();
   updateReadyButton(false);
   document.getElementById('btn-ready').classList.remove('btn-start');
@@ -2140,9 +2325,11 @@ window.confirmKickPlayer = confirmKickPlayer;
     roomEl.value = roomFromUrl || session?.room || '';
   }
   if (session?.avatar && AVATAR_OPTIONS.includes(session.avatar)) {
-    S.playerAvatar = session.avatar;
+    // Ensure saved avatar is still unlocked; if not, reset to 🎲
+    S.playerAvatar = isAvatarUnlocked(session.avatar) ? session.avatar : '🎲';
   }
   renderAvatarPicker();
+  renderLevelBadge();
 
   // Guardar nombre en tiempo real al escribir
   if (nameEl) {

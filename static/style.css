@@ -470,6 +470,24 @@ select:focus { border-color: var(--gold); }
   display: none;
 }
 
+.avatar-chip.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  position: relative;
+  font-size: 0.9rem;
+}
+.avatar-locked-emoji {
+  font-size: 1rem;
+  filter: grayscale(0.6);
+}
+.avatar-lock-icon {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 0.55rem;
+  line-height: 1;
+}
+
 .avatar-toggle {
   justify-self: end;
 }
@@ -1874,7 +1892,51 @@ select:focus { border-color: var(--gold); }
   font-size: 1.1rem;
   color: var(--cream);
 }
+.go-xp {
+  font-size: 0.9rem;
+  color: var(--gold);
+  margin: 4px 0 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
 .go-btn { padding: 12px 32px; font-size: 1rem; }
+
+/* Level badge in lobby */
+.level-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--cream);
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.level-num {
+  font-weight: 700;
+  color: var(--gold);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.level-xp-bar-wrap {
+  flex: 1;
+  min-width: 80px;
+  max-width: 140px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.12);
+  overflow: hidden;
+}
+.level-xp-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--gold);
+  transition: width 0.4s ease;
+}
+.level-xp-text {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+}
 
 .stats-modal {
   position: fixed;
