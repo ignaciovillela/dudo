@@ -7,6 +7,9 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 
 ## [0.3.5] - 2026-05-06
 
+### Fixed
+- Kick durante turno activo: si el anfitrión expulsaba al jugador con el turno, `current_player_idx` quedaba desincronizado. Ahora se calcula el siguiente jugador antes de eliminar al kickeado y se aplica `set_current_player` tras la eliminación.
+
 ### Changed
 - Eliminado soporte móvil: removidas todas las `@media` queries de breakpoint del CSS, el viewport meta usa ancho fijo `width=1280`, y los fallbacks a `window.innerWidth/Height` en animaciones reemplazados por valores fijos de desktop (1280×800).
 

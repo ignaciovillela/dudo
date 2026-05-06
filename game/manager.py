@@ -322,6 +322,14 @@ class GameManager:
 
         self._cancel_disconnect_resolution(room_id, target_id)
 
+        # Calcular antes de eliminar si el kickeado tiene el turno activo
+        was_current = game.phase == "playing" and game.current_player_id() == target_id
+        if was_current:
+            game.advance_turn()
+            next_player_id = game.current_player_id()
+            # Restaurar idx para que apunte al kickeado mientras aún existe (se corregirá tras el del)
+            game.set_current_player(target_id)
+
         await self._send(room_id, target_id, {
             "type": "kicked",
             "message": "El anfitrión te expulsó de la sala",
@@ -349,6 +357,9 @@ class GameManager:
             outcome = self._rules_engine(game).resolve_outcome(game, target_id)
             if outcome:
                 return await self._end_game(room_id, game, outcome)
+            # Si el kickeado era el jugador activo, ajustar el índice al siguiente jugador
+            if was_current:
+                game.set_current_player(next_player_id)
             await self._announce_turn(room_id, game)
 
     async def _h_direction(self, room_id, player_id, game, msg):

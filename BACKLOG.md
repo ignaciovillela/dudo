@@ -34,18 +34,11 @@ Referencia completa en `CHANGELOG.md`.
 - Transferencia automática de anfitrión.
 - Reconexión automática con backoff.
 - Eliminar soporte móvil (viewport fijo, sin @media queries de breakpoint).
+- Fix: kick durante turno activo corrompe orden de turno.
 
 ---
 
 ## 🔴 Alta prioridad
-
-### 2. Fix: kick durante el turno activo corrompe el orden de turno
-**Por qué:** si el anfitrión expulsa al jugador cuyo turno está activo, `current_player_idx` queda apuntando a un jugador incorrecto porque la lista de activos se acortó sin avanzar el turno explícitamente.
-- Alcance técnico: backend.
-- Archivos principales: `game/manager.py` (función `_h_kick_player`, ~línea 336).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: expulsar al jugador con el turno activo resulta en que el turno pasa correctamente al siguiente jugador; se anuncia `turn` con el jugador correcto.
 
 ### 3. Fix: `setTimeout` del overlay de fin de partida no es cancelable
 **Por qué:** si una nueva partida empieza dentro de los `REVEAL_SECONDS` que dura la animación de fin de juego, el overlay aparece encima de la nueva partida. El ID del timeout no se guarda y no se puede cancelar.
@@ -290,7 +283,6 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Riesgo | Impacto |
 |---|--------|--------------------|------------|--------|---------|
-| 2 | Fix: kick corrompe orden de turno | `manager.py` | Baja | Bajo | Alto |
 | 3 | Fix: setTimeout game-over no cancelable | `app.js` | Baja | Bajo | Alto |
 | 4 | Fix: desconexión congela turno activo | `manager.py` | Baja | Bajo | Alto |
 | 5 | Fix: auto-apuesta timeout usa cara=2 siempre | `manager.py` | Baja | Bajo | Medio |
