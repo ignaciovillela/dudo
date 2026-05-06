@@ -229,6 +229,7 @@ const S = {
   pendingKickTargetId: null,
   pendingKickTargetName: '',
   gameOverTimer: null,
+  spectatorCount: 0,
 };
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
@@ -972,6 +973,8 @@ function onJoined(msg) {
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules);
   S.playerAvatar = S.players[S.playerId]?.avatar || S.playerAvatar;
+  S.spectatorCount = msg.spectator_count ?? 0;
+  updateSpectatorCount();
   saveSession();
 
   document.getElementById('disp-room-code').textContent = S.roomId;
@@ -1025,6 +1028,8 @@ function onSpectatorState(msg) {
   S.rules = normalizeRules(msg.rules || S.rules);
   S.roundNum = msg.round_number || S.roundNum;
   S.totalDice = msg.total_dice || S.totalDice;
+  S.spectatorCount = msg.spectator_count ?? S.spectatorCount;
+  updateSpectatorCount();
   if (msg.turn) onTurn(msg.turn);
   renderOtherPlayers();
   renderMyDice();
@@ -1034,11 +1039,30 @@ function onSpectatorState(msg) {
 }
 
 function onSpectatorJoined(msg) {
+  if (msg.spectator_count !== undefined) {
+    S.spectatorCount = msg.spectator_count;
+    updateSpectatorCount();
+  }
   log(`${msg.spectator_name} se unió como espectador`, 'system');
 }
 
 function onSpectatorLeft(msg) {
+  if (msg.spectator_count !== undefined) {
+    S.spectatorCount = msg.spectator_count;
+    updateSpectatorCount();
+  }
   log(`${msg.spectator_name} dejó de observar`, 'system');
+}
+
+function updateSpectatorCount() {
+  const el = document.getElementById('spectator-count');
+  if (!el) return;
+  if (S.spectatorCount > 0) {
+    el.textContent = `👁 ${S.spectatorCount}`;
+    el.style.display = 'inline-flex';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function onPlayerKicked(msg) {
@@ -1078,6 +1102,8 @@ function onReconnected(msg) {
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules);
   S.phase       = msg.phase;
+  S.spectatorCount = msg.spectator_count ?? S.spectatorCount;
+  updateSpectatorCount();
   S.playerAvatar = S.players[S.playerId]?.avatar || S.playerAvatar;
   saveSession();
 

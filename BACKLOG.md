@@ -42,6 +42,7 @@ Referencia completa en `CHANGELOG.md`.
 - UX: botón "Copiar sala" con confirmación visual (checkmark ~1.5s).
 - UX: urgencia visual en el countdown de turno (rojo ≤10s, pulso ≤5s).
 - UX: indicación previa de acción automática por timeout (aviso ≤3s).
+- Contador de espectadores visible en la mesa en tiempo real.
 
 ---
 
@@ -211,14 +212,6 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Medio`.
 - Criterio de término: existe una opción `Obligo` (o `palifico`) en `RuleConfig`; cuando está activo y un jugador tiene exactamente 1 dado (solo la primera vez de cada jugador), el backend usa un conteo sin comodines; el frontend indica visualmente que la ronda es Obligada.
 
-### 28. Contador de espectadores visible
-**Por qué:** los jugadores no saben cuánta gente está mirando; el sistema ya rastrea espectadores pero no lo muestra en ningún lugar de la UI.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (funciones `onSpectatorJoined`/`onSpectatorLeft`), `static/index.html`.
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: hay un contador persistente de espectadores visible en la mesa (ej. "👁 3") que se actualiza en tiempo real al entrar/salir espectadores.
-
 ### 29. Variante: dados iniciales configurables
 **Por qué:** el conteo inicial de 5 dados está hardcodeado. Partidas con 3 o 4 dados son más rápidas; con 6 son más largas. Es una variante común para controlar la duración.
 - Alcance técnico: backend + frontend.
@@ -252,5 +245,4 @@ Referencia completa en `CHANGELOG.md`.
 | 25 | Modal de reglas en partida | `index.html`, `app.js`, `style.css` | Baja | Bajo | Bajo |
 | 26 | Confirmación en acción "Dudo" | `app.js`, `index.html`, `style.css` | Baja | Bajo | Bajo |
 | 27 | Variante: ronda Palifico | `models.py`, `rules/`, `app.js`, `index.html` | Media | Medio | Bajo |
-| 28 | Contador de espectadores visible | `app.js`, `index.html` | Baja | Bajo | Bajo |
 | 29 | Variante: dados iniciales configurables | `models.py`, `manager.py`, `index.html`, `app.js` | Media | Medio | Bajo |

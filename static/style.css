@@ -1325,6 +1325,15 @@ select:focus { border-color: var(--gold); }
   animation: countdown-pulse 0.8s ease-in-out infinite;
 }
 
+.spectator-count {
+  font-size: 0.78rem;
+  color: #a0aec0;
+  border: 1px solid rgba(160, 174, 192, 0.3);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
 .sidebar.spectator-mode #bid-panel {
   opacity: 0.45;
 }

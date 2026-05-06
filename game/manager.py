@@ -65,6 +65,7 @@ class GameManager:
                 "type": "spectator_left",
                 "spectator_id": player_id,
                 "spectator_name": spectator_name,
+                "spectator_count": len(game.spectators),
             })
             return
 
@@ -192,6 +193,7 @@ class GameManager:
                 "player_order": game.player_order,
                 "phase": game.phase,
                 "rules": game.rules.to_dict(),
+                "spectator_count": len(game.spectators),
             })
             await self._broadcast_except(room_id, reconnect_id, {
                 "type": "player_reconnected",
@@ -232,6 +234,7 @@ class GameManager:
                 "type": "spectator_joined",
                 "spectator_id": player_id,
                 "spectator_name": spectator_name,
+                "spectator_count": len(game.spectators),
             })
             return
         if len(game.players) >= MAX_PLAYERS:
@@ -254,6 +257,7 @@ class GameManager:
             "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
             "player_order": game.player_order,
             "rules": game.rules.to_dict(),
+            "spectator_count": len(game.spectators),
         })
         await self._broadcast_except(room_id, player_id, {
             "type": "player_joined",
@@ -718,6 +722,7 @@ class GameManager:
             "total_dice": game.total_dice(),
             "host_id": self._host_id(game.room_id, game),
             "turn": self._turn_payload(game) if game.phase in {"playing", "reveal"} else None,
+            "spectator_count": len(game.spectators),
         }
 
     def _pick_connected_host(self, game: Game) -> str | None:
