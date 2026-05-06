@@ -240,6 +240,7 @@ let titleBlinkTimer = null;
 let titleBlinkState = false;
 let notificationPrompted = false;
 let turnCountdownTimer = null;
+let _activeNotification = null;
 let turnCountdownDeadline = 0;
 
 const NOTIF_PREF_STORAGE_KEY = 'dudoNotifPref';
@@ -339,7 +340,10 @@ function notifyTurnIfHidden() {
   startTurnTitleBlink();
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try {
-    new Notification('¡Tu turno en Dudo!', { icon: '/static/favicon.svg' });
+    if (_activeNotification) { _activeNotification.close(); }
+    const n = new Notification('¡Tu turno en Dudo!', { icon: '/static/favicon.svg' });
+    n.onclick = () => { window.focus(); n.close(); _activeNotification = null; };
+    _activeNotification = n;
   } catch (_) {}
 }
 
@@ -1219,6 +1223,7 @@ function onYourDice(msg) {
   S.myDice    = msg.dice;
   S.roundNum  = msg.round_number;
   S.totalDice = msg.total_dice;
+  if (msg.has_passed !== undefined) S.hasPassed = msg.has_passed;
 
   // Merge updated player counts
   Object.assign(S.players, msg.players);
@@ -2795,14 +2800,16 @@ window.confirmKickPlayer = confirmKickPlayer;
 // Desbloquea audio en la primera interacción del usuario (requisito del navegador).
 ['pointerdown', 'keydown'].forEach(evt => {
   window.addEventListener(evt, unlockAudio, { once: true });
-  window.addEventListener(evt, maybeShowNotificationIntro, { once: true });
 });
 
 // Inicializar hover de emojis una sola vez al cargar (cubre reconexiones y espectadores)
 maybeInitEmojiHover();
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) stopTurnTitleBlink();
+  if (!document.hidden) {
+    stopTurnTitleBlink();
+    if (_activeNotification) { _activeNotification.close(); _activeNotification = null; }
+  }
 });
 
 window.addEventListener('focus', stopTurnTitleBlink);
