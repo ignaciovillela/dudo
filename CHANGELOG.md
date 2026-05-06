@@ -9,6 +9,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 
 ### Fixed
 - Kick durante turno activo: si el anfitrión expulsaba al jugador con el turno, `current_player_idx` quedaba desincronizado. Ahora se calcula el siguiente jugador antes de eliminar al kickeado y se aplica `set_current_player` tras la eliminación.
+- `setTimeout` del overlay de fin de partida: el ID se guarda en `S.gameOverTimer` y se cancela al iniciar una nueva partida (`onGameStarted`) o al cerrar manualmente el overlay (`closeGameOver`), evitando que aparezca encima de una partida ya iniciada.
 
 ### Changed
 - Eliminado soporte móvil: removidas todas las `@media` queries de breakpoint del CSS, el viewport meta usa ancho fijo `width=1280`, y los fallbacks a `window.innerWidth/Height` en animaciones reemplazados por valores fijos de desktop (1280×800).

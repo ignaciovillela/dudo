@@ -35,18 +35,11 @@ Referencia completa en `CHANGELOG.md`.
 - Reconexión automática con backoff.
 - Eliminar soporte móvil (viewport fijo, sin @media queries de breakpoint).
 - Fix: kick durante turno activo corrompe orden de turno.
+- Fix: setTimeout del overlay de fin de partida no era cancelable.
 
 ---
 
 ## 🔴 Alta prioridad
-
-### 3. Fix: `setTimeout` del overlay de fin de partida no es cancelable
-**Por qué:** si una nueva partida empieza dentro de los `REVEAL_SECONDS` que dura la animación de fin de juego, el overlay aparece encima de la nueva partida. El ID del timeout no se guarda y no se puede cancelar.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (función `onGameOver`, ~línea 1522).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: el ID del setTimeout se guarda en `S`; se cancela al iniciar una nueva partida (`onGameStarted`) y al cerrar el overlay (`closeGameOver`).
 
 ### 4. Fix: desconexión durante el turno activo congela la partida [no aplicar aún, se debe revisar bien el alcance]
 **Por qué:** cuando el jugador activo se desconecta, `active_players()` lo excluye y `current_player_id()` retorna al siguiente jugador, pero nunca se llama `_announce_turn`. Los demás jugadores no reciben anuncio de turno y la partida queda congelada visualmente hasta que el timeout expira.
@@ -283,7 +276,6 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Riesgo | Impacto |
 |---|--------|--------------------|------------|--------|---------|
-| 3 | Fix: setTimeout game-over no cancelable | `app.js` | Baja | Bajo | Alto |
 | 4 | Fix: desconexión congela turno activo | `manager.py` | Baja | Bajo | Alto |
 | 5 | Fix: auto-apuesta timeout usa cara=2 siempre | `manager.py` | Baja | Bajo | Medio |
 | 16 | Vista dedicada para eliminados | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |

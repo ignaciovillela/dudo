@@ -228,6 +228,7 @@ const S = {
   reconnectAttempt: 0,
   pendingKickTargetId: null,
   pendingKickTargetName: '',
+  gameOverTimer: null,
 };
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
@@ -1174,6 +1175,8 @@ function onPlayerDisc(msg) {
 }
 
 function onGameStarted(msg) {
+  if (S.gameOverTimer !== null) { clearTimeout(S.gameOverTimer); S.gameOverTimer = null; }
+  document.getElementById('game-over-overlay').style.display = 'none';
   S.isSpectator = false;
   S.phase       = 'playing';
   S.playerOrder = msg.player_order;
@@ -1520,7 +1523,8 @@ function onGameOver(msg) {
   if (goXp) goXp.textContent = xpLines;
 
   const revealSeconds = Number(msg.reveal_seconds || 7);
-  setTimeout(() => {
+  S.gameOverTimer = setTimeout(() => {
+    S.gameOverTimer = null;
     hideReveal();
     const endSfx = isLoserMode ? (isLoser ? 'lose' : 'win') : (isWinner ? 'win' : 'lose');
     playSfx(endSfx);
@@ -1529,6 +1533,7 @@ function onGameOver(msg) {
 }
 
 function closeGameOver() {
+  if (S.gameOverTimer !== null) { clearTimeout(S.gameOverTimer); S.gameOverTimer = null; }
   stopTurnCountdown();
   document.getElementById('game-over-overlay').style.display = 'none';
   S.phase = 'lobby';
