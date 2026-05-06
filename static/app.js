@@ -2056,6 +2056,7 @@ function stopTurnCountdown() {
   if (!el) return;
   el.style.display = 'none';
   el.textContent = '';
+  el.classList.remove('turn-countdown--urgent', 'turn-countdown--critical');
 }
 
 function startTurnCountdown(seconds) {
@@ -2071,6 +2072,8 @@ function startTurnCountdown(seconds) {
     }
     el.textContent = `⏳ ${left}s`;
     el.style.display = 'inline-flex';
+    el.classList.toggle('turn-countdown--urgent',   left <= 10);
+    el.classList.toggle('turn-countdown--critical', left <= 5);
   };
   render();
   turnCountdownTimer = setInterval(render, 250);
@@ -2638,8 +2641,17 @@ function onHostRulesChanged() {
 function copyRoomCode() {
   playSfx('click');
   const shareUrl = `${location.origin}/?sala=${encodeURIComponent(S.roomId)}`;
+  const btn = document.getElementById('btn-copy-room');
+  const doCheck = () => {
+    if (btn) {
+      btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>Copiado';
+      setTimeout(() => {
+        btn.innerHTML = '<i class="fa-regular fa-copy" aria-hidden="true"></i>Copiar';
+      }, 1500);
+    }
+  };
   navigator.clipboard.writeText(shareUrl)
-    .then(() => showToast('Enlace de sala copiado'))
+    .then(() => { showToast('Enlace de sala copiado'); doCheck(); })
     .catch(() => showToast(shareUrl));
 }
 
