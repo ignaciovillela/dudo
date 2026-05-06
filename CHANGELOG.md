@@ -5,6 +5,23 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.5] - 2026-05-06
+
+### Changed
+- Eliminado soporte móvil: removidas todas las `@media` queries de breakpoint del CSS, el viewport meta usa ancho fijo `width=1280`, y los fallbacks a `window.innerWidth/Height` en animaciones reemplazados por valores fijos de desktop (1280×800).
+
+## [0.3.4] - 2026-05-05
+
+### Added
+- Sistema de emojis lanzables entre jugadores: al pasar el cursor sobre la carta de un oponente aparece un popup con emojis seleccionables que se lanzan con una animación parabólica y rebote entre cartas.
+- 23 emojis lanzables desbloqueables progresivamente por nivel (niveles 1–10), mostrados con candado y tooltip del nivel requerido si aún no están disponibles.
+- Regla de sala configurable `allowEmojis` (activado por defecto) que el anfitrión puede desactivar para deshabilitar los lanzamientos de emojis en la partida.
+- El backend propaga el evento `emoji` a todos los jugadores de la sala con origen, destino y el emoji elegido.
+- Los modelos de `Player` y `Game` incluyen la configuración de emojis en el estado compartido.
+
+### Changed
+- El payload de `rule_config` en el backend ahora incluye el campo `allow_emojis`, sincronizado con el frontend al unirse o actualizar reglas.
+
 ## [0.3.3] - 2026-05-05
 
 ### Added

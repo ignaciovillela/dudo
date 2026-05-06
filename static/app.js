@@ -119,7 +119,7 @@ function animateDieCup(pid, type) {
   // Centro de la mesa
   const table = document.querySelector('.game-table');
   const tableRect = table ? table.getBoundingClientRect()
-    : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    : { left: 0, top: 0, width: 1280, height: 800 };
   const tcx = tableRect.left + tableRect.width  / 2;
   const tcy = tableRect.top  + tableRect.height / 2;
 
@@ -1830,10 +1830,10 @@ function animateEmojiThrow(fromId, targetId, emoji) {
   const from = getCardCenter(fromId);
   const to   = getCardCenter(targetId);
 
-  const x0 = from ? from.x : window.innerWidth  / 2;
-  const y0 = from ? from.y : window.innerHeight / 2;
-  const x1 = to   ? to.x   : window.innerWidth  / 2;
-  const y1 = to   ? to.y   : window.innerHeight / 2;
+  const x0 = from ? from.x : 640;
+  const y0 = from ? from.y : 400;
+  const x1 = to   ? to.x   : 640;
+  const y1 = to   ? to.y   : 400;
 
   // Punto de control de Bézier cuadrática: arco hacia arriba proporcional a la distancia
   const dist   = Math.hypot(x1 - x0, y1 - y0);

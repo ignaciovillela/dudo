@@ -321,17 +321,6 @@ body {
   padding: 24px 16px;
 }
 
-@media (max-width: 640px) {
-  .lobby-decor .decor-die,
-  .lobby-decor .decor-beer,
-  .lobby-decor .decor-cup {
-    opacity: 0.1;
-  }
-
-  .lobby-decor .decor-beer {
-    opacity: 0.045;
-  }
-}
 
 .lobby-logo { text-align: center; }
 
@@ -2204,55 +2193,6 @@ select:focus { border-color: var(--gold); }
 /* ══════════════════════════════  UTILS  ══════════════════════════════════ */
 .hidden { display: none !important; }
 
-/* ══════════════════════════════  RESPONSIVE  ══════════════════════════════ */
-@media (max-width: 640px) {
-  .sound-toggle {
-    left: 10px;
-    bottom: 10px;
-    width: 34px;
-    height: 34px;
-    font-size: 0.9rem;
-  }
-
-  /* Layout: tabla arriba, sidebar abajo */
-  .game-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  .sidebar {
-    border-left: none;
-    border-top: 1px solid var(--border);
-    max-height: 55vh;
-    overflow-y: auto;
-  }
-
-  .game-table {
-    border-right: none;
-  }
-
-  /* Bid panel más compacto */
-  .panel { padding: 12px 12px; }
-  .panel-title { margin-bottom: 10px; }
-
-  /* Face picker: dos filas de 3 en pantallas muy pequeñas */
-  @media (max-width: 400px) {
-    .face-picker {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  /* Cantidad grande */
-  #bb-qty { font-size: 1.6rem; }
-
-  /* Botones de acción */
-  .action-btns { gap: 6px; }
-
-  /* Log más pequeño */
-  .panel-log { display: none; }
-}
 
 /* Scrollbar global */
 ::-webkit-scrollbar { width: 6px; }
