@@ -17,6 +17,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 - Urgencia visual en countdown de turno: con ≤10s el temporizador se vuelve rojo; con ≤5s agrega animación de pulso.
 - Indicación previa de acción automática: en los últimos 3s del turno propio aparece un aviso animado ("Paso automático…" o "Apuesta automática (Cara)…") que desaparece al recibir `bid_made` o `paso_made` del servidor.
 - Contador de espectadores visible en la mesa (👁 N): se actualiza en tiempo real con `spectator_joined`/`spectator_left`; el backend incluye `spectator_count` en esos eventos y en los payloads `joined`, `reconnected` y `spectator_state`.
+- Vista dedicada para jugadores eliminados: al ser eliminado el jugador local, el panel de apuesta se oculta y aparece un panel "Eliminado" con aviso de espectador; se restaura al comenzar una nueva partida.
 
 ### Changed
 - Eliminado soporte móvil: removidas todas las `@media` queries de breakpoint del CSS, el viewport meta usa ancho fijo `width=1280`, y los fallbacks a `window.innerWidth/Height` en animaciones reemplazados por valores fijos de desktop (1280×800).

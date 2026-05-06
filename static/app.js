@@ -1207,6 +1207,7 @@ function onPlayerDisc(msg) {
 function onGameStarted(msg) {
   if (S.gameOverTimer !== null) { clearTimeout(S.gameOverTimer); S.gameOverTimer = null; }
   document.getElementById('game-over-overlay').style.display = 'none';
+  applyEliminatedMode(false);
   S.isSpectator = false;
   S.phase       = 'playing';
   S.playerOrder = msg.player_order;
@@ -1504,6 +1505,7 @@ function onEliminated(msg) {
   playSfx('eliminated');
   log(`${msg.player_name} fue eliminado`, 'elim');
   renderOtherPlayers();
+  if (msg.player_id === S.playerId) applyEliminatedMode(true);
 }
 
 function onGameOver(msg) {
@@ -2539,6 +2541,13 @@ function applySpectatorMode() {
   sidebar?.classList.toggle('spectator-mode', S.isSpectator);
   if (myArea) myArea.style.display = S.isSpectator ? 'none' : 'flex';
   if (myLost) myLost.style.display = S.isSpectator ? 'none' : '';
+}
+
+function applyEliminatedMode(eliminated) {
+  const bidPanel  = document.getElementById('bid-panel');
+  const elimPanel = document.getElementById('eliminated-panel');
+  if (bidPanel)  bidPanel.style.display  = eliminated ? 'none' : '';
+  if (elimPanel) elimPanel.style.display = eliminated ? 'flex' : 'none';
 }
 
 // ══════════════════════════════════  LOBBY ACTIONS  ════════════════════════════

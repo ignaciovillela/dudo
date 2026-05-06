@@ -43,6 +43,7 @@ Referencia completa en `CHANGELOG.md`.
 - UX: urgencia visual en el countdown de turno (rojo ≤10s, pulso ≤5s).
 - UX: indicación previa de acción automática por timeout (aviso ≤3s).
 - Contador de espectadores visible en la mesa en tiempo real.
+- Vista dedicada para jugadores eliminados (panel de acciones reemplazado por mensaje de espectador).
 
 ---
 
@@ -55,14 +56,6 @@ Referencia completa en `CHANGELOG.md`.
 - Dificultad estimada: `Baja`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: al desconectarse el jugador activo durante una partida, el siguiente jugador recibe inmediatamente el mensaje `turn`.
-
-### 16. Vista dedicada para jugadores eliminados
-**Por qué:** al ser eliminado, el jugador sigue viendo el panel de apuesta deshabilitado y toda la UI de juego activo, lo cual es confuso. Debería tener una vista limpia de espectador con la mesa visible.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (función `onEliminated`), `static/index.html`, `static/style.css`.
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: al ser eliminado, el panel de acciones (bid builder, botones) se reemplaza por un mensaje de eliminación y la vista se comporta igual que el modo espectador; el jugador sigue viendo la mesa y el log.
 
 ### 17. Clasificación final con orden de eliminación
 **Por qué:** el overlay de game over solo muestra al ganador/perdedor. No hay forma de saber en qué orden fueron cayendo los jugadores ni cuántas rondas sobrevivió cada uno.
@@ -227,7 +220,6 @@ Referencia completa en `CHANGELOG.md`.
 | # | Mejora | Archivos afectados | Dificultad | Riesgo | Impacto |
 |---|--------|--------------------|------------|--------|---------|
 | 4 | Fix: desconexión congela turno activo | `manager.py` | Baja | Bajo | Alto |
-| 16 | Vista dedicada para eliminados | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 17 | Clasificación final con orden de eliminación | `manager.py`, `app.js`, `index.html` | Media | Bajo | Alto |
 | 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
