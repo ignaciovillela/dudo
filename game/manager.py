@@ -564,6 +564,8 @@ class GameManager:
             await self._apply_loss(room_id, game, player_id)
 
     async def _h_emoji(self, room_id, player_id, game, msg):
+        if not game.rules.allow_throwable_emojis:
+            return
         ALLOWED_EMOJIS = {
             "👍","👎","😐","🙄","😬","👀","😏","😤","😂","👏",
             "😎","🤓","😱","🤣","🫵","❄️","🥶","🔥","🤯","💀",

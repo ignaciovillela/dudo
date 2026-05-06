@@ -112,6 +112,10 @@
             <input id="rule-calzo-on-turn" type="checkbox" onchange="onHostRulesChanged()" />
             <span class="rule-line">Calzo recupera en mi turno <button type="button" class="rule-help" data-tooltip="Si esta activo, un calzo correcto recupera dado tambien en tu turno. Si esta desactivado, solo recupera fuera de turno." aria-label="Detalle de recuperacion por calzo"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
           </label>
+          <label class="check-row">
+            <input id="rule-allow-throwable-emojis" type="checkbox" onchange="onHostRulesChanged()" />
+            <span class="rule-line">Permitir lanzar emojis <button type="button" class="rule-help" data-tooltip="Permite que los jugadores lancen emojis a otros durante la partida." aria-label="Detalle de emojis lanzables"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
+          </label>
           <label class="check-row timeout-row">
             <span class="rule-line">Tiempo por turno</span>
             <div id="rule-turn-timeout" class="timeout-options" role="radiogroup" aria-label="Tiempo por turno">

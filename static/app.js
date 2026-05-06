@@ -347,6 +347,7 @@ const DEFAULT_RULES = {
   allow_gavilan: true,
   calzo_recovers_on_turn: false,
   turn_timeout_seconds: 0,
+  allow_throwable_emojis: true,
 };
 
 // ══════════════════════════════════  LEVELS  ══════════════════════════════════
@@ -1587,6 +1588,7 @@ const EMOJI_ROW_SIZE = 5;
 
 function throwEmoji(targetPid, emoji) {
   if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
+  if (!S.rules?.allow_throwable_emojis) return;
   send({ type: 'emoji', target_id: targetPid, emoji });
 }
 
@@ -1747,6 +1749,9 @@ function buildEmojiBar(targetPid) {
   const trigger = document.createElement('div');
   trigger.className = 'emoji-bar-trigger';
   trigger.dataset.pid = targetPid;
+  if (!S.rules?.allow_throwable_emojis) {
+    trigger.style.display = 'none';
+  }
   return trigger;
 }
 
@@ -2524,6 +2529,7 @@ function normalizeRules(rules) {
     allow_gavilan: !!(src.allow_gavilan ?? DEFAULT_RULES.allow_gavilan),
     calzo_recovers_on_turn: !!(src.calzo_recovers_on_turn ?? DEFAULT_RULES.calzo_recovers_on_turn),
     turn_timeout_seconds: timeout,
+    allow_throwable_emojis: !!(src.allow_throwable_emojis ?? DEFAULT_RULES.allow_throwable_emojis),
   };
 }
 
@@ -2550,6 +2556,12 @@ function rulesSummaryItems() {
       label: `Tiempo por turno: ${rules.turn_timeout_seconds > 0 ? `${rules.turn_timeout_seconds}s` : 'Sin limite'}`,
       detail: 'Al expirar el tiempo, el servidor ejecuta una accion automatica conservadora.',
     },
+    {
+      label: `Emojis lanzables: ${rules.allow_throwable_emojis ? 'Si' : 'No'}`,
+      detail: rules.allow_throwable_emojis
+        ? 'Los jugadores pueden lanzar emojis a otros durante la partida.'
+        : 'Los emojis lanzables estan desactivados en esta sala.',
+    },
   ];
 }
 
@@ -2566,10 +2578,12 @@ function renderLobbyRules() {
   const modeEl = document.getElementById('rule-elimination-loser');
   const gavilanEl = document.getElementById('rule-allow-gavilan');
   const calzoEl = document.getElementById('rule-calzo-on-turn');
+  const emojiEl = document.getElementById('rule-allow-throwable-emojis');
   const timeoutInputs = document.querySelectorAll('#rule-turn-timeout input[name="turn-timeout"]');
   if (modeEl)    { modeEl.checked = rules.elimination_mode === 'loser'; modeEl.disabled = !hostCanEdit; }
   if (gavilanEl) { gavilanEl.checked = rules.allow_gavilan;             gavilanEl.disabled = !hostCanEdit; }
   if (calzoEl)   { calzoEl.checked = rules.calzo_recovers_on_turn;     calzoEl.disabled = !hostCanEdit; }
+  if (emojiEl)   { emojiEl.checked = rules.allow_throwable_emojis;     emojiEl.disabled = !hostCanEdit; }
   timeoutInputs.forEach((input) => {
     input.checked = Number(input.value) === rules.turn_timeout_seconds;
     input.disabled = !hostCanEdit;
@@ -2603,6 +2617,7 @@ function onHostRulesChanged() {
     allow_gavilan: !!document.getElementById('rule-allow-gavilan')?.checked,
     calzo_recovers_on_turn: !!document.getElementById('rule-calzo-on-turn')?.checked,
     turn_timeout_seconds: Number(timeoutSelected?.value || 0),
+    allow_throwable_emojis: !!document.getElementById('rule-allow-throwable-emojis')?.checked,
   };
   S.rules = normalizeRules(next);
   saveRulesToStorage(S.rules);
