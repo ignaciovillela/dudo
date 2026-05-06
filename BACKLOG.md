@@ -39,6 +39,8 @@ Referencia completa en `CHANGELOG.md`.
 - Fix: auto-apuesta por timeout siempre usaba cara=2.
 - Fix: mejoras al sistema de notificaciones de turno.
 - Fix: `S.hasPassed` no se restauraba al reconectar.
+- UX: botón "Copiar sala" con confirmación visual (checkmark ~1.5s).
+- UX: urgencia visual en el countdown de turno (rojo ≤10s, pulso ≤5s).
 
 ---
 
@@ -88,22 +90,6 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: el botón "Unirse" muestra un estado de carga (texto o spinner) desde el click hasta recibir `joined` o error; se deshabilita para evitar doble envío.
 
-### 9. UX: botón "Copiar sala" con confirmación visual
-**Por qué:** al copiar el código de sala, solo aparece un toast al fondo de la pantalla. El patrón estándar es que el botón mismo muestre un checkmark brevemente.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (función `copyRoomCode`), `static/style.css`.
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: al copiar exitosamente, el ícono del botón cambia a ✓ por ~1.5s y luego vuelve al ícono original.
-
-### 10. UX: urgencia visual en el countdown de turno
-**Por qué:** el temporizador de turno muestra el tiempo restante pero no escala visualmente. El jugador no tiene alerta temprana de que su tiempo se acaba.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (función `startTurnCountdown`), `static/style.css`.
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: cuando restan ≤10s el countdown cambia a color rojo; cuando restan ≤5s se agrega pulso o animación de urgencia.
-
 ### 11. Fix: cap en cantidad apostada (cliente y servidor) [revisar, podría ser bueno solo limitar el máximo ej: 100]
 **Por qué:** no hay límite superior en la cantidad de la apuesta. Un cliente puede enviar `quantity: 9999999`; el servidor lo acepta porque solo valida que sea ≥ 1 y mayor a la apuesta anterior.
 - Alcance técnico: frontend + backend.
@@ -118,7 +104,7 @@ Referencia completa en `CHANGELOG.md`.
 - Archivos principales: `static/app.js`, `static/index.html`, `static/style.css`, `game/manager.py`.
 - Dificultad estimada: `Media`.
 - Riesgo de implementación: `Bajo`.
-- Criterio de término: hay un conjunto de frases predefinidas (ej. "¡Mentira!", "¡Suerte!", "Buen bluff", "No te creo") activables en cualquier momento; el mensaje aparece brevemente sobre la carta del jugador que lo envía y en el log; los espectadores también pueden usarlas.
+- Criterio de término: hay un conjunto de frases predefinidas (ej. "¡Mentira!", "¡Suerte!", "Buen bluff", "No te creo") activables poniendo el mouse sobre uno mismo (de igual modo que lanzar emojis), en cualquier momento; el mensaje aparece brevemente sobre la carta del jugador que lo envía y en el log; los espectadores también pueden usarlas.
 
 ### 13. Sonido direccional (pan estéreo por posición en la mesa)
 **Por qué:** los sonidos de acciones de los oponentes suenan igual independientemente de dónde estén en la mesa. Con pan estéreo, el jugador a tu izquierda suena a la izquierda y el de la derecha a la derecha, añadiendo inmersión.
@@ -260,8 +246,6 @@ Referencia completa en `CHANGELOG.md`.
 | 17 | Clasificación final con orden de eliminación | `manager.py`, `app.js`, `index.html` | Media | Bajo | Alto |
 | 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
-| 9 | UX: botón copiar sala con checkmark | `app.js`, `style.css` | Baja | Bajo | Bajo |
-| 10 | UX: urgencia visual en countdown de turno | `app.js`, `style.css` | Baja | Bajo | Medio |
 | 11 | Fix: cap en cantidad apostada | `app.js`, `models.py` | Baja | Bajo | Bajo |
 | 12 | Chat rápido con frases predefinidas | `app.js`, `index.html`, `style.css`, `manager.py` | Media | Bajo | Alto |
 | 13 | Sonido direccional (pan estéreo por posición) | `app.js` | Media | Bajo | Medio |
