@@ -36,6 +36,9 @@ Referencia completa en `CHANGELOG.md`.
 - Eliminar soporte móvil (viewport fijo, sin @media queries de breakpoint).
 - Fix: kick durante turno activo corrompe orden de turno.
 - Fix: setTimeout del overlay de fin de partida no era cancelable.
+- Fix: auto-apuesta por timeout siempre usaba cara=2.
+- Fix: mejoras al sistema de notificaciones de turno.
+- Fix: `S.hasPassed` no se restauraba al reconectar.
 
 ---
 
@@ -48,14 +51,6 @@ Referencia completa en `CHANGELOG.md`.
 - Dificultad estimada: `Baja`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: al desconectarse el jugador activo durante una partida, el siguiente jugador recibe inmediatamente el mensaje `turn`.
-
-### 5. Fix: auto-apuesta al vencer el timeout siempre usa cara=2
-**Por qué:** `_run_timeout_action` siempre construye la apuesta automática con `face = 2` sin considerar la apuesta actual. Si la mesa va en "10 cincos", el bot apuesta "11 doses", que es válido pero estratégicamente absurdo y confuso.
-- Alcance técnico: backend.
-- Archivos principales: `game/manager.py` (función `_run_timeout_action`, ~línea 841).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: la apuesta automática usa la misma cara de la apuesta actual (o cara=2 si no hay apuesta activa); la cantidad es la mínima válida para esa cara.
 
 ### 16. Vista dedicada para jugadores eliminados
 **Por qué:** al ser eliminado, el jugador sigue viendo el panel de apuesta deshabilitado y toda la UI de juego activo, lo cual es confuso. Debería tener una vista limpia de espectador con la mesa visible.
@@ -85,22 +80,6 @@ Referencia completa en `CHANGELOG.md`.
 
 ## 🟡 Prioridad media
 
-### 6. Mejoras al sistema de notificaciones de turno
-**Por qué:** tres problemas de UX en el flujo actual: (a) el modal de consentimiento aparece automáticamente al primer `pointerdown`, siendo invasivo; (b) al hacer click en la notificación del sistema no se trae la pestaña al frente; (c) la notificación queda flotando indefinidamente aunque el usuario haya vuelto a la pestaña.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (funciones `maybeShowNotificationIntro`, `notifyTurnIfHidden`, ~líneas 309 y 333).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: (a) el modal solo aparece al hacer click en el ícono de campana; (b) `notification.onclick` llama `window.focus()`; (c) `notification.close()` se llama en el handler de `visibilitychange` cuando la pestaña recupera el foco.
-
-### 7. Fix: `S.hasPassed` no se restaura al reconectar
-**Por qué:** si un jugador ya pasó en la ronda actual y se reconecta, `S.hasPassed` queda en `false` (valor inicial), habilitando incorrectamente el botón "Pasar" en el cliente aunque el backend lo rechazaría.
-- Alcance técnico: frontend + backend.
-- Archivos principales: `static/app.js` (`onReconnected`/`onGameStarted`), `game/manager.py` (`_announce_turn` o `_send_state`).
-- Dificultad estimada: `Media`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: el payload del turno o del estado de reconexión incluye un campo `has_passed`; el frontend lo usa para setear `S.hasPassed` correctamente al restaurar el estado.
-
 ### 8. UX: indicador de carga al unirse a una sala
 **Por qué:** entre hacer click en "Unirse" y recibir la respuesta `joined` del servidor, la UI no da ningún feedback. En conexiones lentas el usuario no sabe si algo está pasando.
 - Alcance técnico: frontend.
@@ -125,7 +104,7 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: cuando restan ≤10s el countdown cambia a color rojo; cuando restan ≤5s se agrega pulso o animación de urgencia.
 
-### 11. Fix: cap en cantidad apostada (cliente y servidor)
+### 11. Fix: cap en cantidad apostada (cliente y servidor) [revisar, podría ser bueno solo limitar el máximo ej: 100]
 **Por qué:** no hay límite superior en la cantidad de la apuesta. Un cliente puede enviar `quantity: 9999999`; el servidor lo acepta porque solo valida que sea ≥ 1 y mayor a la apuesta anterior.
 - Alcance técnico: frontend + backend.
 - Archivos principales: `static/app.js` (función `adjBid`), `game/models.py` (función `is_valid_bid`).
@@ -238,7 +217,7 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: hay un botón `?` visible durante la partida que abre un modal con las reglas resumidas (acciones válidas, escalación de apuestas, resolución de retos); el modal se cierra sin afectar el estado del juego.
 
-### 26. Confirmación en acción "Dudo"
+### 26. Confirmación en acción "Dudo" [no implementar, revisar como no hacerlo molesto]
 **Por qué:** un click accidental en "Dudo!" resulta en perder un dado sin posibilidad de corrección. Es la acción más irreversible del juego.
 - Alcance técnico: frontend.
 - Archivos principales: `static/app.js`, `static/index.html`, `static/style.css`.
@@ -246,13 +225,13 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: el botón "Dudo!" requiere doble click o una confirmación rápida (ej. mantener presionado 0.5s o un segundo click en un overlay mini); configurable por el jugador desde el lobby.
 
-### 27. Variante: ronda Palifico (1 dado, sin comodines)
-**Por qué:** cuando un jugador llega a exactamente 1 dado, en la variante clásica los Ases dejan de ser comodines esa ronda. Es una regla ampliamente conocida que cambia la estrategia en momentos críticos.
+### 27. Variante: ronda Obligo (o Palifico) (1 dado, sin comodines)
+**Por qué:** cuando un jugador llega a exactamente 1 dado por primera vez, en la variante clásica los Ases dejan de ser comodines esa ronda. Es una regla ampliamente conocida que cambia la estrategia en momentos críticos.
 - Alcance técnico: backend + frontend.
 - Archivos principales: `game/models.py` (`count_dice`), `game/rules/`, `static/app.js`, `static/index.html`.
 - Dificultad estimada: `Media`.
 - Riesgo de implementación: `Medio`.
-- Criterio de término: existe una opción `palifico` en `RuleConfig`; cuando está activo y el primer jugador de la ronda tiene exactamente 1 dado, el backend usa un conteo sin comodines; el frontend indica visualmente que la ronda es Palifico.
+- Criterio de término: existe una opción `Obligo` (o `palifico`) en `RuleConfig`; cuando está activo y un jugador tiene exactamente 1 dado (solo la primera vez de cada jugador), el backend usa un conteo sin comodines; el frontend indica visualmente que la ronda es Obligada.
 
 ### 28. Contador de espectadores visible
 **Por qué:** los jugadores no saben cuánta gente está mirando; el sistema ya rastrea espectadores pero no lo muestra en ningún lugar de la UI.
@@ -277,12 +256,9 @@ Referencia completa en `CHANGELOG.md`.
 | # | Mejora | Archivos afectados | Dificultad | Riesgo | Impacto |
 |---|--------|--------------------|------------|--------|---------|
 | 4 | Fix: desconexión congela turno activo | `manager.py` | Baja | Bajo | Alto |
-| 5 | Fix: auto-apuesta timeout usa cara=2 siempre | `manager.py` | Baja | Bajo | Medio |
 | 16 | Vista dedicada para eliminados | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 17 | Clasificación final con orden de eliminación | `manager.py`, `app.js`, `index.html` | Media | Bajo | Alto |
 | 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
-| 6 | Mejoras notificaciones de turno | `app.js` | Baja | Bajo | Medio |
-| 7 | Fix: `S.hasPassed` no se restaura al reconectar | `app.js`, `manager.py` | Media | Bajo | Medio |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
 | 9 | UX: botón copiar sala con checkmark | `app.js`, `style.css` | Baja | Bajo | Bajo |
 | 10 | UX: urgencia visual en countdown de turno | `app.js`, `style.css` | Baja | Bajo | Medio |

@@ -10,6 +10,9 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 ### Fixed
 - Kick durante turno activo: si el anfitrión expulsaba al jugador con el turno, `current_player_idx` quedaba desincronizado. Ahora se calcula el siguiente jugador antes de eliminar al kickeado y se aplica `set_current_player` tras la eliminación.
 - `setTimeout` del overlay de fin de partida: el ID se guarda en `S.gameOverTimer` y se cancela al iniciar una nueva partida (`onGameStarted`) o al cerrar manualmente el overlay (`closeGameOver`), evitando que aparezca encima de una partida ya iniciada.
+- Auto-apuesta por timeout: `_min_timeout_bid` ahora usa la misma cara que la apuesta actual (`current.face`) en lugar de siempre usar cara=2; si no hay apuesta activa sigue usando cara=2.
+- Notificaciones de turno: (a) el modal de consentimiento ya no aparece al primer `pointerdown`/`keydown`, solo al hacer click en el ícono de campana; (b) `notification.onclick` llama `window.focus()` para traer la pestaña al frente; (c) `notification.close()` se llama en `visibilitychange` cuando la pestaña recupera el foco.
+- `S.hasPassed` no se restauraba al reconectar: el payload `your_dice` enviado al reconectar ahora incluye `has_passed` calculado desde `game.passed_players`; el frontend lo aplica en `onYourDice`.
 
 ### Changed
 - Eliminado soporte móvil: removidas todas las `@media` queries de breakpoint del CSS, el viewport meta usa ancho fijo `width=1280`, y los fallbacks a `window.innerWidth/Height` en animaciones reemplazados por valores fijos de desktop (1280×800).
