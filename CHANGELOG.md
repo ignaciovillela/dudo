@@ -15,6 +15,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 - `S.hasPassed` no se restauraba al reconectar: el payload `your_dice` enviado al reconectar ahora incluye `has_passed` calculado desde `game.passed_players`; el frontend lo aplica en `onYourDice`.
 - Botón "Copiar sala": al copiar exitosamente el ícono cambia a ✓ y el texto a "Copiado" durante ~1.5s antes de volver al estado original.
 - Urgencia visual en countdown de turno: con ≤10s el temporizador se vuelve rojo; con ≤5s agrega animación de pulso.
+- Indicación previa de acción automática: en los últimos 3s del turno propio aparece un aviso animado ("Paso automático…" o "Apuesta automática (Cara)…") que desaparece al recibir `bid_made` o `paso_made` del servidor.
 
 ### Changed
 - Eliminado soporte móvil: removidas todas las `@media` queries de breakpoint del CSS, el viewport meta usa ancho fijo `width=1280`, y los fallbacks a `window.innerWidth/Height` en animaciones reemplazados por valores fijos de desktop (1280×800).

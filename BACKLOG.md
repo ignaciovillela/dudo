@@ -41,6 +41,7 @@ Referencia completa en `CHANGELOG.md`.
 - Fix: `S.hasPassed` no se restauraba al reconectar.
 - UX: botón "Copiar sala" con confirmación visual (checkmark ~1.5s).
 - UX: urgencia visual en el countdown de turno (rojo ≤10s, pulso ≤5s).
+- UX: indicación previa de acción automática por timeout (aviso ≤3s).
 
 ---
 
@@ -174,15 +175,6 @@ Referencia completa en `CHANGELOG.md`.
 - Dependencias: #17 (clasificación final; comparten el overlay de game over).
 - Criterio de término: el backend registra eventos destacados durante la partida (apuesta más alta, calzo exacto, dudo más ajustado, bluff más audaz); el payload `game_over` incluye una lista de highlights; el overlay de fin de partida muestra una sección "Momentos de la partida" con estos eventos.
 
-### 30. Indicación previa de acción automática por timeout
-**Por qué:** la acción automática al vencer el tiempo ocurre sin anticipación, generando confusión; parece un error del sistema más que una mecánica intencional.
-- Alcance técnico: frontend + backend (mínimo).
-- Archivos principales: `static/app.js`, `game/manager.py`.
-- Dificultad estimada: `Media`.
-- Riesgo de implementación: `Bajo`.
-- Dependencias: #5 (corrige qué acción se auto-ejecuta), #10 (urgencia visual en countdown).
-- Criterio de término: en los últimos 3s del turno del jugador local aparece un aviso visible (ej. "Apuesta automática en curso…") que anticipa la acción que ejecutará el servidor; el aviso desaparece al recibir la confirmación del backend.
-
 ---
 
 ## 🟢 Prioridad baja
@@ -256,7 +248,6 @@ Referencia completa en `CHANGELOG.md`.
 | 21 | Logros | `app.js`, `index.html`, `style.css` | Alta | Medio | Alto |
 | 22 | Bots | `manager.py`, `models.py`, `bot.py` | Alta | Medio | Alto |
 | 23 | Highlights de partida | `manager.py`, `app.js`, `index.html` | Alta | Medio | Medio |
-| 30 | Indicación previa de acción automática por timeout | `app.js`, `manager.py` | Media | Bajo | Medio |
 | 24 | Limpieza: eliminar CSS muerto | `style.css` | Baja | Bajo | Bajo |
 | 25 | Modal de reglas en partida | `index.html`, `app.js`, `style.css` | Baja | Bajo | Bajo |
 | 26 | Confirmación en acción "Dudo" | `app.js`, `index.html`, `style.css` | Baja | Bajo | Bajo |

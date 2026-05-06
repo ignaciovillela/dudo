@@ -1296,6 +1296,7 @@ function onTurn(msg) {
 
 function onBidMade(msg) {
   playSfx('bid');
+  hideTimeoutActionHint();
   S.currentBid = msg.bid;
   S.activePaso = null;  // la apuesta reemplaza al paso como acción activa
   const b = msg.bid;
@@ -1307,6 +1308,7 @@ function onBidMade(msg) {
 
 function onPasoMade(msg) {
   playSfx('paso');
+  hideTimeoutActionHint();
   S.activePaso = { player_id: msg.passer_id, player_name: msg.passer_name };
   if (msg.passer_id === S.playerId) S.hasPassed = true;
   const name = S.players[msg.passer_id]?.name || msg.passer_name;
@@ -2057,6 +2059,21 @@ function stopTurnCountdown() {
   el.style.display = 'none';
   el.textContent = '';
   el.classList.remove('turn-countdown--urgent', 'turn-countdown--critical');
+  hideTimeoutActionHint();
+}
+
+function _timeoutActionHintText() {
+  // Replica la lógica de _run_timeout_action del backend para mostrar qué acción se ejecutará
+  if (S.currentPid !== S.playerId) return null;
+  if (S.currentBid && !S.hasPassed) return '⏱ Paso automático…';
+  const face = S.currentBid ? S.currentBid.face : 2;
+  const faceName = ['', 'As', 'Dos', 'Tres', 'Cuatro', 'Cinco', 'Seis'][face] || face;
+  return `⏱ Apuesta automática (${faceName})…`;
+}
+
+function hideTimeoutActionHint() {
+  const hint = document.getElementById('timeout-action-hint');
+  if (hint) { hint.style.display = 'none'; hint.textContent = ''; }
 }
 
 function startTurnCountdown(seconds) {
@@ -2074,6 +2091,16 @@ function startTurnCountdown(seconds) {
     el.style.display = 'inline-flex';
     el.classList.toggle('turn-countdown--urgent',   left <= 10);
     el.classList.toggle('turn-countdown--critical', left <= 5);
+    // Aviso de acción automática en los últimos 3s solo si es mi turno
+    const hint = document.getElementById('timeout-action-hint');
+    if (hint) {
+      if (left <= 3) {
+        const text = _timeoutActionHintText();
+        if (text) { hint.textContent = text; hint.style.display = 'inline-flex'; }
+      } else {
+        hideTimeoutActionHint();
+      }
+    }
   };
   render();
   turnCountdownTimer = setInterval(render, 250);
