@@ -940,6 +940,7 @@ function handleMsg(msg) {
     player_kicked:      onPlayerKicked,
     kicked:             onKicked,
     error:              onError,
+    emoji_thrown:       onEmojiThrown,
   };
   const fn = H[msg.type];
   if (fn) fn(msg);
@@ -1003,6 +1004,7 @@ function onJoinedSpectator(msg) {
   applySpectatorMode();
   renderOtherPlayers();
   renderMyDice();
+  maybeInitEmojiHover();
   updateBidDisplay();
   document.getElementById('disp-round').textContent = S.roundNum;
   document.getElementById('disp-total').textContent = S.totalDice;
@@ -1093,6 +1095,7 @@ function onReconnected(msg) {
   showScreen('game');
   applySpectatorMode();
   renderOtherPlayers();
+  maybeInitEmojiHover();
   updateBidDisplay();
   playSfx('reconnect');
   log('Reconectado a la partida en curso', 'system');
@@ -1189,6 +1192,7 @@ function onGameStarted(msg) {
   showScreen('game');
   applySpectatorMode();
   renderOtherPlayers();
+  maybeInitEmojiHover();
   updateBidDisplay();
   // Limpiar log de partidas anteriores
   const logEl = document.getElementById('game-log');
@@ -1548,6 +1552,374 @@ function onError(msg) {
   showToast(msg.message, true);
 }
 
+// ══════════════════════════════════  EMOJI  ════════════════════════════════════
+
+const THROWABLE_EMOJIS = [
+  "😂","😭","😤","🤡","👏","💀","🔥","❄️","🫵","👀",
+  "😱","🤣","😬","🙄","😎","🤓","😏","🥶","🤯","💩",
+];
+
+// Cuántos emojis se muestran en la primera fila (sin expandir)
+const EMOJI_ROW_SIZE = 5;
+
+function throwEmoji(targetPid, emoji) {
+  if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
+  send({ type: 'emoji', target_id: targetPid, emoji });
+}
+
+function onEmojiThrown(msg) {
+  animateEmojiThrow(msg.from_id, msg.target_id, msg.emoji);
+}
+
+/**
+ * Sistema de popup de emojis.
+ * El popup vive en document.body (position:fixed) para escapar cualquier
+ * stacking context. Show/hide se maneja con dos flags booleanos sin timers:
+ * _efOverCard y _efOverPopup. Se oculta solo cuando ambos son false.
+ */
+
+let _efPopup     = null;
+let _efPid       = null;
+let _efHideTimer = null;
+
+function _efHide() {
+  if (_efPopup) {
+    _efPopup.classList.remove('ef-popup--visible');
+    _efPopup.classList.remove('ef-popup--expanded');
+    const ch = _efPopup.querySelector('.ef-chevron');
+    if (ch) ch.textContent = '›';
+    _efPopup.style.top  = '';
+    _efPopup.style.left = '';
+  }
+  _efPid = null;
+  _efHideTimer = null;
+}
+
+function _efScheduleHide() {
+  clearTimeout(_efHideTimer);
+  _efHideTimer = setTimeout(_efHide, 120);
+}
+
+function _efCancelHide() {
+  clearTimeout(_efHideTimer);
+  _efHideTimer = null;
+}
+
+// Comprueba si el punto (x,y) está dentro del rect de un elemento
+function _efHitTest(el, x, y) {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
+function _efPosition(card) {
+  if (!_efPopup || !card) return;
+  // Asegurarse de que el popup está renderizado para medir
+  _efPopup.style.top  = '-9999px';
+  _efPopup.style.left = '-9999px';
+  _efPopup.classList.add('ef-popup--visible');
+
+  const cr = card.getBoundingClientRect();
+  const pw = _efPopup.offsetWidth  || 180;
+  const ph = _efPopup.offsetHeight || 40;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top = cr.bottom;
+  if (top + ph > vh - 8) top = cr.top - ph;
+  top = Math.max(8, Math.min(top, vh - ph - 8));
+
+  let left = cr.left + cr.width / 2 - pw / 2;
+  left = Math.max(8, Math.min(left, vw - pw - 8));
+
+  _efPopup.style.top  = `${top}px`;
+  _efPopup.style.left = `${left}px`;
+}
+
+function _efShow(pid, card) {
+  _efCancelHide();
+  _efPid = pid;
+  _efEnsurePopup();
+  _efPosition(card);
+}
+
+function _efEnsurePopup() {
+  if (_efPopup) return _efPopup;
+
+  const popup = document.createElement('div');
+  popup.className = 'ef-popup';
+
+  const first = THROWABLE_EMOJIS.slice(0, EMOJI_ROW_SIZE);
+  const rest  = THROWABLE_EMOJIS.slice(EMOJI_ROW_SIZE);
+
+  const row = document.createElement('div');
+  row.className = 'ef-row';
+
+  function makeBtn(em) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ef-btn';
+    btn.textContent = em;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (_efPid) throwEmoji(_efPid, em);
+    });
+    return btn;
+  }
+
+  first.forEach(em => row.appendChild(makeBtn(em)));
+
+  const chevron = document.createElement('button');
+  chevron.type = 'button';
+  chevron.className = 'ef-chevron';
+  chevron.setAttribute('aria-label', 'Más emojis');
+  chevron.textContent = '›';
+  chevron.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const open = popup.classList.toggle('ef-popup--expanded');
+    chevron.textContent = open ? '‹' : '›';
+  });
+  row.appendChild(chevron);
+
+  const extra = document.createElement('div');
+  extra.className = 'ef-extra';
+  rest.forEach(em => extra.appendChild(makeBtn(em)));
+
+  popup.appendChild(row);
+  popup.appendChild(extra);
+
+  document.body.appendChild(popup);
+  _efPopup = popup;
+  return popup;
+}
+
+function buildEmojiBar(targetPid) {
+  const trigger = document.createElement('div');
+  trigger.className = 'emoji-bar-trigger';
+  trigger.dataset.pid = targetPid;
+  return trigger;
+}
+
+function attachEmojiHoverToCard(card) {
+  // No usar mouseenter/mouseleave — son poco fiables con elementos superpuestos.
+  // En su lugar, mousemove global detecta si el puntero está sobre card o popup.
+}
+
+// Listener global de mousemove — única fuente de verdad para show/hide
+let _efMoveInited = false;
+function maybeInitEmojiHover() {
+  if (_efMoveInited) return;
+  _efMoveInited = true;
+
+  document.addEventListener('mousemove', (e) => {
+    if (S.phase !== 'playing' && S.phase !== 'reveal') {
+      if (_efPid) _efHide();
+      return;
+    }
+
+    const x = e.clientX, y = e.clientY;
+
+    // ¿Está sobre el popup activo?
+    if (_efPopup && _efPopup.classList.contains('ef-popup--visible')) {
+      if (_efHitTest(_efPopup, x, y)) {
+        _efCancelHide();
+        return;
+      }
+    }
+
+    // ¿Está sobre alguna card de rival?
+    const cards = document.querySelectorAll('#other-players .player-card[data-pid]');
+    for (const card of cards) {
+      if (_efHitTest(card, x, y)) {
+        const pid = card.dataset.pid;
+        if (pid !== _efPid) {
+          _efShow(pid, card);
+        } else {
+          _efCancelHide();
+        }
+        return;
+      }
+    }
+
+    // Fuera de todo — programar ocultamiento
+    if (_efPid) _efScheduleHide();
+  });
+
+  document.addEventListener('mouseleave', _efHide);
+}
+
+function resetEmojiPopup() {
+  _efHide();
+}
+
+
+
+/**
+ * Anima un emoji con trayectoria parabólica hacia el receptor,
+ * luego cae al "piso" (bottom del viewport) y da un bote con dirección dinámica.
+ */
+function animateEmojiThrow(fromId, targetId, emoji) {
+  function getCardCenter(pid) {
+    if (pid === S.playerId) {
+      const el = document.getElementById('my-area') || document.getElementById('my-dice-row');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    const card = document.querySelector(`.player-card[data-pid="${pid}"]`);
+    if (!card) return null;
+    const r = card.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  const from = getCardCenter(fromId);
+  const to   = getCardCenter(targetId);
+
+  const x0 = from ? from.x : window.innerWidth  / 2;
+  const y0 = from ? from.y : window.innerHeight / 2;
+  const x1 = to   ? to.x   : window.innerWidth  / 2;
+  const y1 = to   ? to.y   : window.innerHeight / 2;
+
+  // Punto de control de Bézier cuadrática: arco hacia arriba proporcional a la distancia
+  const dist   = Math.hypot(x1 - x0, y1 - y0);
+  const arcH   = Math.min(dist * 0.55, 260);   // altura del arco
+  const cpx    = (x0 + x1) / 2;
+  const cpy    = Math.min(y0, y1) - arcH;       // siempre por encima del origen
+
+  // Rotación total: sentido y velocidad aleatorios
+  const totalRot = (Math.random() < 0.5 ? 1 : -1) * (360 + Math.random() * 360);
+
+  const el = document.createElement('div');
+  el.className = 'emoji-projectile';
+  el.textContent = emoji;
+  Object.assign(el.style, { left: '0px', top: '0px' });
+  document.body.appendChild(el);
+
+  // ── Fase 1: vuelo parabólico (Bézier cuadrática) ─────────────────────────
+  const FLIGHT_MS = 700;
+  let startTs = null;
+
+  function bézier(t, p0, p1, p2) {
+    // B(t) = (1-t)²·p0 + 2(1-t)t·p1 + t²·p2
+    return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * p1 + t * t * p2;
+  }
+
+  function flyFrame(ts) {
+    if (!startTs) startTs = ts;
+    let t = Math.min((ts - startTs) / FLIGHT_MS, 1);
+
+    // ease-in-out para el progreso horizontal; aceleración gravitacional en y
+    const tEase = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+    const bx = bézier(tEase, x0, cpx, x1);
+    const by = bézier(t,     y0, cpy, y1);   // t sin ease → caída natural
+
+    // Escala: crece al salir, se mantiene, se agranda al impactar
+    const scale = t < 0.1  ? 0.4 + t * 6
+                : t < 0.85 ? 1.1
+                :             1.1 + (t - 0.85) * 4.67; // llega más grande
+
+    const rot = totalRot * t;
+    const opacity = t < 0.08 ? t / 0.08 : 1;
+
+    el.style.transform = `translate(calc(${bx}px - 50%), calc(${by}px - 50%)) scale(${scale}) rotate(${rot}deg)`;
+    el.style.opacity   = opacity;
+
+    if (t < 1) {
+      requestAnimationFrame(flyFrame);
+    } else {
+      // Impacto sobre el receptor
+      triggerHitEffect(targetId);
+      // Pequeña pausa de impacto, luego fase 2
+      setTimeout(() => bounceFall(el, x1, y1, totalRot), 60);
+    }
+  }
+
+  requestAnimationFrame(flyFrame);
+
+  // ── Fase 2: caída corta + bote suave (animación de muerte, baja prioridad) ──
+  function bounceFall(el, ix, iy, rot) {
+    // Bajar z-index: es decorativo, no debe tapar nada importante
+    el.style.zIndex = '100';
+    el.style.filter = 'none';
+
+    const FALL_DIST = 180 + Math.random() * 40;   // ~180-220px, no hasta el fondo
+    const floorY    = iy + FALL_DIST;
+
+    // Lateral aleatorio puro, lado variable
+    const side    = Math.random() < 0.5 ? 1 : -1;
+    const lateral = side * (30 + Math.random() * 50);
+    const bounceH = 18 + Math.random() * 22;       // bote pequeño: 18-40px
+
+    const FALL_MS   = 260;
+    const BOUNCE_MS = 300;
+
+    let fallStart = null;
+
+    function fallFrame(ts) {
+      if (!fallStart) fallStart = ts;
+      const t = Math.min((ts - fallStart) / FALL_MS, 1);
+      const by    = iy + FALL_DIST * t * t;         // gravedad t²
+      const scale = 0.9 - t * 0.2;                  // encoge suavemente
+      const r     = rot + 25 * t * side;
+      const op    = 0.75 - t * 0.25;                // ya empieza semitransparente
+      el.style.transform = `translate(calc(${ix}px - 50%), calc(${by}px - 50%)) scale(${scale}) rotate(${r}deg)`;
+      el.style.opacity   = op;
+
+      if (t < 1) {
+        requestAnimationFrame(fallFrame);
+      } else {
+        // Squash mínimo al tocar "piso"
+        const r2 = rot + 25 * side;
+        el.style.transform = `translate(calc(${ix}px - 50%), calc(${floorY}px - 50%)) scaleX(1.2) scaleY(0.7) rotate(${r2}deg)`;
+        setTimeout(() => bounceUp(el, ix, floorY, r2, lateral, bounceH, BOUNCE_MS), 40);
+      }
+    }
+
+    requestAnimationFrame(fallFrame);
+  }
+
+  function bounceUp(el, ix, floorY, rot, lateral, bounceH, dur) {
+    let bounceStart = null;
+
+    function bounceFrame(ts) {
+      if (!bounceStart) bounceStart = ts;
+      const t  = Math.min((ts - bounceStart) / dur, 1);
+      const arcY   = floorY - bounceH * 4 * t * (1 - t);
+      const bx     = ix + lateral * t;
+      const scale  = 0.65 + 0.1 * Math.sin(t * Math.PI);
+      const r      = rot + 60 * t * (lateral > 0 ? 1 : -1);
+      const opacity = 0.5 * (1 - t);               // desvanece rápido
+
+      el.style.transform = `translate(calc(${bx}px - 50%), calc(${arcY}px - 50%)) scale(${scale}) rotate(${r}deg)`;
+      el.style.opacity   = opacity;
+
+      if (t < 1) {
+        requestAnimationFrame(bounceFrame);
+      } else {
+        el.remove();
+      }
+    }
+
+    requestAnimationFrame(bounceFrame);
+  }
+
+  // ── Efecto de impacto en el receptor ─────────────────────────────────────
+  function triggerHitEffect(targetId) {
+    const hitEl = targetId === S.playerId
+      ? document.getElementById('my-area')
+      : document.querySelector(`.player-card[data-pid="${targetId}"]`);
+    if (!hitEl) return;
+    hitEl.classList.remove('emoji-hit');
+    void hitEl.offsetWidth;
+    hitEl.classList.add('emoji-hit');
+    hitEl.addEventListener('animationend', () => hitEl.classList.remove('emoji-hit'), { once: true });
+  }
+}
+
+
 // ══════════════════════════════════  REVEAL UI  ════════════════════════════════
 function showReveal(msg) {
   document.getElementById('reveal-overlay').style.display = 'flex';
@@ -1747,13 +2119,19 @@ function renderOtherPlayers() {
       kickBtn.onclick = () => openKickConfirm(pid, p.name);
       headerEl.appendChild(kickBtn);
     }
+
     headerEl.appendChild(nameEl);
+
+    // Selector de emoji inline (aparece al hover sobre la card)
+    const emojiBar = buildEmojiBar(pid);
 
     card.appendChild(headerEl);
     if (offlineEl) card.appendChild(offlineEl);
     card.appendChild(diceRow);
     if (actionBadge) card.appendChild(actionBadge);
+    card.appendChild(emojiBar);
     container.appendChild(card);
+    attachEmojiHoverToCard(card);
 
     // Dados perdidos del oponente, colocados entre su carta y el centro de la mesa
     const lostWrap = document.createElement('div');
@@ -2190,6 +2568,7 @@ function copyRoomCode() {
 
 // ══════════════════════════════════  UTILS  ══════════════════════════════════
 function showScreen(name) {
+  if (name !== 'game') resetEmojiPopup();
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.remove('active');
     s.style.display = 'none';
@@ -2346,6 +2725,9 @@ window.confirmKickPlayer = confirmKickPlayer;
   window.addEventListener(evt, unlockAudio, { once: true });
   window.addEventListener(evt, maybeShowNotificationIntro, { once: true });
 });
+
+// Inicializar hover de emojis una sola vez al cargar (cubre reconexiones y espectadores)
+maybeInitEmojiHover();
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) stopTurnTitleBlink();

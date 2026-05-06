@@ -961,6 +961,140 @@ select:focus { border-color: var(--gold); }
 .kick-btn:hover {
   background: rgba(192,57,43,0.26);
 }
+
+/* ── Emoji throw button ── */
+.emoji-throw-btn { display: none; }
+
+/* ── Emoji bar trigger (marcador invisible en la card) ── */
+.emoji-bar-trigger { display: none; }
+
+/* ── Popup de emojis (vive en body, position:fixed) ── */
+.ef-popup {
+  position: fixed;
+  z-index: 10500;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  background: #111e16;
+  border: 1px solid rgba(232,184,109,0.28);
+  border-radius: 10px;
+  padding: 8px 6px 5px;   /* padding-top extra da separación visual sin gap físico */
+  box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+  pointer-events: all;
+  white-space: nowrap;
+}
+.ef-popup--visible {
+  display: flex;
+  animation: ef-in 0.12s ease forwards;
+}
+@keyframes ef-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+/* Fila principal (siempre visible) */
+.ef-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+
+/* Fila extra (oculta hasta expandir) */
+.ef-extra {
+  display: none;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 210px;
+}
+.ef-popup--expanded .ef-extra {
+  display: flex;
+}
+
+/* Botones de emoji */
+.ef-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  transition: background 0.1s, transform 0.1s;
+}
+.ef-btn:hover {
+  background: rgba(232,184,109,0.18);
+  border-color: rgba(232,184,109,0.4);
+  transform: scale(1.22);
+}
+
+/* Chevron */
+.ef-chevron {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 6px;
+  width: 20px;
+  height: 28px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  margin-left: 2px;
+  transition: color 0.1s, background 0.1s;
+}
+.ef-chevron:hover {
+  color: var(--gold);
+  background: rgba(232,184,109,0.12);
+}
+
+/* ── Emoji picker popup antiguo (eliminado) ── */
+.emoji-picker-popup,
+.emoji-bar,
+.emoji-bar-row,
+.emoji-bar-extra,
+.emoji-pick-btn,
+.emoji-chevron { display: none !important; }
+
+
+
+
+/* ── Emoji projectile (flying animation) ── */
+.emoji-projectile {
+  position: fixed;
+  top: 0;
+  left: 0;
+  font-size: 2rem;
+  pointer-events: none;
+  z-index: 11000;
+  line-height: 1;
+  will-change: transform, opacity;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.55)) drop-shadow(0 0 8px rgba(255,220,100,0.6));
+}
+
+/* ── Emoji hit shake ── */
+@keyframes emoji-hit-shake {
+  0%   { box-shadow: 0 0 0 0 rgba(232,184,109,0), 0 8px 32px rgba(0,0,0,0.5); outline-color: transparent; }
+  15%  { box-shadow: 0 0 0 4px rgba(232,184,109,0.8), 0 8px 32px rgba(0,0,0,0.5); outline-color: rgba(232,184,109,0.9); }
+  40%  { box-shadow: 0 0 0 8px rgba(232,184,109,0.4), 0 8px 32px rgba(0,0,0,0.5); outline-color: rgba(232,184,109,0.5); }
+  70%  { box-shadow: 0 0 0 4px rgba(232,184,109,0.2), 0 8px 32px rgba(0,0,0,0.5); outline-color: rgba(232,184,109,0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(232,184,109,0), 0 8px 32px rgba(0,0,0,0.5); outline-color: transparent; }
+}
+.emoji-hit {
+  animation: emoji-hit-shake 0.55s ease;
+  outline: 2px solid transparent;
+}
+
 .player-card-dice { /* wrapper añadido por JS al dice-rows */ }
 
 /* ── Action badge (DUDO / CALZO) ── */

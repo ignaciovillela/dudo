@@ -122,6 +122,7 @@ class GameManager:
             "paso":      self._h_paso,
             "dudo":      self._h_dudo,
             "calzo":     self._h_calzo,
+            "emoji":     self._h_emoji,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -561,6 +562,29 @@ class GameManager:
             await self._new_round(room_id, game, player_id)
         else:
             await self._apply_loss(room_id, game, player_id)
+
+    async def _h_emoji(self, room_id, player_id, game, msg):
+        ALLOWED_EMOJIS = {
+            "😂","😭","😤","🤡","👏","💀","🔥","❄️","🫵","👀",
+            "😱","🤣","😬","🙄","😎","🤓","😏","🥶","🤯","💩",
+        }
+        emoji = msg.get("emoji")
+        target_id = msg.get("target_id")
+        if not isinstance(emoji, str) or emoji not in ALLOWED_EMOJIS:
+            return
+        if not isinstance(target_id, str):
+            return
+        if target_id not in game.players and target_id not in game.spectators:
+            return
+        sender = game.players.get(player_id)
+        sender_name = sender.name if sender else game.spectators.get(player_id, "?")
+        await self._broadcast(room_id, {
+            "type": "emoji_thrown",
+            "from_id": player_id,
+            "from_name": sender_name,
+            "target_id": target_id,
+            "emoji": emoji,
+        })
 
     # ------------------------------------------------------------------ game flow
 
