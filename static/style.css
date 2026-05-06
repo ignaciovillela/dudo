@@ -978,10 +978,19 @@ select:focus { border-color: var(--gold); }
   background: #111e16;
   border: 1px solid rgba(232,184,109,0.28);
   border-radius: 10px;
-  padding: 8px 6px 5px;   /* padding-top extra da separación visual sin gap físico */
+  padding: 8px 6px 5px;
   box-shadow: 0 6px 24px rgba(0,0,0,0.7);
   pointer-events: all;
   white-space: nowrap;
+}
+/* Extensión invisible hacia arriba para cubrir el gap entre card y popup */
+.ef-popup--visible::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
 }
 .ef-popup--visible {
   display: flex;
@@ -1032,6 +1041,30 @@ select:focus { border-color: var(--gold); }
   background: rgba(232,184,109,0.18);
   border-color: rgba(232,184,109,0.4);
   transform: scale(1.22);
+}
+
+/* Emojis bloqueados por nivel */
+.ef-btn--locked {
+  cursor: not-allowed;
+  opacity: 0.45;
+  position: relative;
+}
+.ef-btn--locked:hover {
+  background: transparent;
+  border-color: transparent;
+  transform: none;
+}
+.ef-btn-emoji {
+  display: block;
+  line-height: 1;
+}
+.ef-btn-lock {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 0.5rem;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* Chevron */

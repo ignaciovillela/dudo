@@ -565,8 +565,9 @@ class GameManager:
 
     async def _h_emoji(self, room_id, player_id, game, msg):
         ALLOWED_EMOJIS = {
-            "😂","😭","😤","🤡","👏","💀","🔥","❄️","🫵","👀",
-            "😱","🤣","😬","🙄","😎","🤓","😏","🥶","🤯","💩",
+            "👍","👎","😐","🙄","😬","👀","😏","😤","😂","👏",
+            "😎","🤓","😱","🤣","🫵","❄️","🥶","🔥","🤯","💀",
+            "😭","🤡","💩",
         }
         emoji = msg.get("emoji")
         target_id = msg.get("target_id")

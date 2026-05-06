@@ -1554,9 +1554,32 @@ function onError(msg) {
 
 // ══════════════════════════════════  EMOJI  ════════════════════════════════════
 
+// Emojis lanzables ordenados por nivel requerido (los más fomes primero).
+// Niveles 1-2: emojis genéricos/aburridos | 3-5: más expresivos | 6-8: dramáticos | 9-10: los mejores
 const THROWABLE_EMOJIS = [
-  "😂","😭","😤","🤡","👏","💀","🔥","❄️","🫵","👀",
-  "😱","🤣","😬","🙄","😎","🤓","😏","🥶","🤯","💩",
+  { emoji: "👍",  level: 1 },
+  { emoji: "👎",  level: 1 },
+  { emoji: "😐",  level: 1 },
+  { emoji: "🙄",  level: 1 },
+  { emoji: "😬",  level: 2 },
+  { emoji: "👀",  level: 2 },
+  { emoji: "😏",  level: 2 },
+  { emoji: "😤",  level: 3 },
+  { emoji: "😂",  level: 3 },
+  { emoji: "👏",  level: 3 },
+  { emoji: "😎",  level: 4 },
+  { emoji: "🤓",  level: 4 },
+  { emoji: "😱",  level: 5 },
+  { emoji: "🤣",  level: 5 },
+  { emoji: "🫵",  level: 6 },
+  { emoji: "❄️",  level: 6 },
+  { emoji: "🥶",  level: 7 },
+  { emoji: "🔥",  level: 8 },
+  { emoji: "🤯",  level: 9 },
+  { emoji: "💀",  level: 10 },
+  { emoji: "😭",  level: 10 },
+  { emoji: "🤡",  level: 10 },
+  { emoji: "💩",  level: 10 },
 ];
 
 // Cuántos emojis se muestran en la primera fila (sin expandir)
@@ -1578,9 +1601,9 @@ function onEmojiThrown(msg) {
  * _efOverCard y _efOverPopup. Se oculta solo cuando ambos son false.
  */
 
-let _efPopup     = null;
-let _efPid       = null;
-let _efHideTimer = null;
+let _efPopup        = null;
+let _efPid          = null;
+let _efHideTimer    = null;
 
 function _efHide() {
   if (_efPopup) {
@@ -1597,7 +1620,7 @@ function _efHide() {
 
 function _efScheduleHide() {
   clearTimeout(_efHideTimer);
-  _efHideTimer = setTimeout(_efHide, 120);
+  _efHideTimer = setTimeout(_efHide, 400);
 }
 
 function _efCancelHide() {
@@ -1605,11 +1628,11 @@ function _efCancelHide() {
   _efHideTimer = null;
 }
 
-// Comprueba si el punto (x,y) está dentro del rect de un elemento
-function _efHitTest(el, x, y) {
+// Comprueba si el punto (x,y) está dentro del rect de un elemento, con margen opcional
+function _efHitTest(el, x, y, margin = 0) {
   if (!el) return false;
   const r = el.getBoundingClientRect();
-  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  return x >= r.left - margin && x <= r.right + margin && y >= r.top - margin && y <= r.bottom + margin;
 }
 
 function _efPosition(card) {
@@ -1640,35 +1663,21 @@ function _efShow(pid, card) {
   _efCancelHide();
   _efPid = pid;
   _efEnsurePopup();
+  _efRefreshPopupLocks();
   _efPosition(card);
 }
 
-function _efEnsurePopup() {
-  if (_efPopup) return _efPopup;
+function _efBuildPopup() {
+  if (_efPopup) { _efPopup.remove(); _efPopup = null; }
 
   const popup = document.createElement('div');
   popup.className = 'ef-popup';
 
-  const first = THROWABLE_EMOJIS.slice(0, EMOJI_ROW_SIZE);
-  const rest  = THROWABLE_EMOJIS.slice(EMOJI_ROW_SIZE);
-
   const row = document.createElement('div');
   row.className = 'ef-row';
 
-  function makeBtn(em) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ef-btn';
-    btn.textContent = em;
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (_efPid) throwEmoji(_efPid, em);
-    });
-    return btn;
-  }
-
-  first.forEach(em => row.appendChild(makeBtn(em)));
+  // Crear todos los botones (desbloqueados e bloqueados), se actualizan al mostrar
+  THROWABLE_EMOJIS.slice(0, EMOJI_ROW_SIZE).forEach(item => row.appendChild(_efMakeBtn(item)));
 
   const chevron = document.createElement('button');
   chevron.type = 'button';
@@ -1685,7 +1694,7 @@ function _efEnsurePopup() {
 
   const extra = document.createElement('div');
   extra.className = 'ef-extra';
-  rest.forEach(em => extra.appendChild(makeBtn(em)));
+  THROWABLE_EMOJIS.slice(EMOJI_ROW_SIZE).forEach(item => extra.appendChild(_efMakeBtn(item)));
 
   popup.appendChild(row);
   popup.appendChild(extra);
@@ -1693,6 +1702,45 @@ function _efEnsurePopup() {
   document.body.appendChild(popup);
   _efPopup = popup;
   return popup;
+}
+
+function _efMakeBtn(item) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.dataset.emojiLevel = item.level;
+  btn.dataset.emoji = item.emoji;
+  btn.className = 'ef-btn';
+  btn.textContent = item.emoji;
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const pid = _efPid;
+    if (pid) throwEmoji(pid, item.emoji);
+  });
+  return btn;
+}
+
+// Actualiza el estado bloqueado/desbloqueado de cada botón según el nivel actual
+function _efRefreshPopupLocks() {
+  if (!_efPopup) return;
+  const { level } = loadLevelData();
+  _efPopup.querySelectorAll('.ef-btn[data-emoji-level]').forEach(btn => {
+    const needed = parseInt(btn.dataset.emojiLevel, 10);
+    const locked = level < needed;
+    btn.disabled = locked;
+    btn.classList.toggle('ef-btn--locked', locked);
+    btn.title = locked ? `Se desbloquea en nivel ${needed}` : '';
+    if (locked) {
+      btn.innerHTML = `<span class="ef-btn-emoji">${btn.dataset.emoji}</span><span class="ef-btn-lock">🔒</span>`;
+    } else {
+      btn.textContent = btn.dataset.emoji;
+    }
+  });
+}
+
+function _efEnsurePopup() {
+  if (_efPopup) return _efPopup;
+  return _efBuildPopup();
 }
 
 function buildEmojiBar(targetPid) {
@@ -1721,9 +1769,9 @@ function maybeInitEmojiHover() {
 
     const x = e.clientX, y = e.clientY;
 
-    // ¿Está sobre el popup activo?
+    // ¿Está sobre el popup activo? (margen de 16px para cubrir el gap card→popup)
     if (_efPopup && _efPopup.classList.contains('ef-popup--visible')) {
-      if (_efHitTest(_efPopup, x, y)) {
+      if (_efHitTest(_efPopup, x, y, 16)) {
         _efCancelHide();
         return;
       }
@@ -1788,8 +1836,12 @@ function animateEmojiThrow(fromId, targetId, emoji) {
   const cpx    = (x0 + x1) / 2;
   const cpy    = Math.min(y0, y1) - arcH;       // siempre por encima del origen
 
-  // Rotación total: sentido y velocidad aleatorios
-  const totalRot = (Math.random() < 0.5 ? 1 : -1) * (360 + Math.random() * 360);
+  // Rotación total: para pulgares siempre termina derecho (múltiplo de 360°)
+  // para el resto es aleatoria
+  const UPRIGHT_EMOJIS = ['👍', '👎'];
+  const totalRot = UPRIGHT_EMOJIS.includes(emoji)
+    ? (Math.random() < 0.5 ? 1 : -1) * 360 * (1 + Math.floor(Math.random() * 2))
+    : (Math.random() < 0.5 ? 1 : -1) * (360 + Math.random() * 360);
 
   const el = document.createElement('div');
   el.className = 'emoji-projectile';
@@ -1832,8 +1884,8 @@ function animateEmojiThrow(fromId, targetId, emoji) {
     } else {
       // Impacto sobre el receptor
       triggerHitEffect(targetId);
-      // Pequeña pausa de impacto, luego fase 2
-      setTimeout(() => bounceFall(el, x1, y1, totalRot), 60);
+      // Pausa en el punto de impacto para que se vea bien, luego fase 2
+      setTimeout(() => bounceFall(el, x1, y1, totalRot), 100);
     }
   }
 
