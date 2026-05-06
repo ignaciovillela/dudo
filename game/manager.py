@@ -210,6 +210,7 @@ class GameManager:
                     "round_number": game.round_number,
                     "total_dice": game.total_dice(),
                     "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
+                    "has_passed": reconnect_id in game.passed_players,
                 })
                 await self._announce_turn(room_id, game)
             return
@@ -849,16 +850,17 @@ class GameManager:
 
     @staticmethod
     def _min_timeout_bid(game: Game, player_id: str) -> Bid:
-        face = 2
-        qty = 1
         current = game.current_bid
+        face = current.face if current else 2
+        qty = 1
         if current:
             if current.face == 1:
-                qty = current.quantity * 2 + 1
-            elif face > current.face:
-                qty = current.quantity
-            else:
+                # subir ases: mínimo quantity + 1
                 qty = current.quantity + 1
+            elif face == current.face:
+                qty = current.quantity + 1
+            else:
+                qty = current.quantity
 
         while True:
             bid = Bid(
