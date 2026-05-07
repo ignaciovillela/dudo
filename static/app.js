@@ -958,7 +958,7 @@ function panForPid(pid) {
   const table = document.querySelector('.game-table');
   if (!table) return 0;
   const cx = table.clientWidth  * 0.50;
-  const cy = table.clientHeight * 0.43;
+  const cy = table.clientHeight * 0.47;
   const x = parseFloat(card.style.left);
   const y = parseFloat(card.style.top);
   if (isNaN(x) || isNaN(y)) return 0;
@@ -3134,9 +3134,9 @@ function positionPlayers() {
 
   // Centro y radios de la elipse (coincide con el ::after del CSS)
   const cx = W * 0.50;
-  const cy = H * 0.43;
+  const cy = H * 0.47;
   const rx = W * 0.42;
-  const ry = H * 0.35;
+  const ry = H * 0.32;
 
   const cards = Array.from(table.querySelectorAll('.player-card[data-pid]'));
   const N = cards.length;
