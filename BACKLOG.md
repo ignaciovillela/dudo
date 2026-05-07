@@ -51,6 +51,7 @@ Referencia completa en `CHANGELOG.md`.
 - Sonido al recibir un emoji (SFX.emojiHit).
 - Logros: catálogo de 10 logros con modal y toast de desbloqueo.
 - Sonido direccional con pan estéreo basado en posición de la carta en la mesa.
+- Indicador de probabilidad estimada de la apuesta actual en el bid builder.
 
 ---
 
@@ -91,15 +92,6 @@ Referencia completa en `CHANGELOG.md`.
 - Dificultad estimada: `Baja`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: el stepper de cantidad en el cliente tiene un máximo de `total_dados`; el backend rechaza apuestas con `quantity > total_dados` con mensaje de error.
-
-### 14. Contador de probabilidad estimada de la apuesta actual
-**Por qué:** en un juego de bluff con información parcial, mostrar la probabilidad aproximada de que la apuesta actual sea verdadera (dado los dados propios) ayuda a tomar decisiones más informadas sin quitar el elemento humano.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js`.
-- Dificultad estimada: `Media`.
-- Riesgo de implementación: `Bajo`.
-- Notas de implementación: usar binomial simple con `p` ajustado (aprox. 1/6 por cara, 1/3 para ases considerando wildcards); **no** calcular probabilidad exacta (costoso y falsa precisión). No recalcular en cada frame: solo al cambiar la cara o cantidad en el bid builder.
-- Criterio de término: durante el turno activo se muestra un indicador (ej. "~34%") calculado con binomial aproximada basada en los dados propios, el total de dados en mesa y la apuesta actual; se actualiza solo al cambiar la apuesta; no aparece durante el reveal.
 
 ### 22. Bots
 **Por qué:** permite jugar cuando no hay suficientes amigos disponibles, o para practicar.
@@ -173,7 +165,6 @@ Referencia completa en `CHANGELOG.md`.
 | 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
 | 11 | Fix: cap en cantidad apostada | `app.js`, `models.py` | Baja | Bajo | Bajo |
-| 14 | Contador de probabilidad estimada (aprox.) | `app.js` | Media | Bajo | Medio |
 | 22 | Bots | `manager.py`, `models.py`, `bot.py` | Alta | Medio | Alto |
 | 23 | Highlights de partida | `manager.py`, `app.js`, `index.html` | Alta | Medio | Medio |
 | 24 | Limpieza: eliminar CSS muerto | `style.css` | Baja | Bajo | Bajo |

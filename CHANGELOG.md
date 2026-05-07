@@ -5,6 +5,11 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.9] - 2026-05-07
+
+### Added
+- Indicador de probabilidad estimada (`~N%`) en el bid builder: muestra la probabilidad binomial acumulada de que haya al menos la cantidad apostada de la cara seleccionada, basada en los dados propios y el total en mesa. Color verde (≥60%), amarillo (30-59%) y rojo (<30%). Se actualiza al cambiar cara o cantidad; oculto fuera de turno y durante el reveal.
+
 ## [0.3.8] - 2026-05-07
 
 ### Added

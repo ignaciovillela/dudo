@@ -2014,6 +2014,20 @@ select:focus { border-color: var(--gold); }
 .stepper-qty button:hover:not(:disabled) { background: rgba(255,255,255,0.14); }
 .stepper-qty button:disabled { opacity: 0.3; cursor: not-allowed; }
 
+.bid-prob {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-top: 4px;
+  align-self: center;
+}
+.bid-prob-high { background: rgba(80,200,80,0.18); color: #7edb7e; border: 1px solid rgba(80,200,80,0.35); }
+.bid-prob-mid  { background: rgba(220,180,40,0.18); color: #d4b84a; border: 1px solid rgba(220,180,40,0.35); }
+.bid-prob-low  { background: rgba(210,60,60,0.18);  color: #e07070; border: 1px solid rgba(210,60,60,0.35); }
+
 #bb-qty {
   font-family: 'Cinzel', serif;
   font-size: 2rem;

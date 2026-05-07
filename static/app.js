@@ -2757,6 +2757,67 @@ function resetBidInputs() {
   refreshBidInputUI();
 }
 
+/**
+ * Probabilidad de que haya AL MENOS `qty` dados mostrando `face` en la mesa,
+ * dado lo que el jugador local ya sabe (sus propios dados).
+ * Usa distribución binomial acumulada sobre los dados desconocidos.
+ * face=1 (ases) es wildcard: p=1/3 por dado desconocido.
+ * Para caras regulares (2-6): un dado desconocido lo muestra con p=1/6+1/6=2/6=1/3
+ * cuando los ases también son comodines, o 1/6 cuando la ronda es "palilos" sin ases.
+ * Simplificación: asumimos ases como wildcard siempre (regla estándar).
+ */
+function bidProbability(qty, face, totalDice, myDice) {
+  if (!myDice || myDice.length === 0 || totalDice <= 0) return null;
+  // Dados propios que cuentan para esta cara
+  const myCount = myDice.filter(d => d === face || (face !== 1 && d === 1)).length;
+  const unknown = totalDice - myDice.length;
+  const need    = Math.max(0, qty - myCount);
+
+  // Si ya tengo suficientes con los propios, es certeza
+  if (need <= 0) return 1.0;
+  // Si necesito más dados de los que existen como desconocidos, imposible
+  if (need > unknown) return 0.0;
+
+  // p por dado desconocido: ases=1/3 (1 cara), regular=2/6=1/3 (cara+ases)
+  const p = face === 1 ? 1/6 : 2/6;
+
+  // P(X >= need) = 1 - P(X <= need-1), X~Binomial(unknown, p)
+  // Calcular P(X <= need-1) sumando pmf
+  let cdf = 0;
+  let logP = Math.log(p), log1P = Math.log(1 - p);
+  // Precompute log binomial coefficients via log-gamma approximation
+  function logFactorial(n) {
+    if (n <= 1) return 0;
+    let s = 0;
+    for (let i = 2; i <= n; i++) s += Math.log(i);
+    return s;
+  }
+  const logN = logFactorial(unknown);
+  for (let k = 0; k < need; k++) {
+    const logBinom = logN - logFactorial(k) - logFactorial(unknown - k);
+    const logPmf   = logBinom + k * logP + (unknown - k) * log1P;
+    cdf += Math.exp(logPmf);
+  }
+  return Math.max(0, Math.min(1, 1 - cdf));
+}
+
+function updateBidProb() {
+  const el = document.getElementById('bid-prob');
+  if (!el) return;
+  const isMyTurn = S.currentPid === S.playerId && S.phase === 'playing';
+  if (!isMyTurn || !S.myDice || S.myDice.length === 0) {
+    el.style.display = 'none';
+    return;
+  }
+  const prob = bidProbability(S.bidQty, S.bidFace, S.totalDice, S.myDice);
+  if (prob === null) { el.style.display = 'none'; return; }
+  const pct = Math.round(prob * 100);
+  // Color: verde >60%, amarillo 30-60%, rojo <30%
+  el.className = 'bid-prob ' + (pct >= 60 ? 'bid-prob-high' : pct >= 30 ? 'bid-prob-mid' : 'bid-prob-low');
+  el.textContent = `~${pct}%`;
+  el.style.display = 'inline-block';
+}
+
 function refreshBidInputUI() {
   // Cantidad
   document.getElementById('bb-qty').textContent = S.bidQty;
@@ -2796,6 +2857,8 @@ function refreshBidInputUI() {
     const min = minQtyForFace(S.bidFace);
     hint.textContent = min > 1 ? `(mín. ${min})` : '';
   }
+
+  updateBidProb();
 }
 
 // ══════════════════════════════════  ACTIONS  ════════════════════════════════
