@@ -2810,10 +2810,13 @@ function updateBidProb() {
   }
   const prob = bidProbability(S.bidQty, S.bidFace, S.totalDice, S.myDice);
   if (prob === null) { el.style.display = 'none'; return; }
-  const pct = Math.round(prob * 100);
-  // Color: verde >60%, amarillo 30-60%, rojo <30%
-  el.className = 'bid-prob ' + (pct >= 60 ? 'bid-prob-high' : pct >= 30 ? 'bid-prob-mid' : 'bid-prob-low');
-  el.textContent = `~${pct}%`;
+  const pct = prob * 100;
+  // Color thresholds use rounded value
+  const pctRound = Math.round(pct);
+  // Format: 2 decimals if <1% or exactly 0, 1 decimal if <10%, otherwise integer
+  const pctStr = pct < 1 ? pct.toFixed(2) : pct < 10 ? pct.toFixed(1) : String(pctRound);
+  el.className = 'bid-prob ' + (pctRound >= 60 ? 'bid-prob-high' : pctRound >= 30 ? 'bid-prob-mid' : 'bid-prob-low');
+  el.textContent = `~${pctStr}%`;
   el.style.display = 'inline-block';
 }
 
