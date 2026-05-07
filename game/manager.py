@@ -117,7 +117,7 @@ class GameManager:
         msg_type = msg.get("type")
         if player_id in game.spectators and msg_type not in {"join", "emoji"}:
             return
-        if msg_type not in {"join", "connected"} and not self._allow_message(player_id):
+        if msg_type not in {"join", "connected", "select_bid"} and not self._allow_message(player_id):
             return
         handlers = {
             "join":      self._h_join,
@@ -127,6 +127,7 @@ class GameManager:
             "kick_player": self._h_kick_player,
             "direction": self._h_direction,
             "bid":       self._h_bid,
+            "select_bid": self._h_select_bid,
             "paso":      self._h_paso,
             "dudo":      self._h_dudo,
             "calzo":     self._h_calzo,
@@ -423,6 +424,27 @@ class GameManager:
 
         await self._broadcast(room_id, {"type": "bid_made", "bid": bid.to_dict()})
         await self._announce_turn(room_id, game)
+
+    async def _h_select_bid(self, room_id, player_id, game, msg):
+        if game.phase != "playing":
+            return
+        if game.current_player_id() != player_id:
+            return
+        try:
+            bid = Bid(
+                quantity=int(msg["quantity"]),
+                face=int(msg["face"]),
+                player_id=player_id,
+                player_name=game.players[player_id].name,
+            )
+        except (KeyError, ValueError, TypeError):
+            return
+
+        if not game.is_valid_bid(bid):
+            return
+
+        # Guardar la apuesta seleccionada sin ejecutarla
+        game.players[player_id].selected_bid = bid
 
     async def _h_paso(self, room_id, player_id, game, msg):
         if game.phase != "playing":
@@ -835,6 +857,19 @@ class GameManager:
         if not player:
             return
 
+        # Si el jugador tiene una apuesta seleccionada, ejecutarla
+        if player.selected_bid is not None:
+            bid = player.selected_bid
+            player.selected_bid = None  # limpiar la selección después de usarla
+            game.current_bid = bid
+            game.last_paso = None
+            game.bid_history.append(bid)
+            game.advance_turn()
+            await self._broadcast(room_id, {"type": "bid_made", "bid": bid.to_dict()})
+            await self._announce_turn(room_id, game)
+            return
+
+        # Comportamiento original si no hay apuesta seleccionada
         if game.current_bid is not None and player_id not in game.passed_players:
             game.passed_players.add(player_id)
             game.last_paso = {"player_id": player_id, "player_name": player.name}

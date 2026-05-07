@@ -2428,6 +2428,7 @@ function minQtyForFace(face) {
 function selectFace(face) {
   S.bidFace = face;
   S.bidQty  = minQtyForFace(face);
+  saveBidSelection();
   refreshBidInputUI();
 }
 
@@ -2436,6 +2437,7 @@ function adjBid(which, delta) {
     const min = minQtyForFace(S.bidFace);
     S.bidQty = Math.max(min, S.bidQty + delta);
   }
+  saveBidSelection();
   refreshBidInputUI();
 }
 
@@ -2492,6 +2494,11 @@ function refreshBidInputUI() {
 }
 
 // ══════════════════════════════════  ACTIONS  ════════════════════════════════
+function saveBidSelection() {
+  if (S.isSpectator || !S.currentPid || S.currentPid !== S.playerId) return;
+  send({ type: 'select_bid', quantity: S.bidQty, face: S.bidFace });
+}
+
 function sendBid() {
   if (S.isSpectator) return;
   playSfx('click');

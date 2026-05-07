@@ -14,6 +14,7 @@ class Player:
     dice_count: int = 5
     connected: bool = True
     ready: bool = False
+    selected_bid: Optional["Bid"] = None  # apuesta seleccionada para timeout
 
     def to_public_dict(self):
         return {
