@@ -1869,7 +1869,6 @@ function _showQuickChatBubble(fromId, phrase) {
   const bubble = document.createElement('div');
   bubble.className = 'qc-bubble';
   bubble.textContent = phrase;
-  card.style.position = 'relative';
   card.appendChild(bubble);
   setTimeout(() => bubble.remove(), 3000);
 }
