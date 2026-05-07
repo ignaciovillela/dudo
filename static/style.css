@@ -2209,6 +2209,19 @@ select:focus { border-color: var(--gold); }
 .go-standing-row--self .go-pos { color: var(--gold); }
 .go-avatar { font-size: 1.1rem; }
 .go-sname  { flex: 1; }
+.go-streak { font-size: 0.8rem; opacity: 0.85; }
+
+/* Streak badge on player cards */
+.streak-badge {
+  font-size: 0.72rem;
+  background: rgba(255,100,0,0.18);
+  border: 1px solid rgba(255,120,0,0.35);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: #ff9040;
+  margin-left: 4px;
+  white-space: nowrap;
+}
 
 /* Level badge in lobby */
 .level-badge {
@@ -2351,3 +2364,44 @@ select:focus { border-color: var(--gold); }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+/* ══════════════════════════  ACHIEVEMENTS  ══════════════════════════════ */
+.achievements-box {
+  min-width: min(480px, 92vw);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.achievements-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.achievement-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  opacity: 0.45;
+}
+.achievement-row--unlocked {
+  opacity: 1;
+  background: rgba(232,184,109,0.08);
+  border-color: rgba(232,184,109,0.25);
+}
+.ach-emoji { font-size: 1.5rem; width: 28px; text-align: center; flex-shrink: 0; }
+.ach-info  { display: flex; flex-direction: column; gap: 2px; }
+.ach-name  { font-size: 0.9rem; font-weight: 600; color: var(--cream); }
+.ach-desc  { font-size: 0.78rem; color: var(--text-dim); }
+.achievement-row--unlocked .ach-name { color: var(--gold); }
+
+/* go-actions row in game over overlay */
+.go-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}

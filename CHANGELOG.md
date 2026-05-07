@@ -5,6 +5,14 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.7] - 2026-05-07
+
+### Added
+- Espectadores interactivos: los espectadores pueden lanzar emojis a jugadores y usar frases rápidas; el backend ya permitía los mensajes `emoji` y `quick_chat`, y el popup de emojis se muestra al pasar el cursor sobre las cartas de jugadores; el nombre del espectador aparece como remitente en el log al usar frases.
+- Rachas: contador de rondas consecutivas sin perder dados por jugador; badge `🔥N` visible en las cartas de oponentes y en el nombre propio cuando la racha es ≥ 2; en el overlay de game over se muestra la mejor racha de cada jugador junto a su posición en la clasificación.
+- Sonido al recibir un emoji: `SFX.emojiHit` — "pop" de dos tonos suaves — se reproduce cuando el jugador local es el destino de un emoji lanzado.
+- Logros: catálogo de 10 logros persistidos en `localStorage` (`dudoAchievements`); se verifican en `onReveal` y `onGameOver`; al desbloquear uno aparece un toast en pantalla; modal accesible desde el lobby ("🏆 Logros") y desde el overlay de fin de partida.
+
 ## [0.3.6] - 2026-05-07
 
 ### Added

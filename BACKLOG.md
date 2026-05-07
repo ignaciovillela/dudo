@@ -46,6 +46,10 @@ Referencia completa en `CHANGELOG.md`.
 - Vista dedicada para jugadores eliminados (panel de acciones reemplazado por mensaje de espectador).
 - Clasificación final con orden de eliminación en overlay de game over.
 - Chat rápido con frases predefinidas desde el popup de emojis.
+- Espectadores interactivos: emojis y frases rápidas disponibles para espectadores.
+- Rachas: badge 🔥N en cartas y resumen en overlay de game over.
+- Sonido al recibir un emoji (SFX.emojiHit).
+- Logros: catálogo de 10 logros con modal y toast de desbloqueo.
 
 ---
 
@@ -104,39 +108,6 @@ Referencia completa en `CHANGELOG.md`.
 - Notas de implementación: usar binomial simple con `p` ajustado (aprox. 1/6 por cara, 1/3 para ases considerando wildcards); **no** calcular probabilidad exacta (costoso y falsa precisión). No recalcular en cada frame: solo al cambiar la cara o cantidad en el bid builder.
 - Criterio de término: durante el turno activo se muestra un indicador (ej. "~34%") calculado con binomial aproximada basada en los dados propios, el total de dados en mesa y la apuesta actual; se actualiza solo al cambiar la apuesta; no aparece durante el reveal.
 
-### 15. Espectadores interactivos
-**Por qué:** los espectadores son completamente pasivos; no pueden lanzar emojis ni usar frases rápidas, lo que los hace invisibles para los jugadores y reduce el sentido de audiencia.
-- Alcance técnico: frontend + backend.
-- Archivos principales: `game/manager.py` (`_h_emoji`, `handle_message`), `static/app.js`.
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Dependencias: #12 (para frases rápidas).
-- Criterio de término: los espectadores pueden lanzar emojis a cualquier jugador y usar frases rápidas (cuando existan, ítem 12); el backend procesa sus mensajes `emoji` y `quick_chat` sin restricción de turno; su nombre aparece como remitente en el log.
-
-### 19. Rachas: indicador en tiempo real y resumen al final
-**Por qué:** las rachas de dudos correctos, calzos o rondas sobrevividas son momentos de tensión y celebración; mostrarlas en tiempo real y al final de la partida añade contexto sin alterar el juego.
-- Alcance técnico: frontend (principalmente), backend mínimo.
-- Archivos principales: `static/app.js`, `static/style.css`, `static/index.html`.
-- Dificultad estimada: `Media`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: cada jugador tiene un indicador de racha activa visible en su carta (ej. "🔥3" si lleva 3 rondas sobrevividas sin perder dados, o 3 dudos correctos consecutivos); el overlay de game over muestra la mejor racha de cada jugador en la partida; las rachas se calculan en cliente a partir de los eventos recibidos.
-
-### 20. Sonido al recibir un emoji
-**Por qué:** hay SFX cuando lanzás un emoji pero no cuando te impacta uno; el feedback asimétrico hace que el sistema de emojis se sienta incompleto para el receptor.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (función `onEmoji`, sistema SFX).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: cuando `msg.target_id === S.playerId` en `onEmoji`, se reproduce un SFX corto (sintetizado con Web Audio API, sin archivos); el sonido es distinto al de lanzar.
-
-### 21. Logros
-**Por qué:** los logros dan objetivos secundarios que incentivan estilos de juego distintos (el bluffer, el cauteloso, el que siempre duda) y añaden rejugabilidad más allá del XP lineal.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js`, `static/index.html`, `static/style.css`.
-- Dificultad estimada: `Alta`.
-- Riesgo de implementación: `Medio`.
-- Criterio de término: existe un catálogo de logros definido en cliente (ej. "Primer dudo correcto", "Calzo perfecto", "Sobrevivir una ronda con 1 dado", "Ganar sin perder un dado"); los logros desbloqueados se persisten en `localStorage`; al desbloquear uno aparece un toast en partida; hay un modal accesible desde el lobby que muestra todos los logros con estado bloqueado/desbloqueado.
-
 ### 22. Bots
 **Por qué:** permite jugar cuando no hay suficientes amigos disponibles, o para practicar.
 - Alcance técnico: backend.
@@ -189,7 +160,7 @@ Referencia completa en `CHANGELOG.md`.
 - Archivos principales: `game/models.py` (`count_dice`), `game/rules/`, `static/app.js`, `static/index.html`.
 - Dificultad estimada: `Media`.
 - Riesgo de implementación: `Medio`.
-- Criterio de término: existe una opción `Obligo` (o `palifico`) en `RuleConfig`; cuando está activo y un jugador tiene exactamente 1 dado (solo la primera vez de cada jugador), el backend usa un conteo sin comodines; el frontend indica visualmente que la ronda es Obligada.
+- Criterio de término: existe una opción `Obligo` (o `palifico`) en `RuleConfig`; cuando está activo y un jugador tiene exactamente 1 dado (solo la primera vez de cada jugador), el backend usa un conteo sin comodines, la pinta (cara del dado) no se puede cambiar salvo por otro jugador con un dado; el frontend indica visualmente que la ronda es Obligada.
 
 ### 29. Variante: dados iniciales configurables
 **Por qué:** el conteo inicial de 5 dados está hardcodeado. Partidas con 3 o 4 dados son más rápidas; con 6 son más largas. Es una variante común para controlar la duración.
@@ -211,10 +182,6 @@ Referencia completa en `CHANGELOG.md`.
 | 11 | Fix: cap en cantidad apostada | `app.js`, `models.py` | Baja | Bajo | Bajo |
 | 13 | Sonido direccional (pan estéreo por posición) | `app.js` | Media | Bajo | Medio |
 | 14 | Contador de probabilidad estimada (aprox.) | `app.js` | Media | Bajo | Medio |
-| 15 | Espectadores interactivos (emojis + frases) | `manager.py`, `app.js` | Baja | Bajo | Medio |
-| 19 | Rachas: indicador en tiempo real y resumen final | `app.js`, `style.css`, `index.html` | Media | Bajo | Medio |
-| 20 | Sonido al recibir un emoji | `app.js` | Baja | Bajo | Bajo |
-| 21 | Logros | `app.js`, `index.html`, `style.css` | Alta | Medio | Alto |
 | 22 | Bots | `manager.py`, `models.py`, `bot.py` | Alta | Medio | Alto |
 | 23 | Highlights de partida | `manager.py`, `app.js`, `index.html` | Alta | Medio | Medio |
 | 24 | Limpieza: eliminar CSS muerto | `style.css` | Baja | Bajo | Bajo |

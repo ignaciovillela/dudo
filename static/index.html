@@ -141,6 +141,7 @@
       </div>
       <div class="lobby-subactions">
         <button class="btn btn-sm" type="button" onclick="openStatsModal()">📊 Mis stats</button>
+        <button class="btn btn-sm" type="button" onclick="openAchievementsModal()">🏆 Logros</button>
         <div id="level-badge" class="level-badge"></div>
       </div>
       <p class="hint">Mínimo 2 jugadores · El juego comienza cuando todos estén listos.<br/>
@@ -275,7 +276,10 @@
     <p id="go-winner" class="go-winner"></p>
     <p id="go-xp" class="go-xp"></p>
     <ol id="go-standings" class="go-standings"></ol>
-    <button class="btn btn-gold go-btn" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i>Volver al lobby</button>
+    <div class="go-actions">
+      <button class="btn btn-sm" type="button" onclick="openAchievementsModal()">🏆 Logros</button>
+      <button class="btn btn-gold go-btn" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i>Volver al lobby</button>
+    </div>
   </div>
 </div>
 
@@ -286,6 +290,14 @@
       <tbody id="stats-table-body"></tbody>
     </table>
     <button class="btn btn-gold" type="button" onclick="closeStatsModal()">Cerrar</button>
+  </div>
+</div>
+
+<div id="achievements-modal" class="stats-modal" style="display:none">
+  <div class="stats-box achievements-box">
+    <h2>🏆 Logros</h2>
+    <div id="achievements-body" class="achievements-body"></div>
+    <button class="btn btn-gold" type="button" onclick="closeAchievementsModal()">Cerrar</button>
   </div>
 </div>
 

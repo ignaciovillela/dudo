@@ -217,6 +217,9 @@ const S = {
     calzoOk: 0,
     calzoFail: 0,
   },
+  // Streaks: rondas consecutivas sobrevividas (sin perder dados)
+  streaks: {},        // pid → current streak count
+  bestStreaks: {},     // pid → best streak this game
 
   // UI bid inputs
   bidQty:         1,
@@ -577,7 +580,87 @@ function renderAvatarPicker() {
   toggle.textContent = avatarPickerExpanded ? 'Contraer' : 'Ver todos';
 }
 
-// ══════════════════════════════════  SOUND  ═══════════════════════════════════
+// ══════════════════════════════  LOGROS  ══════════════════════════════════════
+
+const ACHIEVEMENTS_STORAGE_KEY = 'dudoAchievements';
+
+const ACHIEVEMENTS_CATALOG = [
+  { id: 'first_dudo',      emoji: '🎯', name: 'Primer dudo',        desc: 'Acertar un dudo por primera vez.' },
+  { id: 'first_calzo',     emoji: '🔒', name: 'Calzo perfecto',     desc: 'Acertar un calzo por primera vez.' },
+  { id: 'survivor',        emoji: '🏃', name: 'Sobreviviente',      desc: 'Ganar una partida sin perder ningún dado.' },
+  { id: 'streak5',         emoji: '🔥', name: 'En llamas',          desc: 'Alcanzar una racha de 5 rondas sin perder dados.' },
+  { id: 'veteran',         emoji: '🎲', name: 'Veterano',           desc: 'Jugar 10 partidas.' },
+  { id: 'champion',        emoji: '🏆', name: 'Campeón',            desc: 'Ganar 5 partidas.' },
+  { id: 'gavilan_win',     emoji: '🦅', name: 'Gavilán certero',    desc: 'Gavilán exitoso (dudo fuera de turno correcto).' },
+  { id: 'last_die_win',    emoji: '💀', name: 'Al filo',            desc: 'Ganar una partida con un solo dado.' },
+  { id: 'three_dudos',     emoji: '⚡', name: 'Certero',            desc: 'Acertar 3 dudos en una misma partida.' },
+  { id: 'calzo_one_die',   emoji: '🧊', name: 'Imperturbable',      desc: 'Calzo exitoso teniendo solo 1 dado.' },
+];
+
+function loadAchievements() {
+  try {
+    const raw = localStorage.getItem(ACHIEVEMENTS_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (_) { return new Set(); }
+}
+
+function saveAchievements(set) {
+  try { localStorage.setItem(ACHIEVEMENTS_STORAGE_KEY, JSON.stringify([...set])); } catch (_) {}
+}
+
+function unlockAchievement(id) {
+  const unlocked = loadAchievements();
+  if (unlocked.has(id)) return; // ya desbloqueado
+  unlocked.add(id);
+  saveAchievements(unlocked);
+  const def = ACHIEVEMENTS_CATALOG.find(a => a.id === id);
+  if (def) showToast(`${def.emoji} Logro desbloqueado: ${def.name}`);
+}
+
+function checkAchievements(context) {
+  // context: { action, isGavilan, dudoSuccess, calzoSuccess, myDiceCount,
+  //            isGameOver, won, noDiceLost, dudoOkThisGame, stats }
+  if (context.dudoSuccess)                         unlockAchievement('first_dudo');
+  if (context.calzoSuccess)                         unlockAchievement('first_calzo');
+  if (context.calzoSuccess && context.myDiceCount === 1) unlockAchievement('calzo_one_die');
+  if (context.isGavilan && context.dudoSuccess)     unlockAchievement('gavilan_win');
+  if (context.dudoOkThisGame >= 3)                  unlockAchievement('three_dudos');
+  if ((S.streaks[S.playerId] || 0) >= 5)            unlockAchievement('streak5');
+  if (context.isGameOver) {
+    const stats = context.stats || loadStats();
+    if (stats.gamesPlayed >= 10)                    unlockAchievement('veteran');
+    if (context.won) {
+      if (stats.gamesWon >= 5)                      unlockAchievement('champion');
+      if (context.noDiceLost)                       unlockAchievement('survivor');
+      if (context.myDiceCount === 1)                unlockAchievement('last_die_win');
+    }
+  }
+}
+
+function renderAchievementsModal() {
+  const body = document.getElementById('achievements-body');
+  if (!body) return;
+  const unlocked = loadAchievements();
+  body.innerHTML = '';
+  for (const a of ACHIEVEMENTS_CATALOG) {
+    const div = document.createElement('div');
+    const isUnlocked = unlocked.has(a.id);
+    div.className = 'achievement-row' + (isUnlocked ? ' achievement-row--unlocked' : '');
+    div.innerHTML = `<span class="ach-emoji">${isUnlocked ? a.emoji : '🔒'}</span><div class="ach-info"><span class="ach-name">${a.name}</span><span class="ach-desc">${a.desc}</span></div>`;
+    body.appendChild(div);
+  }
+}
+
+function openAchievementsModal() {
+  renderAchievementsModal();
+  const modal = document.getElementById('achievements-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeAchievementsModal() {
+  const modal = document.getElementById('achievements-modal');
+  if (modal) modal.style.display = 'none';
+}
 const AUDIO_STORAGE_KEY = 'dudoMuted';
 const RULES_STORAGE_KEY = 'dudoRules';
 const STATS_STORAGE_KEY = 'dudoStats';
@@ -825,6 +908,11 @@ const SFX = {
   },
   tick() {
     playTone(1450, 0.03, { type: 'square', volume: 0.025 });
+  },
+  emojiHit() {
+    // Sonido al recibir un emoji: "pop" suave con dos tonos cortos
+    playTone(800, 0.04, { type: 'sine', volume: 0.04 });
+    playTone(1100, 0.05, { type: 'sine', delay: 0.04, volume: 0.03 });
   },
 };
 
@@ -1234,6 +1322,8 @@ function onGameStarted(msg) {
   S.hasFirstAction    = false;
   S.lastLossPlayerId = null;
   S.pendingStats = { dudoOk: 0, dudoFail: 0, calzoOk: 0, calzoFail: 0 };
+  S.streaks = {};
+  S.bestStreaks = {};
   showScreen('game');
   applySpectatorMode();
   renderOtherPlayers();
@@ -1368,6 +1458,10 @@ function onReveal(msg) {
   stopTurnCountdown();
   S.phase = 'reveal';
   S.lastLossPlayerId = msg.loser_id || null;
+  // Romper racha del jugador que pierde un dado
+  if (msg.loser_id) {
+    S.streaks[msg.loser_id] = 0;
+  }
   if (msg.action === 'dudo' || msg.action === 'calzo') {
     S.lastActionPlayerId = msg.challenger_id || null;
     S.lastActionType = msg.action;
@@ -1429,6 +1523,14 @@ function onReveal(msg) {
     if (actionXpResult && actionXpResult.unlockedEmojis.length > 0) {
       showToast(`¡Desbloqueaste: ${actionXpResult.unlockedEmojis.join(' ')}! (Nv. ${actionXpResult.newLevel})`);
     }
+    // Check achievements for this action
+    checkAchievements({
+      dudoSuccess: msg.action === 'dudo' && actionSuccess,
+      calzoSuccess: msg.action === 'calzo' && actionSuccess,
+      isGavilan: !!msg.is_gavilan && msg.action === 'dudo' && actionSuccess,
+      myDiceCount: S.myDice.length || (S.players[S.playerId]?.dice_count ?? 5),
+      dudoOkThisGame: S.pendingStats.dudoOk,
+    });
   }
 
   if (msg.is_gavilan) {
@@ -1489,7 +1591,20 @@ function onReveal(msg) {
 function onNewRound(msg) {
   stopTurnCountdown();
   // Award 1 XP for surviving the previous round (skip on round 1 start)
-  if (S.roundNum > 0) awardRoundXp();
+  if (S.roundNum > 0) {
+    awardRoundXp();
+    // Increment streak for all players still alive (dice_count > 0)
+    for (const pid of Object.keys(S.players)) {
+      const p = S.players[pid];
+      if (p && p.dice_count > 0) {
+        S.streaks[pid] = (S.streaks[pid] || 0) + 1;
+        if ((S.streaks[pid] || 0) > (S.bestStreaks[pid] || 0)) {
+          S.bestStreaks[pid] = S.streaks[pid];
+        }
+      }
+    }
+    renderStreakBadges();
+  }
   S.roundNum      = msg.round_number;
   S.currentBid       = null;
   S.activePaso       = null;
@@ -1507,10 +1622,22 @@ function onNewRound(msg) {
   updateBidDisplay();
   log(`─── Ronda ${S.roundNum} ───`, 'round');
   playSfx('roll');
+  renderOtherPlayers();
 }
 
-function onEliminated(msg) {
-  if (S.players[msg.player_id])
+function renderStreakBadges() {
+  // Actualiza badges de racha en cartas de oponentes ya renderizadas
+  renderOtherPlayers();
+  // Badge en la propia carta
+  const myStreak = S.streaks[S.playerId] || 0;
+  const nameEl = document.getElementById('my-name-disp');
+  if (nameEl) {
+    const base = S.playerAvatar ? `${S.playerAvatar} ${S.playerName}` : S.playerName;
+    nameEl.textContent = myStreak >= 2 ? `${base} 🔥${myStreak}` : base;
+  }
+}
+
+function onEliminated(msg) {  if (S.players[msg.player_id])
     S.players[msg.player_id].dice_count = 0;
   playSfx('eliminated');
   log(`${msg.player_name} fue eliminado`, 'elim');
@@ -1542,8 +1669,20 @@ function onGameOver(msg) {
   stats.calzoFail += S.pendingStats.calzoFail;
   saveStats(stats);
 
-  // Award XP: base + win bonus (action XP was already saved during reveals)
   const won = (!isLoserMode && isWinner) || (isLoserMode && !isLoser);
+  // Check game-over achievements
+  const myFinalDice = S.myDice.length || (S.players[S.playerId]?.dice_count ?? 0);
+  const noDiceLost = myFinalDice >= 5;
+  checkAchievements({
+    isGameOver: true,
+    won,
+    noDiceLost,
+    myDiceCount: myFinalDice,
+    dudoOkThisGame: S.pendingStats.dudoOk,
+    stats,
+  });
+
+  // Award XP: base + win bonus (action XP was already saved during reveals)
   const xpResult = awardGameOverXp({ won });
 
   // Preparar el overlay ya, pero mostrarlo al terminar el countdown de reveal (7 s)
@@ -1578,7 +1717,9 @@ function onGameOver(msg) {
       li.className = 'go-standing-row';
       const isSelf = entry.id === S.playerId;
       if (isSelf) li.classList.add('go-standing-row--self');
-      li.innerHTML = `<span class="go-pos">${pos}</span><span class="go-avatar">${entry.avatar}</span><span class="go-sname">${entry.name}</span>`;
+      const best = S.bestStreaks[entry.id] || 0;
+      const streakStr = best >= 2 ? ` <span class="go-streak">🔥${best}</span>` : '';
+      li.innerHTML = `<span class="go-pos">${pos}</span><span class="go-avatar">${entry.avatar}</span><span class="go-sname">${entry.name}</span>${streakStr}`;
       goStandings.appendChild(li);
     });
     goStandings.style.display = 'flex';
@@ -1679,6 +1820,7 @@ function _showQuickChatBubble(fromId, phrase) {
 
 function onEmojiThrown(msg) {
   animateEmojiThrow(msg.from_id, msg.target_id, msg.emoji);
+  if (msg.target_id === S.playerId) playSfx('emojiHit');
 }
 
 /**
@@ -2333,6 +2475,16 @@ function renderOtherPlayers() {
     }
 
     headerEl.appendChild(nameEl);
+
+    // Streak badge
+    const streak = S.streaks[pid] || 0;
+    if (streak >= 2) {
+      const streakBadge = document.createElement('span');
+      streakBadge.className = 'streak-badge';
+      streakBadge.textContent = `🔥${streak}`;
+      streakBadge.title = `${streak} rondas consecutivas sin perder dados`;
+      headerEl.appendChild(streakBadge);
+    }
 
     // Selector de emoji inline (aparece al hover sobre la card)
     const emojiBar = buildEmojiBar(pid);
