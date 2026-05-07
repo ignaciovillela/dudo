@@ -5,6 +5,11 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.8] - 2026-05-07
+
+### Added
+- Sonido direccional (pan estéreo por posición en la mesa): `playTone`, `playSweep` y `playNoiseBurst` aceptan `opts.pan` e insertan un `StereoPannerNode` cuando el valor es distinto de 0. Nueva función `playSfxFor(name, pid)` calcula el pan a partir de la posición CSS de la carta del jugador en la elipse de la mesa. Los SFX de acciones de oponentes (`bid`, `paso`, `reveal`, `gavilan`, `eliminated`) usan `playSfxFor` con el pid del actor; el jugador local y los eventos de mesa suenan centrados (pan=0).
+
 ## [0.3.7] - 2026-05-07
 
 ### Added

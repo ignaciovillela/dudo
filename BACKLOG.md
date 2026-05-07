@@ -50,6 +50,7 @@ Referencia completa en `CHANGELOG.md`.
 - Rachas: badge 🔥N en cartas y resumen en overlay de game over.
 - Sonido al recibir un emoji (SFX.emojiHit).
 - Logros: catálogo de 10 logros con modal y toast de desbloqueo.
+- Sonido direccional con pan estéreo basado en posición de la carta en la mesa.
 
 ---
 
@@ -90,14 +91,6 @@ Referencia completa en `CHANGELOG.md`.
 - Dificultad estimada: `Baja`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: el stepper de cantidad en el cliente tiene un máximo de `total_dados`; el backend rechaza apuestas con `quantity > total_dados` con mensaje de error.
-
-### 13. Sonido direccional (pan estéreo por posición en la mesa)
-**Por qué:** los sonidos de acciones de los oponentes suenan igual independientemente de dónde estén en la mesa. Con pan estéreo, el jugador a tu izquierda suena a la izquierda y el de la derecha a la derecha, añadiendo inmersión.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (sistema de SFX y `AudioState`).
-- Dificultad estimada: `Media`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: los SFX de acciones de oponentes (bid, dudo, calzo, paso, emoji) usan `StereoPannerNode` del Web Audio API con un valor de pan calculado a partir de la posición angular del jugador en la mesa; el jugador local siempre suena centrado (pan=0).
 
 ### 14. Contador de probabilidad estimada de la apuesta actual
 **Por qué:** en un juego de bluff con información parcial, mostrar la probabilidad aproximada de que la apuesta actual sea verdadera (dado los dados propios) ayuda a tomar decisiones más informadas sin quitar el elemento humano.
@@ -180,7 +173,6 @@ Referencia completa en `CHANGELOG.md`.
 | 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
 | 11 | Fix: cap en cantidad apostada | `app.js`, `models.py` | Baja | Bajo | Bajo |
-| 13 | Sonido direccional (pan estéreo por posición) | `app.js` | Media | Bajo | Medio |
 | 14 | Contador de probabilidad estimada (aprox.) | `app.js` | Media | Bajo | Medio |
 | 22 | Bots | `manager.py`, `models.py`, `bot.py` | Alta | Medio | Alto |
 | 23 | Highlights de partida | `manager.py`, `app.js`, `index.html` | Alta | Medio | Medio |

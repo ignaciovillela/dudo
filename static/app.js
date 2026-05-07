@@ -804,7 +804,15 @@ function playTone(freq, duration = 0.08, opts = {}) {
   gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
 
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  const pan = opts.pan ?? 0;
+  if (pan !== 0 && ctx.createStereoPanner) {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+  } else {
+    gain.connect(ctx.destination);
+  }
   osc.start(when);
   osc.stop(when + duration + 0.02);
 }
@@ -824,7 +832,15 @@ function playSweep(startFreq, endFreq, duration = 0.12, opts = {}) {
   gain.gain.exponentialRampToValueAtTime(volume, when + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  const pan = opts.pan ?? 0;
+  if (pan !== 0 && ctx.createStereoPanner) {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+  } else {
+    gain.connect(ctx.destination);
+  }
   osc.start(when);
   osc.stop(when + duration + 0.02);
 }
@@ -854,7 +870,15 @@ function playNoiseBurst(duration = 0.12, opts = {}) {
   gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
   source.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  const pan = opts.pan ?? 0;
+  if (pan !== 0 && ctx.createStereoPanner) {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    gain.connect(panner);
+    panner.connect(ctx.destination);
+  } else {
+    gain.connect(ctx.destination);
+  }
   source.start(when);
 }
 
@@ -862,20 +886,20 @@ const SFX = {
   click() {
     playTone(620, 0.05, { type: 'square', volume: 0.03 });
   },
-  bid() {
-    playTone(420, 0.07, { type: 'triangle', volume: 0.045 });
-    playTone(540, 0.08, { type: 'triangle', delay: 0.06, volume: 0.04 });
+  bid(pan = 0) {
+    playTone(420, 0.07, { type: 'triangle', volume: 0.045, pan });
+    playTone(540, 0.08, { type: 'triangle', delay: 0.06, volume: 0.04, pan });
   },
-  paso() {
-    playTone(260, 0.12, { type: 'sine', volume: 0.04 });
+  paso(pan = 0) {
+    playTone(260, 0.12, { type: 'sine', volume: 0.04, pan });
   },
   yourTurn() {
     playTone(740, 0.08, { type: 'square', volume: 0.05 });
     playTone(980, 0.12, { type: 'square', delay: 0.09, volume: 0.045 });
   },
-  reveal() {
-    playTone(360, 0.09, { type: 'triangle', volume: 0.04 });
-    playTone(280, 0.12, { type: 'triangle', delay: 0.08, volume: 0.035 });
+  reveal(pan = 0) {
+    playTone(360, 0.09, { type: 'triangle', volume: 0.04, pan });
+    playTone(280, 0.12, { type: 'triangle', delay: 0.08, volume: 0.035, pan });
   },
   win() {
     playTone(650, 0.1, { type: 'triangle', volume: 0.055 });
@@ -894,13 +918,13 @@ const SFX = {
     playNoiseBurst(0.13, { freq: 980, q: 1.2, volume: 0.05 });
     playNoiseBurst(0.1, { freq: 620, q: 1.1, delay: 0.03, volume: 0.04 });
   },
-  gavilan() {
-    playSweep(900, 1800, 0.11, { type: 'triangle', volume: 0.04 });
+  gavilan(pan = 0) {
+    playSweep(900, 1800, 0.11, { type: 'triangle', volume: 0.04, pan });
   },
-  eliminated() {
-    playTone(420, 0.16, { type: 'sawtooth', volume: 0.05 });
-    playTone(300, 0.2, { type: 'sawtooth', delay: 0.14, volume: 0.045 });
-    playTone(210, 0.24, { type: 'sawtooth', delay: 0.32, volume: 0.04 });
+  eliminated(pan = 0) {
+    playTone(420, 0.16, { type: 'sawtooth', volume: 0.05, pan });
+    playTone(300, 0.2, { type: 'sawtooth', delay: 0.14, volume: 0.045, pan });
+    playTone(210, 0.24, { type: 'sawtooth', delay: 0.32, volume: 0.04, pan });
   },
   reconnect() {
     playTone(880, 0.06, { type: 'sine', volume: 0.035 });
@@ -920,6 +944,38 @@ function playSfx(name) {
   unlockAudio();
   const fx = SFX[name];
   if (fx) fx();
+}
+
+/**
+ * Calcula el valor de pan estéreo (-1 a +1) para un jugador dado su pid.
+ * Usa la posición CSS de su carta en la mesa para determinar su ángulo.
+ * Retorna 0 (centrado) si no se encuentra la carta o es el propio jugador.
+ */
+function panForPid(pid) {
+  if (!pid || pid === S.playerId) return 0;
+  const card = document.querySelector(`.player-card[data-pid="${pid}"]`);
+  if (!card) return 0;
+  const table = document.querySelector('.game-table');
+  if (!table) return 0;
+  const cx = table.clientWidth  * 0.50;
+  const cy = table.clientHeight * 0.43;
+  const x = parseFloat(card.style.left);
+  const y = parseFloat(card.style.top);
+  if (isNaN(x) || isNaN(y)) return 0;
+  // cos(ángulo): -1 = izquierda, 0 = centro (arriba/abajo), +1 = derecha
+  return Math.cos(Math.atan2(y - cy, x - cx));
+}
+
+/**
+ * Reproduce un SFX con pan estéreo basado en la posición del jugador en la mesa.
+ * Los sonidos del propio jugador o eventos de mesa suenan centrados (pan=0).
+ */
+function playSfxFor(name, pid = null) {
+  unlockAudio();
+  const fx = SFX[name];
+  if (!fx) return;
+  const pan = pid ? panForPid(pid) : 0;
+  fx(pan);
 }
 
 function updateSoundButton() {
@@ -1422,7 +1478,7 @@ function onTurn(msg) {
 }
 
 function onBidMade(msg) {
-  playSfx('bid');
+  playSfxFor('bid', msg.bid?.player_id);
   hideTimeoutActionHint();
   S.currentBid = msg.bid;
   S.activePaso = null;  // la apuesta reemplaza al paso como acción activa
@@ -1434,7 +1490,7 @@ function onBidMade(msg) {
 }
 
 function onPasoMade(msg) {
-  playSfx('paso');
+  playSfxFor('paso', msg.passer_id);
   hideTimeoutActionHint();
   S.activePaso = { player_id: msg.passer_id, player_name: msg.passer_name };
   if (msg.passer_id === S.playerId) S.hasPassed = true;
@@ -1454,7 +1510,7 @@ function onDirectionSet(msg) {
 }
 
 function onReveal(msg) {
-  playSfx('reveal');
+  playSfxFor('reveal', msg.challenger_id);
   stopTurnCountdown();
   S.phase = 'reveal';
   S.lastLossPlayerId = msg.loser_id || null;
@@ -1534,7 +1590,7 @@ function onReveal(msg) {
   }
 
   if (msg.is_gavilan) {
-    playSfx('gavilan');
+    playSfxFor('gavilan', msg.challenger_id);
   }
 
   let resultText, resultClass;
@@ -1639,7 +1695,7 @@ function renderStreakBadges() {
 
 function onEliminated(msg) {  if (S.players[msg.player_id])
     S.players[msg.player_id].dice_count = 0;
-  playSfx('eliminated');
+  playSfxFor('eliminated', msg.player_id);
   log(`${msg.player_name} fue eliminado`, 'elim');
   renderOtherPlayers();
   if (msg.player_id === S.playerId) applyEliminatedMode(true);
