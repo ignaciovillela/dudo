@@ -5,6 +5,11 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.10] - 2026-05-07
+
+### Removed
+- CSS muerto eliminado de `style.css`: bloque `.emoji-picker-popup / .emoji-bar / .emoji-bar-row / .emoji-bar-extra / .emoji-pick-btn / .emoji-chevron` (sistema de picker antiguo, ya sin referencias en HTML ni JS) y bloque `.lost-dice-row / .lost-dice-row .die` (fallback de my-area ya no utilizado).
+
 ## [0.3.9] - 2026-05-07
 
 ### Added

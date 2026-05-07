@@ -52,6 +52,7 @@ Referencia completa en `CHANGELOG.md`.
 - Logros: catálogo de 10 logros con modal y toast de desbloqueo.
 - Sonido direccional con pan estéreo basado en posición de la carta en la mesa.
 - Indicador de probabilidad estimada de la apuesta actual en el bid builder.
+- Limpieza CSS: eliminados selectores muertos del picker antiguo y lost-dice-row.
 
 ---
 
@@ -114,14 +115,6 @@ Referencia completa en `CHANGELOG.md`.
 ---
 
 ## 🟢 Prioridad baja
-
-### 24. Limpieza: eliminar CSS muerto
-**Por qué:** hay reglas CSS de sistemas anteriores que ya no se usan (`.emoji-picker-popup`, `.emoji-bar`, `.lost-dice-row`), generando ruido en el archivo.
-- Alcance técnico: frontend.
-- Archivos principales: `static/style.css` (~líneas 1094–1100 y 1551–1568).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: los selectores eliminados no aparecen en ningún HTML ni JS del proyecto; el CSS compila sin cambios visuales.
 
 ### 25. Modal de reglas accesible desde la partida
 **Por qué:** no hay forma de consultar las reglas una vez que empieza la partida. Los jugadores nuevos quedan perdidos sin poder salir de la vista de juego.

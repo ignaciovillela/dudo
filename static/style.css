@@ -1129,17 +1129,6 @@ select:focus { border-color: var(--gold); }
   animation: ef-in 0.15s ease forwards;
 }
 
-/* ── Emoji picker popup antiguo (eliminado) ── */
-.emoji-picker-popup,
-.emoji-bar,
-.emoji-bar-row,
-.emoji-bar-extra,
-.emoji-pick-btn,
-.emoji-chevron { display: none !important; }
-
-
-
-
 /* ── Emoji projectile (flying animation) ── */
 .emoji-projectile {
   position: fixed;
@@ -1649,25 +1638,6 @@ select:focus { border-color: var(--gold); }
   flex-wrap: wrap;
   position: relative;
   z-index: 3;
-}
-
-/* Lost dice row — estilos ya no usados para my-area (se queda como fallback) */
-.lost-dice-row {
-  display: flex;
-  gap: 4px;
-  justify-content: center;
-  flex-wrap: wrap;
-  min-height: 20px;
-  pointer-events: none;
-}
-
-.lost-dice-row .die {
-  width: 32px !important;
-  height: 32px !important;
-  padding: 4px !important;
-  gap: 2px !important;
-  border-radius: 6px !important;
-  opacity: 0.5;
 }
 
 /* Dados perdidos propios: entre my-area y el centro */
