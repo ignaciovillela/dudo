@@ -1090,17 +1090,17 @@ select:focus { border-color: var(--gold); }
 .ef-phrases {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  max-width: 220px;
-  padding: 2px 0;
+  gap: 6px;
+  max-width: 300px;
+  padding: 4px 2px;
 }
 .ef-phrase-btn {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(232,184,109,0.2);
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--cream);
-  font-size: 0.72rem;
-  padding: 3px 8px;
+  font-size: 0.85rem;
+  padding: 6px 12px;
   cursor: pointer;
   transition: background 0.1s, border-color 0.1s;
   white-space: nowrap;
