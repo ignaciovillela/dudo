@@ -1029,7 +1029,7 @@ select:focus { border-color: var(--gold); }
 .ef-btn:hover {
   background: rgba(232,184,109,0.18);
   border-color: rgba(232,184,109,0.4);
-  transform: scale(1.22);
+  transform: scale(1.12);
 }
 
 /* Emojis bloqueados por nivel */
@@ -1096,7 +1096,7 @@ select:focus { border-color: var(--gold); }
   position: fixed;
   top: 0;
   left: 0;
-  font-size: 2rem;
+  font-size: 3rem;   /* tamaño base = máximo real; nunca se escala por encima de 1 */
   pointer-events: none;
   z-index: 11000;
   line-height: 1;

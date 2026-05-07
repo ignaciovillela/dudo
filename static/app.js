@@ -360,25 +360,34 @@ const DEFAULT_RULES = {
 // Emojis ordered from "boring" to "exciting", each unlocked at a given level.
 const AVATAR_LEVEL_MAP = [
   { emoji: '🎲', level: 1 },
-  { emoji: '🍀', level: 1 },
   { emoji: '🃏', level: 1 },
+  { emoji: '😏', level: 1 },
+
   { emoji: '🎭', level: 2 },
-  { emoji: '🌙', level: 2 },
-  { emoji: '🛡️', level: 3 },
-  { emoji: '🏹', level: 3 },
+  { emoji: '🌚', level: 2 },
+
+  { emoji: '🦊', level: 3 },
+  { emoji: '🐍', level: 3 },
+
   { emoji: '🐺', level: 4 },
-  { emoji: '🦊', level: 4 },
+  { emoji: '🔥', level: 4 },
+
   { emoji: '🦁', level: 5 },
-  { emoji: '🐯', level: 5 },
-  { emoji: '⚔️', level: 6 },
-  { emoji: '🔥', level: 6 },
-  { emoji: '⚡', level: 7 },
-  { emoji: '💎', level: 7 },
-  { emoji: '🎯', level: 8 },
-  { emoji: '🎪', level: 8 },
-  { emoji: '🦅', level: 9 },
-  { emoji: '👑', level: 9 },
-  { emoji: '💀', level: 10 },
+  { emoji: '⚔️', level: 5 },
+
+  { emoji: '🍀', level: 6 },
+  { emoji: '💎', level: 6 },
+
+  { emoji: '🦂', level: 7 },
+  { emoji: '👁️', level: 7 },
+
+  { emoji: '👑', level: 8 },
+  { emoji: '☠️', level: 8 },
+
+  { emoji: '💀', level: 9 },
+  { emoji: '👹', level: 9 },
+
+  { emoji: '🜏', level: 10 },
 ];
 const AVATAR_OPTIONS = AVATAR_LEVEL_MAP.map(e => e.emoji);
 
@@ -1595,33 +1604,13 @@ function onError(msg) {
 
 // ══════════════════════════════════  EMOJI  ════════════════════════════════════
 
-// Emojis lanzables ordenados por nivel requerido (los más fomes primero).
-// Niveles 1-2: emojis genéricos/aburridos | 3-5: más expresivos | 6-8: dramáticos | 9-10: los mejores
-const THROWABLE_EMOJIS = [
-  { emoji: "👍",  level: 1 },
-  { emoji: "👎",  level: 1 },
-  { emoji: "😐",  level: 1 },
-  { emoji: "🙄",  level: 1 },
-  { emoji: "😬",  level: 2 },
-  { emoji: "👀",  level: 2 },
-  { emoji: "😏",  level: 2 },
-  { emoji: "😤",  level: 3 },
-  { emoji: "😂",  level: 3 },
-  { emoji: "👏",  level: 3 },
-  { emoji: "😎",  level: 4 },
-  { emoji: "🤓",  level: 4 },
-  { emoji: "😱",  level: 5 },
-  { emoji: "🤣",  level: 5 },
-  { emoji: "🫵",  level: 6 },
-  { emoji: "❄️",  level: 6 },
-  { emoji: "🥶",  level: 7 },
-  { emoji: "🔥",  level: 8 },
-  { emoji: "🤯",  level: 9 },
-  { emoji: "💀",  level: 10 },
-  { emoji: "😭",  level: 10 },
-  { emoji: "🤡",  level: 10 },
-  { emoji: "💩",  level: 10 },
-];
+// Fuente de verdad: /static/emojis.json  (compartido con el servidor)
+// Se carga una sola vez al inicio; vacío hasta que resuelva el fetch.
+let THROWABLE_EMOJIS = [];
+fetch('/static/emojis.json')
+  .then(r => r.json())
+  .then(data => { THROWABLE_EMOJIS = data; })
+  .catch(() => { /* si falla, el array queda vacío y los emojis simplemente no aparecen */ });
 
 // Cuántos emojis se muestran en la primera fila (sin expandir)
 const EMOJI_ROW_SIZE = 5;
@@ -1914,9 +1903,10 @@ function animateEmojiThrow(fromId, targetId, emoji) {
     const by = bézier(t,     y0, cpy, y1);   // t sin ease → caída natural
 
     // Escala: crece al salir, se mantiene, se agranda al impactar
-    const scale = t < 0.1  ? 0.4 + t * 6
-                : t < 0.85 ? 1.1
-                :             1.1 + (t - 0.85) * 4.67; // llega más grande
+    // font-size base es 3rem; escala max = 1.0 para evitar upscaling y pixelado
+    const scale = t < 0.1  ? 0.27 + t * 4.6
+                : t < 0.85 ? 0.73
+                :             0.73 + (t - 0.85) * 1.8; // llega a ~1.0 al impactar
 
     const rot = totalRot * t;
     const opacity = t < 0.08 ? t / 0.08 : 1;
@@ -1959,7 +1949,7 @@ function animateEmojiThrow(fromId, targetId, emoji) {
       if (!fallStart) fallStart = ts;
       const t = Math.min((ts - fallStart) / FALL_MS, 1);
       const by    = iy + FALL_DIST * t * t;         // gravedad t²
-      const scale = 0.9 - t * 0.2;                  // encoge suavemente
+      const scale = 0.6 - t * 0.13;                // encoge suavemente
       const r     = rot + 25 * t * side;
       const op    = 0.75 - t * 0.25;                // ya empieza semitransparente
       el.style.transform = `translate(calc(${ix}px - 50%), calc(${by}px - 50%)) scale(${scale}) rotate(${r}deg)`;
@@ -1986,7 +1976,7 @@ function animateEmojiThrow(fromId, targetId, emoji) {
       const t  = Math.min((ts - bounceStart) / dur, 1);
       const arcY   = floorY - bounceH * 4 * t * (1 - t);
       const bx     = ix + lateral * t;
-      const scale  = 0.65 + 0.1 * Math.sin(t * Math.PI);
+      const scale  = 0.43 + 0.07 * Math.sin(t * Math.PI);
       const r      = rot + 60 * t * (lateral > 0 ? 1 : -1);
       const opacity = 0.5 * (1 - t);               // desvanece rápido
 

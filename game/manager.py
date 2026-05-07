@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pathlib
 import random
 import time
 
@@ -8,6 +9,12 @@ from fastapi import WebSocket
 from game.config import DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
+
+# Fuente de verdad compartida con el cliente: static/emojis.json
+_EMOJIS_PATH = pathlib.Path(__file__).parent.parent / "static" / "emojis.json"
+ALLOWED_EMOJIS: frozenset[str] = frozenset(
+    item["emoji"] for item in json.loads(_EMOJIS_PATH.read_text(encoding="utf-8"))
+)
 
 ALLOWED_AVATARS = {
     "🎲", "🦅", "🐺", "🦁", "🐯", "🦊", "💀", "👑", "🎭", "🃏",
@@ -108,7 +115,7 @@ class GameManager:
         if not game:
             return
         msg_type = msg.get("type")
-        if player_id in game.spectators and msg_type != "join":
+        if player_id in game.spectators and msg_type not in {"join", "emoji"}:
             return
         if msg_type not in {"join", "connected"} and not self._allow_message(player_id):
             return
@@ -582,11 +589,6 @@ class GameManager:
     async def _h_emoji(self, room_id, player_id, game, msg):
         if not game.rules.allow_throwable_emojis:
             return
-        ALLOWED_EMOJIS = {
-            "👍","👎","😐","🙄","😬","👀","😏","😤","😂","👏",
-            "😎","🤓","😱","🤣","🫵","❄️","🥶","🔥","🤯","💀",
-            "😭","🤡","💩",
-        }
         emoji = msg.get("emoji")
         target_id = msg.get("target_id")
         if not isinstance(emoji, str) or emoji not in ALLOWED_EMOJIS:
