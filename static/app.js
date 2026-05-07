@@ -1855,7 +1855,28 @@ function onQuickChat(msg) {
   const isSelf = msg.from_id === S.playerId;
   const label = isSelf ? 'Tú' : msg.from_name;
   log(`${msg.from_avatar} ${label}: "${msg.phrase}"`, 'chat');
-  _showQuickChatBubble(msg.from_id, msg.phrase);
+  // Si el emisor es un espectador (no tiene carta en la mesa) → mostrar en el display central
+  const isPlayer = isSelf || !!document.querySelector(`#other-players .player-card[data-pid="${msg.from_id}"]`);
+  if (isPlayer) {
+    _showQuickChatBubble(msg.from_id, msg.phrase);
+  } else {
+    showSpectatorQcDisplay(`${msg.from_avatar} ${msg.from_name}: "${msg.phrase}"`);
+  }
+}
+
+function _showQuickChatBubble(fromId, phrase) {
+  // Busca la carta exacta del jugador: oponente o self-card propia
+  const card = fromId === S.playerId
+    ? document.getElementById('self-card')
+    : document.querySelector(`#other-players .player-card[data-pid="${fromId}"]`);
+  if (!card) return;
+  const existing = card.querySelector('.qc-bubble');
+  if (existing) existing.remove();
+  const bubble = document.createElement('div');
+  bubble.className = 'qc-bubble';
+  bubble.textContent = phrase;
+  card.appendChild(bubble);
+  setTimeout(() => bubble.remove(), 3000);
 }
 
 let _spectatorQcTimer = null;
