@@ -5,6 +5,12 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.3.6] - 2026-05-07
+
+### Added
+- Clasificación final con orden de eliminación: el backend registra en qué ronda fue eliminado cada jugador; el payload `game_over` incluye `standings` (lista ordenada); el overlay de fin de partida muestra la tabla de posiciones completa con avatar y nombre de cada jugador, resaltando al jugador local.
+- Chat rápido con frases predefinidas: al pasar el cursor sobre cualquier carta de jugador (incluyendo la propia) aparece una sección de frases rápidas en el popup de emojis (¡Mentira!, Buen bluff, No te creo, etc.); al seleccionar una, aparece como burbuja temporal sobre la carta del emisor y se registra en el log de partida; los espectadores también pueden usarlas.
+
 ## [0.3.5] - 2026-05-06
 
 ### Fixed

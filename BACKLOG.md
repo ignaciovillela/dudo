@@ -44,6 +44,8 @@ Referencia completa en `CHANGELOG.md`.
 - UX: indicación previa de acción automática por timeout (aviso ≤3s).
 - Contador de espectadores visible en la mesa en tiempo real.
 - Vista dedicada para jugadores eliminados (panel de acciones reemplazado por mensaje de espectador).
+- Clasificación final con orden de eliminación en overlay de game over.
+- Chat rápido con frases predefinidas desde el popup de emojis.
 
 ---
 
@@ -57,14 +59,6 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: al desconectarse el jugador activo durante una partida, el siguiente jugador recibe inmediatamente el mensaje `turn`.
 
-### 17. Clasificación final con orden de eliminación
-**Por qué:** el overlay de game over solo muestra al ganador/perdedor. No hay forma de saber en qué orden fueron cayendo los jugadores ni cuántas rondas sobrevivió cada uno.
-- Alcance técnico: frontend + backend.
-- Archivos principales: `game/manager.py` (`_end_game`, `_h_dudo`, `_h_calzo`), `static/app.js` (`onGameOver`), `static/index.html`.
-- Dificultad estimada: `Media`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: el backend registra el orden de eliminación durante la partida; el payload `game_over` incluye `standings` (lista ordenada de jugadores con ronda de eliminación); el overlay de fin de partida muestra la tabla de posiciones completa.
-
 ### 18. Total de dados coincidentes visible en el reveal
 **Por qué:** durante los 7 segundos de revelación no se muestra cuántos dados de la cara apostada había en total en la mesa. Esa información existe en el payload `reveal` pero no se resume en ningún lugar visible.
 - Alcance técnico: frontend.
@@ -77,7 +71,7 @@ Referencia completa en `CHANGELOG.md`.
 
 ## 🟡 Prioridad media
 
-### 8. UX: indicador de carga al unirse a una sala
+### 8. UX: indicador de carga al unirse a una sala [revisar si es necesario, podría ser que el proceso de unirse es tan rápido que no vale la pena]
 **Por qué:** entre hacer click en "Unirse" y recibir la respuesta `joined` del servidor, la UI no da ningún feedback. En conexiones lentas el usuario no sabe si algo está pasando.
 - Alcance técnico: frontend.
 - Archivos principales: `static/app.js`, `static/index.html`, `static/style.css`.
@@ -92,14 +86,6 @@ Referencia completa en `CHANGELOG.md`.
 - Dificultad estimada: `Baja`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: el stepper de cantidad en el cliente tiene un máximo de `total_dados`; el backend rechaza apuestas con `quantity > total_dados` con mensaje de error.
-
-### 12. Chat rápido con frases predefinidas
-**Por qué:** el único canal social son los emojis lanzables; en un juego de bluff, la comunicación verbal es parte de la experiencia. Frases predefinidas evitan la complejidad de un chat libre y mantienen el ritmo del juego.
-- Alcance técnico: frontend + backend.
-- Archivos principales: `static/app.js`, `static/index.html`, `static/style.css`, `game/manager.py`.
-- Dificultad estimada: `Media`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: hay un conjunto de frases predefinidas (ej. "¡Mentira!", "¡Suerte!", "Buen bluff", "No te creo") activables poniendo el mouse sobre uno mismo (de igual modo que lanzar emojis), en cualquier momento; el mensaje aparece brevemente sobre la carta del jugador que lo envía y en el log; los espectadores también pueden usarlas.
 
 ### 13. Sonido direccional (pan estéreo por posición en la mesa)
 **Por qué:** los sonidos de acciones de los oponentes suenan igual independientemente de dónde estén en la mesa. Con pan estéreo, el jugador a tu izquierda suena a la izquierda y el de la derecha a la derecha, añadiendo inmersión.
@@ -220,11 +206,9 @@ Referencia completa en `CHANGELOG.md`.
 | # | Mejora | Archivos afectados | Dificultad | Riesgo | Impacto |
 |---|--------|--------------------|------------|--------|---------|
 | 4 | Fix: desconexión congela turno activo | `manager.py` | Baja | Bajo | Alto |
-| 17 | Clasificación final con orden de eliminación | `manager.py`, `app.js`, `index.html` | Media | Bajo | Alto |
 | 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
 | 11 | Fix: cap en cantidad apostada | `app.js`, `models.py` | Baja | Bajo | Bajo |
-| 12 | Chat rápido con frases predefinidas | `app.js`, `index.html`, `style.css`, `manager.py` | Media | Bajo | Alto |
 | 13 | Sonido direccional (pan estéreo por posición) | `app.js` | Media | Bajo | Medio |
 | 14 | Contador de probabilidad estimada (aprox.) | `app.js` | Media | Bajo | Medio |
 | 15 | Espectadores interactivos (emojis + frases) | `manager.py`, `app.js` | Baja | Bajo | Medio |

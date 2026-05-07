@@ -113,6 +113,7 @@ class Game:
     direction: int = 1              # 1 = horario, -1 = antihorario
     round_first_player: str = ""    # jugador que inicia la ronda (puede cambiar sentido)
     rules: RuleConfig = field(default_factory=RuleConfig)
+    elimination_order: list = field(default_factory=list)  # [{"id", "name", "avatar", "round"}] orden de eliminación
 
     def active_players(self) -> list[str]:
         return [

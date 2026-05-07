@@ -957,6 +957,7 @@ function handleMsg(msg) {
     kicked:             onKicked,
     error:              onError,
     emoji_thrown:       onEmojiThrown,
+    quick_chat:         onQuickChat,
   };
   const fn = H[msg.type];
   if (fn) fn(msg);
@@ -1566,6 +1567,25 @@ function onGameOver(msg) {
   const goXp = document.getElementById('go-xp');
   if (goXp) goXp.textContent = xpLines;
 
+  // Build standings table
+  const goStandings = document.getElementById('go-standings');
+  if (goStandings && Array.isArray(msg.standings) && msg.standings.length > 1) {
+    goStandings.innerHTML = '';
+    const total = msg.standings.length;
+    msg.standings.slice().reverse().forEach((entry, i) => {
+      const pos = total - i;
+      const li = document.createElement('li');
+      li.className = 'go-standing-row';
+      const isSelf = entry.id === S.playerId;
+      if (isSelf) li.classList.add('go-standing-row--self');
+      li.innerHTML = `<span class="go-pos">${pos}</span><span class="go-avatar">${entry.avatar}</span><span class="go-sname">${entry.name}</span>`;
+      goStandings.appendChild(li);
+    });
+    goStandings.style.display = 'flex';
+  } else if (goStandings) {
+    goStandings.style.display = 'none';
+  }
+
   const revealSeconds = Number(msg.reveal_seconds || 7);
   S.gameOverTimer = setTimeout(() => {
     S.gameOverTimer = null;
@@ -1619,6 +1639,42 @@ function throwEmoji(targetPid, emoji) {
   if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
   if (!S.rules?.allow_throwable_emojis) return;
   send({ type: 'emoji', target_id: targetPid, emoji });
+}
+
+// ══════════════════════════════  QUICK CHAT  ═══════════════════════════════════
+
+const QUICK_PHRASES = [
+  '¡Mentira!', '¡Suerte!', 'Buen bluff', 'No te creo',
+  '¡Calzo!', 'Vamos', '😅', '🤔', 'Eso era mentira',
+  '¡Bien jugado!', 'Mala suerte', 'Ups',
+];
+
+function sendQuickChat(phrase) {
+  if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
+  send({ type: 'quick_chat', phrase });
+}
+
+function onQuickChat(msg) {
+  const isSelf = msg.from_id === S.playerId;
+  const label = isSelf ? 'Tú' : msg.from_name;
+  log(`${msg.from_avatar} ${label}: "${msg.phrase}"`, 'chat');
+  _showQuickChatBubble(msg.from_id, msg.phrase);
+}
+
+function _showQuickChatBubble(fromId, phrase) {
+  // Busca la carta del jugador (propio o oponente) y muestra una burbuja temporal
+  const card = document.querySelector(
+    `#other-players .player-card[data-pid="${fromId}"], #self-card`
+  );
+  if (!card) return;
+  const existing = card.querySelector('.qc-bubble');
+  if (existing) existing.remove();
+  const bubble = document.createElement('div');
+  bubble.className = 'qc-bubble';
+  bubble.textContent = phrase;
+  card.style.position = 'relative';
+  card.appendChild(bubble);
+  setTimeout(() => bubble.remove(), 3000);
 }
 
 function onEmojiThrown(msg) {
@@ -1730,6 +1786,28 @@ function _efBuildPopup() {
   popup.appendChild(row);
   popup.appendChild(extra);
 
+  // Separador + frases rápidas
+  const sep = document.createElement('div');
+  sep.className = 'ef-phrases-sep';
+  popup.appendChild(sep);
+
+  const phrases = document.createElement('div');
+  phrases.className = 'ef-phrases';
+  QUICK_PHRASES.forEach(phrase => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ef-phrase-btn';
+    btn.textContent = phrase;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      sendQuickChat(phrase);
+      _efScheduleHide();
+    });
+    phrases.appendChild(btn);
+  });
+  popup.appendChild(phrases);
+
   document.body.appendChild(popup);
   _efPopup = popup;
   return popup;
@@ -1755,6 +1833,14 @@ function _efMakeBtn(item) {
 function _efRefreshPopupLocks() {
   if (!_efPopup) return;
   const { level } = loadLevelData();
+  const isSelf = _efPid === S.playerId;
+  // Ocultar sección de emojis lanzables cuando es la propia carta
+  const row = _efPopup.querySelector('.ef-row');
+  const extra = _efPopup.querySelector('.ef-extra');
+  const sep = _efPopup.querySelector('.ef-phrases-sep');
+  if (row) row.style.display = isSelf ? 'none' : '';
+  if (extra) { if (isSelf) { extra.style.display = 'none'; _efPopup.classList.remove('ef-popup--expanded'); } else { extra.style.display = ''; } }
+  if (sep) sep.style.display = isSelf ? 'none' : '';
   _efPopup.querySelectorAll('.ef-btn[data-emoji-level]').forEach(btn => {
     const needed = parseInt(btn.dataset.emojiLevel, 10);
     const locked = level < needed;
@@ -1823,6 +1909,17 @@ function maybeInitEmojiHover() {
         }
         return;
       }
+    }
+
+    // ¿Está sobre la propia carta? (solo frases rápidas, sin emojis lanzables)
+    const selfCard = document.getElementById('self-card');
+    if (selfCard && _efHitTest(selfCard, x, y)) {
+      if (S.playerId !== _efPid) {
+        _efShow(S.playerId, selfCard);
+      } else {
+        _efCancelHide();
+      }
+      return;
     }
 
     // Fuera de todo — programar ocultamiento

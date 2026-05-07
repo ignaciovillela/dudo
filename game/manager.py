@@ -115,7 +115,7 @@ class GameManager:
         if not game:
             return
         msg_type = msg.get("type")
-        if player_id in game.spectators and msg_type not in {"join", "emoji"}:
+        if player_id in game.spectators and msg_type not in {"join", "emoji", "quick_chat"}:
             return
         if msg_type not in {"join", "connected", "select_bid"} and not self._allow_message(player_id):
             return
@@ -132,6 +132,7 @@ class GameManager:
             "dudo":      self._h_dudo,
             "calzo":     self._h_calzo,
             "emoji":     self._h_emoji,
+            "quick_chat": self._h_quick_chat,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -608,8 +609,7 @@ class GameManager:
         else:
             await self._apply_loss(room_id, game, player_id)
 
-    async def _h_emoji(self, room_id, player_id, game, msg):
-        if not game.rules.allow_throwable_emojis:
+    async def _h_emoji(self, room_id, player_id, game, msg):        if not game.rules.allow_throwable_emojis:
             return
         emoji = msg.get("emoji")
         target_id = msg.get("target_id")
@@ -629,6 +629,27 @@ class GameManager:
             "emoji": emoji,
         })
 
+    ALLOWED_QUICK_PHRASES = {
+        "¡Mentira!", "¡Suerte!", "Buen bluff", "No te creo",
+        "¡Calzo!", "Vamos", "😅", "🤔", "Eso era mentira",
+        "¡Bien jugado!", "Mala suerte", "Ups",
+    }
+
+    async def _h_quick_chat(self, room_id, player_id, game, msg):
+        phrase = msg.get("phrase")
+        if not isinstance(phrase, str) or phrase not in self.ALLOWED_QUICK_PHRASES:
+            return
+        sender = game.players.get(player_id)
+        sender_name = sender.name if sender else game.spectators.get(player_id, "?")
+        sender_avatar = sender.avatar if sender else "👁"
+        await self._broadcast(room_id, {
+            "type": "quick_chat",
+            "from_id": player_id,
+            "from_name": sender_name,
+            "from_avatar": sender_avatar,
+            "phrase": phrase,
+        })
+
     # ------------------------------------------------------------------ game flow
 
     async def _begin_game(self, room_id: str, game: Game):
@@ -643,6 +664,7 @@ class GameManager:
         game.passed_players = set()
         game.bid_history = []
         game.direction = 1
+        game.elimination_order = []
         active = game.active_players()
         game.current_player_idx = random.randint(0, len(active) - 1) if active else 0
         game.round_first_player = game.current_player_id()
@@ -660,10 +682,17 @@ class GameManager:
 
         if game.players[loser_id].dice_count <= 0:
             game.players[loser_id].dice_count = 0
+            p = game.players[loser_id]
+            game.elimination_order.append({
+                "id": loser_id,
+                "name": p.name,
+                "avatar": p.avatar,
+                "round": game.round_number,
+            })
             await self._broadcast(room_id, {
                 "type": "player_eliminated",
                 "player_id": loser_id,
-                "player_name": game.players[loser_id].name,
+                "player_name": p.name,
             })
 
         outcome = self._rules_engine(game).resolve_outcome(game, loser_id)
@@ -699,11 +728,26 @@ class GameManager:
     async def _end_game(self, room_id: str, game: Game, outcome):
         game.phase = "lobby"
         self._cancel_turn_timeout(room_id)
+
+        # Construir standings: eliminados en orden + ganador/sobreviviente al final
+        standings = list(game.elimination_order)
+        # El/los jugadores con dados > 0 van al final (ganadores/sobrevivientes)
+        for pid in game.player_order:
+            p = game.players.get(pid)
+            if p and p.dice_count > 0:
+                standings.append({
+                    "id": pid,
+                    "name": p.name,
+                    "avatar": p.avatar,
+                    "round": game.round_number,
+                })
+
         payload = {
             "type": "game_over",
             "result_mode": outcome.kind,
             "rules": game.rules.to_dict(),
             "reveal_seconds": REVEAL_SECONDS,
+            "standings": standings,
         }
         if outcome.kind == "winner":
             payload.update({"winner_id": outcome.player_id, "winner_name": outcome.player_name})
@@ -717,6 +761,7 @@ class GameManager:
         game.current_bid = None
         game.bid_history = []
         game.round_number = 0
+        game.elimination_order = []
 
     def _rules_engine(self, game: Game) -> RuleEngine:
         return RuleEngine.from_config(game.rules)
