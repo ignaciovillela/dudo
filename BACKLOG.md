@@ -8,7 +8,7 @@ Al implementar una mejora, eliminarla de este backlog y registrarla en `CHANGELO
 
 ### Cómo agregar nuevas mejoras
 
-- Crear el item en la sección de prioridad correspondiente (`🔴 Alta` o `🟡 Media`; si agregas baja, crear `🟢 Baja`).
+- Crear el item en la sección de prioridad correspondiente (`🔴 Alta`, `🟡 Media` o `🟢 Baja`).
 - Mantener este formato mínimo por mejora:
 
 ```markdown
@@ -25,6 +25,7 @@ Al implementar una mejora, eliminarla de este backlog y registrarla en `CHANGELO
 - Ordenar dentro de cada prioridad por **impacto primero**, **dificultad después** y **riesgo como desempate**.
 - Actualizar la tabla de `## Resumen` al agregar/quitar una mejora, incluyendo riesgo y dificultad.
 - Cuando se implemente: 1) eliminarla del backlog, 2) registrar el cambio en `CHANGELOG.md`.
+- Cada cambio debe tener un commit dedicado con mensaje descriptivo (ej. "Fix: desconexión durante turno activo congela partida") y referenciar el número de la mejora (ej. "Backlog #4").
 
 ## Implementado recientemente (resumen)
 
