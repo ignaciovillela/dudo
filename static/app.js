@@ -2031,13 +2031,16 @@ function _efRefreshPopupLocks() {
   if (!_efPopup) return;
   const { level } = loadLevelData();
   const isSelf = _efPid === S.playerId;
-  // Ocultar sección de emojis lanzables cuando es la propia carta
+  // Emojis lanzables: solo sobre oponentes
   const row = _efPopup.querySelector('.ef-row');
   const extra = _efPopup.querySelector('.ef-extra');
   const sep = _efPopup.querySelector('.ef-phrases-sep');
+  const phrases = _efPopup.querySelector('.ef-phrases');
   if (row) row.style.display = isSelf ? 'none' : '';
   if (extra) { if (isSelf) { extra.style.display = 'none'; _efPopup.classList.remove('ef-popup--expanded'); } else { extra.style.display = ''; } }
-  if (sep) sep.style.display = isSelf ? 'none' : '';
+  // Frases rápidas: solo sobre la propia carta
+  if (sep)     sep.style.display     = isSelf ? '' : 'none';
+  if (phrases) phrases.style.display = isSelf ? '' : 'none';
   _efPopup.querySelectorAll('.ef-btn[data-emoji-level]').forEach(btn => {
     const needed = parseInt(btn.dataset.emojiLevel, 10);
     const locked = level < needed;
@@ -2647,11 +2650,32 @@ function updateDirectionIndicator() {
 function updateControls() {
   if (S.isSpectator) {
     hideControls();
-    document.getElementById('bid-panel').style.opacity = '0.45';
+    document.getElementById('bid-panel').style.opacity = '1';
     document.getElementById('wait-msg').style.display = 'block';
     document.getElementById('wait-msg').textContent = 'Modo espectador: solo observas.';
+    // Mostrar panel de frases integrado
+    const sp = document.getElementById('spectator-phrases');
+    if (sp) {
+      sp.style.display = (S.phase === 'playing' || S.phase === 'reveal') ? 'block' : 'none';
+      const grid = document.getElementById('spectator-phrases-grid');
+      if (grid && !grid.dataset.built) {
+        grid.dataset.built = '1';
+        QUICK_PHRASES.forEach(phrase => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ef-phrase-btn';
+          btn.textContent = phrase;
+          btn.addEventListener('click', () => sendQuickChat(phrase));
+          grid.appendChild(btn);
+        });
+      }
+    }
     return;
   }
+
+  // Jugador activo: asegurar que el panel de espectador esté oculto
+  const _sp = document.getElementById('spectator-phrases');
+  if (_sp) _sp.style.display = 'none';
 
   const isMyTurn      = S.currentPid === S.playerId && S.phase === 'playing';
   const playing       = S.phase === 'playing';
