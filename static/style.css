@@ -1496,6 +1496,30 @@ select:focus { border-color: var(--gold); }
   margin-bottom: 4px;
 }
 
+/* ── Spectator quick-chat display (center of table, below bid-area) ── */
+.spectator-qc-display {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(43% + 20px);
+  background: rgba(10,20,14,0.88);
+  border: 1px solid rgba(232,184,109,0.4);
+  border-radius: 14px;
+  padding: 8px 20px;
+  font-size: 1rem;
+  color: var(--cream);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  animation: ef-in 0.18s ease forwards;
+}
+.spectator-qc-fadeout {
+  animation: fadeOut 0.4s ease forwards;
+}
+@keyframes fadeOut {
+  to { opacity: 0; transform: translateX(-50%) translateY(6px); }
+}
+
 /* ── Reveal overlay ── */
 .reveal-overlay {
   position: absolute;

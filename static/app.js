@@ -1858,6 +1858,23 @@ function onQuickChat(msg) {
   _showQuickChatBubble(msg.from_id, msg.phrase);
 }
 
+let _spectatorQcTimer = null;
+function showSpectatorQcDisplay(phrase) {
+  const el = document.getElementById('spectator-qc-display');
+  if (!el) return;
+  if (_spectatorQcTimer) { clearTimeout(_spectatorQcTimer); _spectatorQcTimer = null; }
+  el.textContent = `"${phrase}"`;
+  el.style.display = 'block';
+  el.classList.remove('spectator-qc-fadeout');
+  // Forzar reflow para reiniciar animación
+  void el.offsetWidth;
+  _spectatorQcTimer = setTimeout(() => {
+    el.classList.add('spectator-qc-fadeout');
+    setTimeout(() => { el.style.display = 'none'; el.classList.remove('spectator-qc-fadeout'); }, 400);
+    _spectatorQcTimer = null;
+  }, 3000);
+}
+
 function _showQuickChatBubble(fromId, phrase) {
   // Busca la carta del jugador (propio o oponente) y muestra una burbuja temporal
   const card = document.querySelector(
@@ -2650,9 +2667,14 @@ function updateDirectionIndicator() {
 function updateControls() {
   if (S.isSpectator) {
     hideControls();
+    // Ocultar bid builder y botones de acción — el espectador no juega
+    const bidBuilder = document.querySelector('#bid-panel .bid-builder');
+    const actionBtns = document.querySelector('#bid-panel .action-btns');
+    if (bidBuilder) bidBuilder.style.display = 'none';
+    if (actionBtns) actionBtns.style.display = 'none';
     document.getElementById('bid-panel').style.opacity = '1';
     document.getElementById('wait-msg').style.display = 'block';
-    document.getElementById('wait-msg').textContent = 'Modo espectador: solo observas.';
+    document.getElementById('wait-msg').textContent = 'Modo espectador';
     // Mostrar panel de frases integrado
     const sp = document.getElementById('spectator-phrases');
     if (sp) {
@@ -2665,7 +2687,10 @@ function updateControls() {
           btn.type = 'button';
           btn.className = 'ef-phrase-btn';
           btn.textContent = phrase;
-          btn.addEventListener('click', () => sendQuickChat(phrase));
+          btn.addEventListener('click', () => {
+            sendQuickChat(phrase);
+            showSpectatorQcDisplay(phrase);
+          });
           grid.appendChild(btn);
         });
       }
@@ -2673,9 +2698,13 @@ function updateControls() {
     return;
   }
 
-  // Jugador activo: asegurar que el panel de espectador esté oculto
+  // Jugador activo: asegurar que bid-builder y action-btns sean visibles y spectator-phrases oculto
   const _sp = document.getElementById('spectator-phrases');
   if (_sp) _sp.style.display = 'none';
+  const _bb = document.querySelector('#bid-panel .bid-builder');
+  const _ab = document.querySelector('#bid-panel .action-btns');
+  if (_bb) _bb.style.display = '';
+  if (_ab) _ab.style.display = '';
 
   const isMyTurn      = S.currentPid === S.playerId && S.phase === 'playing';
   const playing       = S.phase === 'playing';
