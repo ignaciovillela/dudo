@@ -1501,7 +1501,7 @@ select:focus { border-color: var(--gold); }
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 140px;
+  bottom: -40px;
   background: rgba(10,20,14,0.88);
   border: 1px solid rgba(232,184,109,0.4);
   border-radius: 14px;
