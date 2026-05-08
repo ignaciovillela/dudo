@@ -408,13 +408,14 @@ class GameManager:
                                     {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
 
         difficulty = msg.get("difficulty", "medium")
-        if difficulty not in {"easy", "medium", "hard"}:
+        if difficulty not in {"easy", "medium", "hard", "very_hard"}:
             difficulty = "medium"
 
         bot_names = {
-            "easy":   ["Botín", "Novato", "Pipón", "Torpe"],
-            "medium": ["Calculín", "Medio", "Astuto", "Listo"],
-            "hard":   ["Maestro", "Genio", "Experto", "HAL"],
+            "easy":      ["Botín", "Novato", "Pipón", "Torpe"],
+            "medium":    ["Calculín", "Medio", "Astuto", "Listo"],
+            "hard":      ["Maestro", "Genio", "Experto", "HAL"],
+            "very_hard": ["Oráculo", "Némesis", "Profeta", "Centinela"],
         }
         existing_bot_names = {p.name for p in game.players.values() if p.is_bot}
         candidates = [n for n in bot_names[difficulty] if n not in existing_bot_names]
@@ -664,7 +665,7 @@ class GameManager:
         action.apply(result)
 
         if isinstance(result, DudoPasoResult):
-            await self._broadcast(room_id, {
+            reveal_payload = {
                 "type": "reveal",
                 "action": "paso",
                 "challenger_id": result.challenger_id,
@@ -677,9 +678,10 @@ class GameManager:
                 "challenger_gained": result.challenger_gained,
                 "all_dice": game.all_dice_reveal(),
                 "reveal_seconds": REVEAL_SECONDS,
-            })
+            }
+            await self._broadcast(room_id, reveal_payload)
         else:
-            await self._broadcast(room_id, {
+            reveal_payload = {
                 "type": "reveal",
                 "action": "dudo",
                 "challenger_id": result.challenger_id,
@@ -691,8 +693,10 @@ class GameManager:
                 "loser_id": result.loser_id,
                 "all_dice": game.all_dice_reveal(),
                 "reveal_seconds": REVEAL_SECONDS,
-            })
+            }
+            await self._broadcast(room_id, reveal_payload)
 
+        bot_engine.notify_reveal(game, reveal_payload)
         await self._apply_loss(room_id, game, result.loser_id)
 
     async def _h_calzo(self, room_id, player_id, game, msg):
@@ -708,7 +712,7 @@ class GameManager:
         result = action.resolve()
         action.apply(result)
 
-        await self._broadcast(room_id, {
+        calzo_payload = {
             "type": "reveal",
             "action": "calzo",
             "challenger_id": result.challenger_id,
@@ -722,7 +726,9 @@ class GameManager:
             "is_gavilan": result.is_gavilan,
             "all_dice": game.all_dice_reveal(),
             "reveal_seconds": REVEAL_SECONDS,
-        })
+        }
+        await self._broadcast(room_id, calzo_payload)
+        bot_engine.notify_reveal(game, calzo_payload)
 
         if result.exact:
             await self._new_round(room_id, game, result.challenger_id)

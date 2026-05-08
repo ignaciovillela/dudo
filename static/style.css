@@ -817,18 +817,62 @@ select:focus { border-color: var(--gold); }
   color: var(--text-dim);
   white-space: nowrap;
 }
-.btn-bot {
-  background: rgba(99, 179, 237, 0.15);
-  color: #63b3ed;
-  border: 1px solid rgba(99, 179, 237, 0.3);
+/* Fácil — verde */
+.btn-bot--easy {
+  background: rgba(39, 174, 96, 0.15);
+  color: #2ecc71;
+  border: 1px solid rgba(39, 174, 96, 0.35);
 }
-.btn-bot:hover {
-  background: rgba(99, 179, 237, 0.28);
+.btn-bot--easy:hover {
+  background: rgba(39, 174, 96, 0.28);
 }
-.lobby-player-row .ready-badge.bot-badge {
-  background: rgba(99, 179, 237, 0.15);
-  color: #63b3ed;
-  border-color: rgba(99, 179, 237, 0.3);
+/* Medio — dorado (acento principal del menú) */
+.btn-bot--medium {
+  background: rgba(232, 184, 109, 0.15);
+  color: #e8b86d;
+  border: 1px solid rgba(232, 184, 109, 0.35);
+}
+.btn-bot--medium:hover {
+  background: rgba(232, 184, 109, 0.28);
+}
+/* Difícil — naranja */
+.btn-bot--hard {
+  background: rgba(230, 126, 34, 0.15);
+  color: #e67e22;
+  border: 1px solid rgba(230, 126, 34, 0.35);
+}
+.btn-bot--hard:hover {
+  background: rgba(230, 126, 34, 0.28);
+}
+/* Muy difícil — rojo */
+.btn-bot--very-hard {
+  background: rgba(192, 57, 43, 0.15);
+  color: #e74c3c;
+  border: 1px solid rgba(192, 57, 43, 0.40);
+}
+.btn-bot--very-hard:hover {
+  background: rgba(192, 57, 43, 0.28);
+}
+/* Badges en lista de jugadores */
+.lobby-player-row .ready-badge.bot-badge--easy {
+  background: rgba(39, 174, 96, 0.15);
+  color: #2ecc71;
+  border-color: rgba(39, 174, 96, 0.35);
+}
+.lobby-player-row .ready-badge.bot-badge--medium {
+  background: rgba(232, 184, 109, 0.15);
+  color: #e8b86d;
+  border-color: rgba(232, 184, 109, 0.35);
+}
+.lobby-player-row .ready-badge.bot-badge--hard {
+  background: rgba(230, 126, 34, 0.15);
+  color: #e67e22;
+  border-color: rgba(230, 126, 34, 0.35);
+}
+.lobby-player-row .ready-badge.bot-badge--very-hard {
+  background: rgba(192, 57, 43, 0.15);
+  color: #e74c3c;
+  border-color: rgba(192, 57, 43, 0.40);
 }
 
 .lobby-subactions {
@@ -957,6 +1001,24 @@ select:focus { border-color: var(--gold); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Badge de bot en la mesa de juego */
+.player-bot-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+.player-bot-tag.bot-tag--easy      { color: #2ecc71; background: rgba(39,174,96,0.15);  border-color: rgba(39,174,96,0.35); }
+.player-bot-tag.bot-tag--medium    { color: #e8b86d; background: rgba(232,184,109,0.15); border-color: rgba(232,184,109,0.35); }
+.player-bot-tag.bot-tag--hard      { color: #e67e22; background: rgba(230,126,34,0.15); border-color: rgba(230,126,34,0.35); }
+.player-bot-tag.bot-tag--very-hard { color: #e74c3c; background: rgba(192,57,43,0.15);  border-color: rgba(192,57,43,0.40); }
 
 .player-card-header {
   display: flex;

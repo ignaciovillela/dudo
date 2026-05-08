@@ -2528,8 +2528,9 @@ function renderLobbyPlayers() {
 
     const badge = document.createElement('div');
     if (p.is_bot) {
-      const diffLabel = { easy: 'Fácil', medium: 'Medio', hard: 'Difícil' }[p.bot_difficulty] || 'Bot';
-      badge.className = 'ready-badge ready bot-badge';
+      const diffLabel = { easy: 'Fácil', medium: 'Medio', hard: 'Difícil', very_hard: 'Muy difícil' }[p.bot_difficulty] || 'Bot';
+      const diffClass = `bot-badge--${(p.bot_difficulty || 'medium').replace('_', '-')}`;
+      badge.className = `ready-badge ready bot-badge ${diffClass}`;
       badge.innerHTML = `<i class="fa-solid fa-robot" aria-hidden="true"></i> Bot · ${diffLabel}`;
     } else {
       badge.className = 'ready-badge' + (p.connected ? (p.ready ? ' ready' : '') : ' inactive');
@@ -2638,6 +2639,16 @@ function renderOtherPlayers() {
     }
 
     headerEl.appendChild(nameEl);
+
+    // Badge de bot en mesa: icono coloreado según dificultad
+    if (p.is_bot) {
+      const botTag = document.createElement('span');
+      const diffClass = `bot-tag--${(p.bot_difficulty || 'medium').replace('_', '-')}`;
+      botTag.className = `player-bot-tag ${diffClass}`;
+      botTag.title = { easy: 'Bot fácil', medium: 'Bot medio', hard: 'Bot difícil', very_hard: 'Bot muy difícil' }[p.bot_difficulty] || 'Bot';
+      botTag.innerHTML = '<i class="fa-solid fa-robot" aria-hidden="true"></i>';
+      headerEl.appendChild(botTag);
+    }
 
     // Streak badge
     const streak = S.streaks[pid] || 0;

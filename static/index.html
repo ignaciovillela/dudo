@@ -147,9 +147,10 @@
       </div>
       <div id="host-bot-controls" class="host-bot-controls" style="display:none">
         <span class="bot-controls-label"><i class="fa-solid fa-robot" aria-hidden="true"></i> Agregar bot:</span>
-        <button class="btn btn-sm btn-bot" type="button" onclick="addBot('easy')" title="Bot fácil: juega aleatoriamente">Fácil</button>
-        <button class="btn btn-sm btn-bot" type="button" onclick="addBot('medium')" title="Bot medio: usa probabilidades básicas">Medio</button>
-        <button class="btn btn-sm btn-bot" type="button" onclick="addBot('hard')" title="Bot difícil: calcula probabilidades con sus dados">Difícil</button>
+        <button class="btn btn-sm btn-bot btn-bot--easy" type="button" onclick="addBot('easy')" title="Bot fácil: juega aleatoriamente">Fácil</button>
+        <button class="btn btn-sm btn-bot btn-bot--medium" type="button" onclick="addBot('medium')" title="Bot medio: usa probabilidades básicas">Medio</button>
+        <button class="btn btn-sm btn-bot btn-bot--hard" type="button" onclick="addBot('hard')" title="Bot difícil: calcula probabilidades con sus dados">Difícil</button>
+        <button class="btn btn-sm btn-bot btn-bot--very-hard" type="button" onclick="addBot('very_hard')" title="Bot muy difícil: memoria, modelado de rivales, Gavilán y bluff">Muy difícil</button>
       </div>
       <div class="lobby-subactions">
         <button class="btn btn-sm" type="button" onclick="openStatsModal()">📊 Mis stats</button>

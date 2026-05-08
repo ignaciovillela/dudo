@@ -5,7 +5,29 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
-## [0.3.10] - 2026-05-07
+## [0.3.11] - 2026-05-08
+
+### Added
+- Bot **Muy difícil** (`very_hard`): nueva estrategia `VeryHardBot` en `game/bot.py` con memoria de rondas, modelado de rivales, bluff deliberado, Gavilán adaptativo y Calzo perfecto.
+  - **Memoria de rondas**: registra bids por rival en cada ronda para estimar su tasa de bluff.
+  - **Modelado de rivales**: ajusta el umbral de dudo dinámicamente — sube a 0.30 contra apostadores con historial de bluff alto (>40%) y baja a 0.14 contra jugadores muy conservadores (<10% con ≥5 bids registrados).
+  - **Gavilán adaptativo**: intenta Gavilán fuera de turno solo si la expectativa supera la cantidad apostada, con gate aleatorio (55%); si tiene 5 dados es muy reticente (umbral 98%, gate 20%); espera al menos 1 bid ajeno en la ronda antes de intervenir.
+  - **Calzo perfecto**: sin gate aleatorio — Calzo siempre que la expectativa puntual esté a ≤0.35 de la cantidad apostada y la probabilidad bayesiana sea ≥75%.
+  - **Bluff deliberado**: 12% de las veces apuesta intencionalmente débil para manipular al siguiente jugador.
+  - **Agresividad adaptativa**: con ≤3 dados acepta bids con umbral menor (45% en lugar de 55%) y sube el umbral de paso (85% en lugar de 75%), aumentando la presión cuando está acorralado.
+  - Nombres de bot exclusivos: Oráculo, Némesis, Profeta, Centinela.
+- Botón **Muy difícil** en los controles de bots del lobby; badge morado distintivo en la lista de jugadores.
+
+### Fixed
+- El host conserva el liderazgo al pasarse a espectador en el lobby: `_h_become_spectator` ya no transfiere `self.hosts`; `_host_id` acepta al host en `spectators` además de en `players`.
+- Un bot nunca puede ser host: `_pick_connected_host` filtra `not player.is_bot`; `_host_id` verifica lo mismo antes de aceptar al host registrado.
+- Host-espectador puede iniciar la partida, agregar/eliminar bots y cambiar reglas: el dispatch amplía `_spectator_allowed` para acciones de anfitrión cuando `phase == "lobby"` y el solicitante es el host.
+- `add_bot` y `remove_bot` exentos del rate limiter, igual que `become_spectator`/`become_player`, para evitar bloqueos al encadenar acciones rápidas.
+- `kicked_by_name` en `_h_kick_player` y `_h_remove_bot` busca en `game.spectators` si el host ya no está en `game.players`, evitando `KeyError`.
+- `onBecameSpectator` en el frontend ya no fuerza `S.isHost = false`; deriva el valor de `msg.host_id` igual que el resto de handlers.
+- `renderLobbySpectatorControls` muestra `btn-start` y `botControls` al host-espectador.
+
+
 
 ### Removed
 - CSS muerto eliminado de `style.css`: bloque `.emoji-picker-popup / .emoji-bar / .emoji-bar-row / .emoji-bar-extra / .emoji-pick-btn / .emoji-chevron` (sistema de picker antiguo, ya sin referencias en HTML ni JS) y bloque `.lost-dice-row / .lost-dice-row .die` (fallback de my-area ya no utilizado).
