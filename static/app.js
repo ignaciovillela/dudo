@@ -1097,6 +1097,8 @@ function handleMsg(msg) {
     spectator_state:    onSpectatorState,
     spectator_joined:   onSpectatorJoined,
     spectator_left:     onSpectatorLeft,
+    became_spectator:   onBecameSpectator,
+    became_player:      onBecamePlayer,
     player_kicked:      onPlayerKicked,
     kicked:             onKicked,
     error:              onError,
@@ -1149,6 +1151,7 @@ function onJoined(msg) {
   }
   renderLobbyRules();
   applySpectatorMode();
+  renderLobbySpectatorControls();
   log(`Unido a la sala ${S.roomId}`, 'system');
 }
 
@@ -1226,7 +1229,50 @@ function onPlayerKicked(msg) {
   renderLobbyPlayers();
   renderOtherPlayers();
   updateStartButton();
-  log(`${msg.player_name} fue expulsado por ${msg.kicked_by_name}`, 'system');
+  if (msg.became_spectator) {
+    log(`${msg.player_name} se convirtió en espectador`, 'system');
+  } else {
+    log(`${msg.player_name} fue expulsado por ${msg.kicked_by_name}`, 'system');
+  }
+}
+
+function onBecameSpectator(msg) {
+  // Yo me convertí en espectador en el lobby
+  S.isSpectator   = true;
+  S.hostId        = msg.host_id || null;
+  // El host conserva su liderazgo aunque pase a espectador
+  S.isHost        = S.playerId === S.hostId;
+  S.players       = msg.players || {};
+  S.playerOrder   = msg.player_order || [];
+  S.spectatorCount = msg.spectator_count ?? S.spectatorCount;
+  updateSpectatorCount();
+  renderLobbyPlayers();
+  updateStartButton();
+  renderLobbySpectatorControls();
+  log('Ahora eres espectador', 'system');
+}
+
+function onBecamePlayer(msg) {
+  // Yo me convertí en jugador desde espectador en el lobby
+  S.isSpectator   = false;
+  S.playerId      = msg.player_id;
+  S.hostId        = msg.host_id || null;
+  S.isHost        = msg.is_host || false;
+  S.players       = msg.players || {};
+  S.playerOrder   = msg.player_order || [];
+  S.rules         = normalizeRules(msg.rules || S.rules);
+  S.spectatorCount = msg.spectator_count ?? S.spectatorCount;
+  S.isReady       = false;
+  updateSpectatorCount();
+  updateReadyButton(false);
+  const startBtn = document.getElementById('btn-start');
+  if (startBtn) startBtn.style.display = S.isHost ? 'inline-flex' : 'none';
+  renderLobbyPlayers();
+  renderLobbyRules();
+  updateStartButton();
+  renderLobbySpectatorControls();
+  saveSession();
+  log('Ahora eres jugador', 'system');
 }
 
 function onKicked(msg) {
@@ -1273,6 +1319,7 @@ function onReconnected(msg) {
     renderLobbyPlayers();
     renderLobbyRules();
     updateStartButton();
+    renderLobbySpectatorControls();
     playSfx('reconnect');
     log('Reconectado al lobby', 'system');
     return;
@@ -2525,6 +2572,7 @@ function renderLobbyPlayers() {
   if (botControls) {
     botControls.style.display = S.isHost && S.phase === 'lobby' ? 'flex' : 'none';
   }
+  renderLobbySpectatorControls();
 }
 
 function renderOtherPlayers() {
@@ -3033,6 +3081,41 @@ function addBot(difficulty) {
 function removeBot(botId) {
   playSfx('click');
   send({ type: 'remove_bot', target_id: botId });
+}
+
+function becomeSpectator() {
+  playSfx('click');
+  send({ type: 'become_spectator' });
+}
+
+function becomePlayer() {
+  playSfx('click');
+  send({ type: 'become_player', avatar: S.playerAvatar });
+}
+
+// Muestra u oculta los controles de cambio de rol según el estado actual
+function renderLobbySpectatorControls() {
+  const btnSpectator = document.getElementById('btn-become-spectator');
+  const btnPlayer    = document.getElementById('btn-become-player');
+  const btnReady     = document.getElementById('btn-ready');
+  const btnStart     = document.getElementById('btn-start');
+  const botControls  = document.getElementById('host-bot-controls');
+
+  if (S.isSpectator) {
+    // Soy espectador en el lobby: mostrar "Unirme", ocultar lo de jugador
+    if (btnSpectator) btnSpectator.style.display = 'none';
+    if (btnPlayer)    btnPlayer.style.display    = 'inline-flex';
+    if (btnReady)     btnReady.style.display     = 'none';
+    // El host-espectador conserva btn-start y controles de bots
+    if (btnStart)    btnStart.style.display    = S.isHost ? 'inline-flex' : 'none';
+    if (botControls) botControls.style.display = S.isHost ? ''           : 'none';
+  } else {
+    // Soy jugador en el lobby: mostrar "Ser espectador", ocultar "Unirme"
+    if (btnSpectator) btnSpectator.style.display = 'inline-flex';
+    if (btnPlayer)    btnPlayer.style.display    = 'none';
+    if (btnReady)     btnReady.style.display     = '';
+    // btn-start y bot-controls los maneja cada función respectiva
+  }
 }
 
 function toggleReady() {

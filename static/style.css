@@ -797,6 +797,14 @@ select:focus { border-color: var(--gold); }
 }
 .lobby-actions .btn { flex: 1; padding: 12px; font-size: 0.95rem; }
 
+.btn-spectator-toggle {
+  background: rgba(160, 210, 180, 0.12);
+  color: #7ecfa0;
+  border: 1px solid rgba(126, 207, 160, 0.3);
+}
+.btn-spectator-toggle:hover {
+  background: rgba(160, 210, 180, 0.25);
+}
 .host-bot-controls {
   display: none;
   align-items: center;

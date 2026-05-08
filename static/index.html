@@ -138,6 +138,12 @@
         <button id="btn-start" class="btn btn-start" onclick="startGame()" style="display:none">
           <i class="fa-solid fa-play" aria-hidden="true"></i>Iniciar Juego
         </button>
+        <button id="btn-become-spectator" class="btn btn-sm btn-spectator-toggle" style="display:none" onclick="becomeSpectator()" title="Pasarte a espectador y liberar tu lugar">
+          <i class="fa-solid fa-eye" aria-hidden="true"></i> Ser espectador
+        </button>
+        <button id="btn-become-player" class="btn btn-sm btn-spectator-toggle" style="display:none" onclick="becomePlayer()" title="Unirte como jugador">
+          <i class="fa-solid fa-user-plus" aria-hidden="true"></i> Unirme a partida
+        </button>
       </div>
       <div id="host-bot-controls" class="host-bot-controls" style="display:none">
         <span class="bot-controls-label"><i class="fa-solid fa-robot" aria-hidden="true"></i> Agregar bot:</span>

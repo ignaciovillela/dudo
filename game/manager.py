@@ -118,9 +118,13 @@ class GameManager:
         if not game:
             return
         msg_type = msg.get("type")
-        if player_id in game.spectators and msg_type not in {"join", "emoji", "quick_chat"}:
+        _spectator_allowed = {"join", "emoji", "quick_chat", "become_player"}
+        # El host conserva privilegios aunque sea espectador en el lobby
+        if player_id in game.spectators and game.phase == "lobby" and self._host_id(room_id, game) == player_id:
+            _spectator_allowed |= {"set_rules", "kick_player", "add_bot", "remove_bot", "start"}
+        if player_id in game.spectators and msg_type not in _spectator_allowed:
             return
-        if msg_type not in {"join", "connected", "select_bid"} and not self._allow_message(player_id):
+        if msg_type not in {"join", "connected", "select_bid", "become_spectator", "become_player", "add_bot", "remove_bot"} and not self._allow_message(player_id):
             return
         handlers = {
             "join":      self._h_join,
@@ -130,6 +134,8 @@ class GameManager:
             "kick_player": self._h_kick_player,
             "add_bot":   self._h_add_bot,
             "remove_bot": self._h_remove_bot,
+            "become_spectator": self._h_become_spectator,
+            "become_player":    self._h_become_player,
             "direction": self._h_direction,
             "bid":       self._h_bid,
             "select_bid": self._h_select_bid,
@@ -251,9 +257,8 @@ class GameManager:
                 "spectator_count": len(game.spectators),
             })
             return
-        if len(game.players) >= MAX_PLAYERS:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
+        # Sin límite de jugadores en el join del lobby: el límite se aplica al iniciar partida.
+        # Permite que espectadores pasen a jugadores libremente hasta que empiece el juego.
 
         name = (msg.get("name") or f"Jugador {len(game.players) + 1}").strip()[:20]
         avatar = self._normalize_avatar(msg.get("avatar"))
@@ -293,10 +298,19 @@ class GameManager:
             })
 
     async def _h_start(self, room_id, player_id, game, msg):
-        is_host = self._host_id(room_id, game) == player_id
-        connected = [p for p in game.players.values() if p.connected]
-        if is_host and len(connected) >= 2:
-            await self._begin_game(room_id, game)
+        if self._host_id(room_id, game) != player_id:
+            return
+        connected = [p for p in game.players.values() if p.connected and not p.is_bot]
+        bots = [p for p in game.players.values() if p.is_bot]
+        active = connected + bots
+        if len(active) < 2:
+            return
+        if len(active) > MAX_PLAYERS:
+            return await self._send(room_id, player_id, {
+                "type": "error",
+                "message": f"Demasiados jugadores para iniciar (máx. {MAX_PLAYERS}). Algunos deben pasarse a espectadores.",
+            })
+        await self._begin_game(room_id, game)
 
     async def _h_set_rules(self, room_id, player_id, game, msg):
         if game.phase != "lobby":
@@ -369,7 +383,8 @@ class GameManager:
             "player_id": target_id,
             "player_name": target.name,
             "kicked_by_id": player_id,
-            "kicked_by_name": game.players[player_id].name if player_id in game.players else "Anfitrión",
+            "kicked_by_name": (game.players[player_id].name if player_id in game.players
+                               else game.spectators.get(player_id, "Anfitrión")),
         })
 
         if game.phase == "playing":
@@ -457,7 +472,89 @@ class GameManager:
             "player_id": target_id,
             "player_name": target.name,
             "kicked_by_id": player_id,
-            "kicked_by_name": game.players[player_id].name if player_id in game.players else "Anfitrión",
+            "kicked_by_name": (game.players[player_id].name if player_id in game.players
+                               else game.spectators.get(player_id, "Anfitrión")),
+        })
+
+    async def _h_become_spectator(self, room_id, player_id, game, msg):
+        """Un jugador en el lobby decide pasarse a espectador.
+        El host conserva su liderazgo aunque pase a espectador."""
+        if game.phase != "lobby":
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Solo puedes cambiar de rol en el lobby"})
+        if player_id not in game.players:
+            return
+
+        player = game.players[player_id]
+        spectator_name = player.name
+
+        # Eliminar de jugadores sin tocar self.hosts: el host conserva el liderazgo
+        del game.players[player_id]
+        if player_id in game.player_order:
+            game.player_order.remove(player_id)
+        game.spectators[player_id] = spectator_name
+
+        # Notificar al propio jugador su nuevo estado
+        await self._send(room_id, player_id, {
+            "type": "became_spectator",
+            "spectator_id": player_id,
+            "spectator_name": spectator_name,
+            "host_id": self._host_id(room_id, game),
+            "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
+            "player_order": game.player_order,
+            "spectator_count": len(game.spectators),
+        })
+        # Notificar al resto
+        await self._broadcast_except(room_id, player_id, {
+            "type": "player_kicked",
+            "player_id": player_id,
+            "player_name": spectator_name,
+            "became_spectator": True,
+            "kicked_by_id": player_id,
+            "kicked_by_name": spectator_name,
+        })
+        await self._broadcast(room_id, {
+            "type": "spectator_joined",
+            "spectator_id": player_id,
+            "spectator_name": spectator_name,
+            "spectator_count": len(game.spectators),
+        })
+
+    async def _h_become_player(self, room_id, player_id, game, msg):
+        """Un espectador en el lobby decide unirse como jugador."""
+        if game.phase != "lobby":
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Solo puedes cambiar de rol en el lobby"})
+        if player_id not in game.spectators:
+            return
+
+        spectator_name = game.spectators.pop(player_id)
+        player = Player(id=player_id, name=spectator_name, avatar=self._normalize_avatar(msg.get("avatar")))
+        game.players[player_id] = player
+        game.player_order.append(player_id)
+
+        if room_id not in self.hosts or self.hosts[room_id] not in game.players:
+            self.hosts[room_id] = game.player_order[0]
+
+        await self._send(room_id, player_id, {
+            "type": "became_player",
+            "player_id": player_id,
+            "host_id": self._host_id(room_id, game),
+            "is_host": self._host_id(room_id, game) == player_id,
+            "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
+            "player_order": game.player_order,
+            "rules": game.rules.to_dict(),
+            "spectator_count": len(game.spectators),
+        })
+        await self._broadcast_except(room_id, player_id, {
+            "type": "player_joined",
+            "player": player.to_public_dict(),
+        })
+        await self._broadcast(room_id, {
+            "type": "spectator_left",
+            "spectator_id": player_id,
+            "spectator_name": spectator_name,
+            "spectator_count": len(game.spectators),
         })
 
     async def _h_direction(self, room_id, player_id, game, msg):
@@ -819,16 +916,27 @@ class GameManager:
         }
 
     def _pick_connected_host(self, game: Game) -> str | None:
+        """Devuelve el primer jugador humano conectado como candidato a host. Los bots nunca son host."""
         for pid in game.player_order:
             player = game.players.get(pid)
-            if player and player.connected:
+            if player and player.connected and not player.is_bot:
                 return pid
         return None
 
     def _host_id(self, room_id: str, game: Game) -> str | None:
+        """
+        Devuelve el host actual.
+        El host puede estar en players O en spectators (si se hizo espectador en el lobby).
+        Los bots nunca son host. Si el host registrado ya no existe en ninguno de los dos,
+        se asigna automáticamente el primer jugador humano conectado.
+        """
         host_id = self.hosts.get(room_id)
-        if host_id in game.players and game.players[host_id].connected:
-            return host_id
+        if host_id:
+            in_players = host_id in game.players and game.players[host_id].connected and not game.players[host_id].is_bot
+            in_spectators = host_id in game.spectators
+            if in_players or in_spectators:
+                return host_id
+        # Fallback: primer jugador humano conectado
         fallback = self._pick_connected_host(game)
         if fallback:
             self.hosts[room_id] = fallback
