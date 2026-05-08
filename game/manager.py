@@ -10,6 +10,7 @@ from fastapi import WebSocket
 from game.config import DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
+from game.actions import CalzoAction, DudoAction, DudoBidResult, DudoPasoResult
 import game.bot as bot_engine
 
 # Fuente de verdad compartida con el cliente: static/emojis.json
@@ -556,141 +557,80 @@ class GameManager:
         if game.phase != "playing":
             return
         self._cancel_turn_timeout(room_id)
-        if player_id in game.players and game.players[player_id].dice_count <= 0:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "Estás eliminado"})
 
-        was_current = game.current_player_id() == player_id
-        if not was_current and not self._rules_engine(game).allow_gavilan():
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "Gavilán está desactivado en esta sala"})
+        action = DudoAction(game, player_id, self._rules_engine(game))
+        error = action.validate()
+        if error:
+            return await self._send(room_id, player_id, {"type": "error", "message": error})
 
-        # ── Dudo sobre un paso activo ──────────────────────────────────────────
-        if game.last_paso is not None:
-            paso = game.last_paso
-            game.last_paso = None  # evitar doble dudo simultáneo
+        result = action.resolve()
+        action.apply(result)
 
-            if paso["player_id"] == player_id:
-                game.last_paso = paso
-                return await self._send(room_id, player_id,
-                                        {"type": "error", "message": "No puedes dudar tu propio paso"})
-
-            paso_valid = game.is_valid_paso(paso["player_id"])
-            loser_id = player_id if paso_valid else paso["player_id"]
-            is_gavilan = not was_current
-
-            # Gavilán correcto: solo recupera dado si NO es el jugador en turno (gavilán real)
-            challenger_gained = False
-            if not paso_valid and is_gavilan:
-                p = game.players[player_id]
-                if p.dice_count < 5:
-                    p.dice_count += 1
-                    challenger_gained = True
-
+        if isinstance(result, DudoPasoResult):
             await self._broadcast(room_id, {
                 "type": "reveal",
                 "action": "paso",
-                "challenger_id": player_id,
-                "challenger_name": game.players[player_id].name,
-                "passer_id": paso["player_id"],
-                "passer_name": paso["player_name"],
-                "paso_valid": paso_valid,
-                "is_gavilan": is_gavilan,
-                "loser_id": loser_id,
-                "challenger_gained": challenger_gained,
+                "challenger_id": result.challenger_id,
+                "challenger_name": result.challenger_name,
+                "passer_id": result.passer_id,
+                "passer_name": result.passer_name,
+                "paso_valid": result.paso_valid,
+                "is_gavilan": result.is_gavilan,
+                "loser_id": result.loser_id,
+                "challenger_gained": result.challenger_gained,
                 "all_dice": game.all_dice_reveal(),
                 "reveal_seconds": REVEAL_SECONDS,
             })
-            await self._apply_loss(room_id, game, loser_id)
-            return
+        else:
+            await self._broadcast(room_id, {
+                "type": "reveal",
+                "action": "dudo",
+                "challenger_id": result.challenger_id,
+                "challenger_name": result.challenger_name,
+                "bid": result.bid.to_dict(),
+                "actual_count": result.actual_count,
+                "bid_holds": result.bid_holds,
+                "is_gavilan": result.is_gavilan,
+                "loser_id": result.loser_id,
+                "all_dice": game.all_dice_reveal(),
+                "reveal_seconds": REVEAL_SECONDS,
+            })
 
-        # ── Dudo sobre una apuesta ─────────────────────────────────────────────
-        if game.current_bid is None:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "No hay acción activa que dudar"})
-
-        bid = game.current_bid
-        game.current_bid = None  # evitar doble dudo simultáneo
-
-        if bid.player_id == player_id:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "No puedes dudar tu propia apuesta"})
-
-        actual = game.count_dice(bid.face)
-        bid_holds = actual >= bid.quantity
-        loser_id = player_id if bid_holds else bid.player_id
-
-        await self._broadcast(room_id, {
-            "type": "reveal",
-            "action": "dudo",
-            "challenger_id": player_id,
-            "challenger_name": game.players[player_id].name,
-            "bid": bid.to_dict(),
-            "actual_count": actual,
-            "bid_holds": bid_holds,
-            "loser_id": loser_id,
-            "all_dice": game.all_dice_reveal(),
-            "reveal_seconds": REVEAL_SECONDS,
-        })
-        await self._apply_loss(room_id, game, loser_id)
+        await self._apply_loss(room_id, game, result.loser_id)
 
     async def _h_calzo(self, room_id, player_id, game, msg):
         if game.phase != "playing":
             return
         self._cancel_turn_timeout(room_id)
-        if player_id in game.players and game.players[player_id].dice_count <= 0:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "Estás eliminado"})
-        if game.last_paso is not None:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "No se puede calzar un paso"})
-        if game.current_bid is None:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "No hay apuesta"})
 
-        was_current = game.current_player_id() == player_id
-        if not was_current and not self._rules_engine(game).allow_gavilan():
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "Gavilán está desactivado en esta sala"})
+        action = CalzoAction(game, player_id, self._rules_engine(game))
+        error = action.validate()
+        if error:
+            return await self._send(room_id, player_id, {"type": "error", "message": error})
 
-        bid = game.current_bid
-        game.current_bid = None  # evitar doble calzo simultánea
-
-        if bid.player_id == player_id:
-            return await self._send(room_id, player_id,
-                                    {"type": "error", "message": "No puedes calzar tu propia apuesta"})
-
-        actual = game.count_dice(bid.face)
-        exact = actual == bid.quantity
-
-        # Recuperación de dado definida por plugin de reglas.
-        challenger_gained = False
-        can_recover_on_turn = self._rules_engine(game).calzo_recovers_on_turn()
-        if exact and (not was_current or can_recover_on_turn):
-            p = game.players[player_id]
-            if p.dice_count < 5:
-                p.dice_count += 1
-                challenger_gained = True
+        result = action.resolve()
+        action.apply(result)
 
         await self._broadcast(room_id, {
             "type": "reveal",
             "action": "calzo",
-            "challenger_id": player_id,
-            "challenger_name": game.players[player_id].name,
-            "bid": bid.to_dict(),
-            "actual_count": actual,
-            "bid_holds": exact,
-            "loser_id": None if exact else player_id,
-            "calzo_success": exact,
-            "challenger_gained": challenger_gained,
+            "challenger_id": result.challenger_id,
+            "challenger_name": result.challenger_name,
+            "bid": result.bid.to_dict(),
+            "actual_count": result.actual_count,
+            "bid_holds": result.exact,
+            "loser_id": result.loser_id,
+            "calzo_success": result.exact,
+            "challenger_gained": result.challenger_gained,
+            "is_gavilan": result.is_gavilan,
             "all_dice": game.all_dice_reveal(),
             "reveal_seconds": REVEAL_SECONDS,
         })
 
-        if exact:
-            await self._new_round(room_id, game, player_id)
+        if result.exact:
+            await self._new_round(room_id, game, result.challenger_id)
         else:
-            await self._apply_loss(room_id, game, player_id)
+            await self._apply_loss(room_id, game, result.loser_id)
 
     async def _h_emoji(self, room_id, player_id, game, msg):
         if not game.rules.allow_throwable_emojis:
