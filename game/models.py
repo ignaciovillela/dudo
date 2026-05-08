@@ -15,6 +15,8 @@ class Player:
     connected: bool = True
     ready: bool = False
     selected_bid: Optional["Bid"] = None  # apuesta seleccionada para timeout
+    is_bot: bool = False
+    bot_difficulty: str = "medium"  # easy | medium | hard
 
     def to_public_dict(self):
         return {
@@ -24,6 +26,8 @@ class Player:
             "dice_count": self.dice_count,
             "connected": self.connected,
             "ready": self.ready,
+            "is_bot": self.is_bot,
+            "bot_difficulty": self.bot_difficulty if self.is_bot else None,
         }
 
 
@@ -189,6 +193,8 @@ class Game:
         if not dice:
             return False
         counts = Counter(dice)
+        if len(dice) != 5:
+            return False
         # Todos distintos
         if len(counts) == len(dice):
             return True
@@ -196,7 +202,7 @@ class Game:
         if len(counts) == 1:
             return True
         # Full: exactamente 3 de un valor y 2 de otro (requiere 5 dados)
-        if len(dice) == 5 and sorted(counts.values()) == [2, 3]:
+        if sorted(counts.values()) == [2, 3]:
             return True
         return False
 

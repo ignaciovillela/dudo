@@ -54,6 +54,7 @@ Referencia completa en `CHANGELOG.md`.
 - Sonido direccional con pan estéreo basado en posición de la carta en la mesa.
 - Indicador de probabilidad estimada de la apuesta actual en el bid builder.
 - Limpieza CSS: eliminados selectores muertos del picker antiguo y lost-dice-row.
+- Bots con 3 niveles de dificultad (fácil/medio/difícil); el anfitrión los agrega desde el lobby.
 
 ---
 
@@ -94,15 +95,6 @@ Referencia completa en `CHANGELOG.md`.
 - Dificultad estimada: `Baja`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: el stepper de cantidad en el cliente tiene un máximo de `total_dados`; el backend rechaza apuestas con `quantity > total_dados` con mensaje de error.
-
-### 22. Bots
-**Por qué:** permite jugar cuando no hay suficientes amigos disponibles, o para practicar.
-- Alcance técnico: backend.
-- Archivos principales: `game/manager.py`, `game/models.py`, nuevo `game/bot.py`.
-- Dificultad estimada: `Alta`.
-- Riesgo de implementación: `Medio`.
-- Notas de implementación: la lógica no necesita modelar probabilidades completas. Basta con: si la apuesta actual está cerca de la estimación del bot → subir o aceptar; si la apuesta parece muy alta → dudar; agregar ruido aleatorio calibrado para que el bot sea entretenido, no óptimo. Los bots demasiado "correctos" dejan de ser divertidos.
-- Criterio de término: el anfitrión puede añadir slots de bot desde el lobby (hasta completar `MAX_PLAYERS`); el bot toma decisiones basadas en sus propios dados y la apuesta actual con algo de aleatoriedad; tiene nombre, avatar y aparece como jugador normal en la UI.
 
 ### 23. Highlights de partida
 **Por qué:** al terminar la partida, mostrar los momentos más destacados (el bluff más arriesgado, el dudo más preciso, la apuesta más alta) genera conversación y replayability social.
@@ -159,9 +151,7 @@ Referencia completa en `CHANGELOG.md`.
 | 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
 | 11 | Fix: cap en cantidad apostada | `app.js`, `models.py` | Baja | Bajo | Bajo |
-| 22 | Bots | `manager.py`, `models.py`, `bot.py` | Alta | Medio | Alto |
 | 23 | Highlights de partida | `manager.py`, `app.js`, `index.html` | Alta | Medio | Medio |
-| 24 | Limpieza: eliminar CSS muerto | `style.css` | Baja | Bajo | Bajo |
 | 25 | Modal de reglas en partida | `index.html`, `app.js`, `style.css` | Baja | Bajo | Bajo |
 | 26 | Confirmación en acción "Dudo" | `app.js`, `index.html`, `style.css` | Baja | Bajo | Bajo |
 | 27 | Variante: ronda Palifico | `models.py`, `rules/`, `app.js`, `index.html` | Media | Medio | Bajo |

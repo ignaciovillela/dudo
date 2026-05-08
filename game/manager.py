@@ -3,12 +3,14 @@ import json
 import pathlib
 import random
 import time
+import uuid
 
 from fastapi import WebSocket
 
 from game.config import DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
+import game.bot as bot_engine
 
 # Fuente de verdad compartida con el cliente: static/emojis.json
 _EMOJIS_PATH = pathlib.Path(__file__).parent.parent / "static" / "emojis.json"
@@ -125,6 +127,8 @@ class GameManager:
             "start":     self._h_start,
             "set_rules": self._h_set_rules,
             "kick_player": self._h_kick_player,
+            "add_bot":   self._h_add_bot,
+            "remove_bot": self._h_remove_bot,
             "direction": self._h_direction,
             "bid":       self._h_bid,
             "select_bid": self._h_select_bid,
@@ -375,6 +379,85 @@ class GameManager:
             if was_current:
                 game.set_current_player(next_player_id)
             await self._announce_turn(room_id, game)
+
+    async def _h_add_bot(self, room_id, player_id, game, msg):
+        if game.phase != "lobby":
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Solo se pueden agregar bots en el lobby"})
+        if self._host_id(room_id, game) != player_id:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Solo el anfitrión puede agregar bots"})
+        if len(game.players) >= MAX_PLAYERS:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
+
+        difficulty = msg.get("difficulty", "medium")
+        if difficulty not in {"easy", "medium", "hard"}:
+            difficulty = "medium"
+
+        bot_names = {
+            "easy":   ["Botín", "Novato", "Pipón", "Torpe"],
+            "medium": ["Calculín", "Medio", "Astuto", "Listo"],
+            "hard":   ["Maestro", "Genio", "Experto", "HAL"],
+        }
+        existing_bot_names = {p.name for p in game.players.values() if p.is_bot}
+        candidates = [n for n in bot_names[difficulty] if n not in existing_bot_names]
+        name = random.choice(candidates) if candidates else f"Bot-{difficulty[:1].upper()}{len(game.players)}"
+
+        bot_avatars = ["🤖", "👾", "🎮", "🧠", "⚙️"]
+        used_avatars = {p.avatar for p in game.players.values() if p.is_bot}
+        free_avatars = [a for a in bot_avatars if a not in used_avatars]
+        avatar = random.choice(free_avatars) if free_avatars else "🤖"
+
+        bot_id = f"bot-{uuid.uuid4().hex[:8]}"
+        bot_player = Player(
+            id=bot_id,
+            name=name,
+            avatar=avatar,
+            is_bot=True,
+            bot_difficulty=difficulty,
+            ready=True,  # los bots siempre están listos
+        )
+        game.players[bot_id] = bot_player
+        game.player_order.append(bot_id)
+
+        await self._broadcast(room_id, {
+            "type": "player_joined",
+            "player": bot_player.to_public_dict(),
+        })
+        await self._broadcast(room_id, {
+            "type": "player_ready",
+            "player_id": bot_id,
+            "ready": True,
+        })
+        if game.all_ready():
+            await self._broadcast(room_id, {"type": "all_ready"})
+
+    async def _h_remove_bot(self, room_id, player_id, game, msg):
+        if game.phase != "lobby":
+            return
+        if self._host_id(room_id, game) != player_id:
+            return
+
+        target_id = msg.get("target_id")
+        if not isinstance(target_id, str):
+            return
+        target = game.players.get(target_id)
+        if not target or not target.is_bot:
+            return await self._send(room_id, player_id,
+                                    {"type": "error", "message": "Ese jugador no es un bot"})
+
+        del game.players[target_id]
+        if target_id in game.player_order:
+            game.player_order.remove(target_id)
+
+        await self._broadcast(room_id, {
+            "type": "player_kicked",
+            "player_id": target_id,
+            "player_name": target.name,
+            "kicked_by_id": player_id,
+            "kicked_by_name": game.players[player_id].name if player_id in game.players else "Anfitrión",
+        })
 
     async def _h_direction(self, room_id, player_id, game, msg):
         """Solo el primer jugador de la ronda puede cambiar sentido, y solo antes de su primera acción."""
@@ -832,6 +915,10 @@ class GameManager:
     async def _announce_turn(self, room_id: str, game: Game):
         await self._broadcast(room_id, self._turn_payload(game))
         self._schedule_turn_timeout(room_id, game)
+        # Si el turno es de un bot, programar su acción con un pequeño delay
+        current = game.current_player_id()
+        if current and current in game.players and game.players[current].is_bot:
+            self._schedule_bot_action(room_id, game, current)
 
     def _cancel_turn_timeout(self, room_id: str):
         task = self.turn_timeout_tasks.pop(room_id, None)
@@ -960,6 +1047,64 @@ class GameManager:
             if game.is_valid_bid(bid):
                 return bid
             qty += 1
+
+    # ------------------------------------------------------------------ bot actions
+
+    # Delay de pensamiento por dificultad (segundos)
+    _BOT_THINK_DELAY = {"easy": 1.8, "medium": 1.2, "hard": 0.7}
+
+    def _schedule_bot_action(self, room_id: str, game: Game, bot_id: str):
+        difficulty = game.players[bot_id].bot_difficulty
+        delay = self._BOT_THINK_DELAY.get(difficulty, 1.2) + random.uniform(0, 0.8)
+
+        async def _runner():
+            try:
+                await asyncio.sleep(delay)
+                current_game = self.games.get(room_id)
+                if not current_game or current_game.phase != "playing":
+                    return
+                if current_game.current_player_id() != bot_id:
+                    return
+                await self._run_bot_action(room_id, current_game, bot_id)
+            except asyncio.CancelledError:
+                return
+
+        asyncio.create_task(_runner())
+
+    async def _run_bot_action(self, room_id: str, game: Game, bot_id: str):
+        decision = bot_engine.decide(game, bot_id)
+        action = decision.get("action")
+
+        if action == "dudo":
+            # Verificar que haya algo que dudar
+            if game.current_bid is None and game.last_paso is None:
+                action = "bid"  # fallback
+            else:
+                self._cancel_turn_timeout(room_id)
+                await self._h_dudo(room_id, bot_id, game, {})
+                return
+
+        if action == "calzo":
+            if game.current_bid is None or game.current_bid.player_id == bot_id:
+                action = "bid"  # fallback
+            else:
+                self._cancel_turn_timeout(room_id)
+                await self._h_calzo(room_id, bot_id, game, {})
+                return
+
+        if action == "paso":
+            if game.current_bid is not None and bot_id not in game.passed_players:
+                self._cancel_turn_timeout(room_id)
+                await self._h_paso(room_id, bot_id, game, {})
+                return
+            else:
+                action = "bid"  # fallback si no puede pasar
+
+        if action == "bid":
+            qty = decision.get("quantity", 1)
+            face = decision.get("face", 2)
+            self._cancel_turn_timeout(room_id)
+            await self._h_bid(room_id, bot_id, game, {"quantity": qty, "face": face})
 
     # ------------------------------------------------------------------ transport
 

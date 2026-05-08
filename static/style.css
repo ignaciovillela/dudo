@@ -797,6 +797,32 @@ select:focus { border-color: var(--gold); }
 }
 .lobby-actions .btn { flex: 1; padding: 12px; font-size: 0.95rem; }
 
+.host-bot-controls {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.bot-controls-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.btn-bot {
+  background: rgba(99, 179, 237, 0.15);
+  color: #63b3ed;
+  border: 1px solid rgba(99, 179, 237, 0.3);
+}
+.btn-bot:hover {
+  background: rgba(99, 179, 237, 0.28);
+}
+.lobby-player-row .ready-badge.bot-badge {
+  background: rgba(99, 179, 237, 0.15);
+  color: #63b3ed;
+  border-color: rgba(99, 179, 237, 0.3);
+}
+
 .lobby-subactions {
   margin-top: 8px;
   display: flex;

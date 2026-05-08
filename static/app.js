@@ -1649,10 +1649,10 @@ function onNewRound(msg) {
   // Award 1 XP for surviving the previous round (skip on round 1 start)
   if (S.roundNum > 0) {
     awardRoundXp();
-    // Increment streak for all players still alive (dice_count > 0)
+    // Increment streak for all players still alive (dice_count > 0) except the one who just lost a die
     for (const pid of Object.keys(S.players)) {
       const p = S.players[pid];
-      if (p && p.dice_count > 0) {
+      if (p && p.dice_count > 0 && pid !== S.lastLossPlayerId) {
         S.streaks[pid] = (S.streaks[pid] || 0) + 1;
         if ((S.streaks[pid] || 0) > (S.bestStreaks[pid] || 0)) {
           S.bestStreaks[pid] = S.streaks[pid];
@@ -2480,23 +2480,36 @@ function renderLobbyPlayers() {
     name.textContent = p.name;
 
     const badge = document.createElement('div');
-    badge.className = 'ready-badge' + (p.connected ? (p.ready ? ' ready' : '') : ' inactive');
-    badge.innerHTML = !p.connected
-      ? '<i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i> Inactivo'
-      : (p.ready
-        ? '<i class="fa-solid fa-check" aria-hidden="true"></i> Listo'
-        : '<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando');
+    if (p.is_bot) {
+      const diffLabel = { easy: 'Fácil', medium: 'Medio', hard: 'Difícil' }[p.bot_difficulty] || 'Bot';
+      badge.className = 'ready-badge ready bot-badge';
+      badge.innerHTML = `<i class="fa-solid fa-robot" aria-hidden="true"></i> Bot · ${diffLabel}`;
+    } else {
+      badge.className = 'ready-badge' + (p.connected ? (p.ready ? ' ready' : '') : ' inactive');
+      badge.innerHTML = !p.connected
+        ? '<i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i> Inactivo'
+        : (p.ready
+          ? '<i class="fa-solid fa-check" aria-hidden="true"></i> Listo'
+          : '<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando');
+    }
 
     if (S.isHost && pid !== S.playerId) {
-      const kickBtn = document.createElement('button');
-      kickBtn.type = 'button';
-      kickBtn.className = 'kick-btn';
-      kickBtn.title = `Expulsar a ${p.name}`;
-      kickBtn.setAttribute('aria-label', `Expulsar a ${p.name}`);
-      kickBtn.innerHTML = '<i class="fa-solid fa-user-xmark" aria-hidden="true"></i>';
-      kickBtn.onclick = () => openKickConfirm(pid, p.name);
+      const actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'kick-btn';
+      if (p.is_bot) {
+        actionBtn.title = `Quitar bot ${p.name}`;
+        actionBtn.setAttribute('aria-label', `Quitar bot ${p.name}`);
+        actionBtn.innerHTML = '<i class="fa-solid fa-robot" aria-hidden="true"></i>';
+        actionBtn.onclick = () => removeBot(pid);
+      } else {
+        actionBtn.title = `Expulsar a ${p.name}`;
+        actionBtn.setAttribute('aria-label', `Expulsar a ${p.name}`);
+        actionBtn.innerHTML = '<i class="fa-solid fa-user-xmark" aria-hidden="true"></i>';
+        actionBtn.onclick = () => openKickConfirm(pid, p.name);
+      }
       row.appendChild(av);
-      row.appendChild(kickBtn);
+      row.appendChild(actionBtn);
       row.appendChild(name);
       row.appendChild(badge);
     } else {
@@ -2505,6 +2518,12 @@ function renderLobbyPlayers() {
       row.appendChild(badge);
     }
     list.appendChild(row);
+  }
+
+  // Mostrar/ocultar controles de bot (solo host, solo lobby)
+  const botControls = document.getElementById('host-bot-controls');
+  if (botControls) {
+    botControls.style.display = S.isHost && S.phase === 'lobby' ? 'flex' : 'none';
   }
 }
 
@@ -3004,6 +3023,16 @@ function joinRoom() {
   persistLobbyIdentity(name);
   playSfx('click');
   connect(room);
+}
+
+function addBot(difficulty) {
+  playSfx('click');
+  send({ type: 'add_bot', difficulty });
+}
+
+function removeBot(botId) {
+  playSfx('click');
+  send({ type: 'remove_bot', target_id: botId });
 }
 
 function toggleReady() {
