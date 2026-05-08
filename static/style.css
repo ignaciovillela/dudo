@@ -1511,13 +1511,18 @@ select:focus { border-color: var(--gold); }
   white-space: nowrap;
   pointer-events: none;
   z-index: 10;
-  animation: ef-in 0.18s ease forwards;
+  animation: sqc-in 0.18s ease forwards;
+}
+@keyframes sqc-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-4px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1);    }
 }
 .spectator-qc-fadeout {
   animation: fadeOut 0.4s ease forwards;
 }
 @keyframes fadeOut {
-  to { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to   { opacity: 0; transform: translateX(-50%) translateY(6px); }
 }
 
 /* ── Reveal overlay ── */

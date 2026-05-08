@@ -1854,13 +1854,13 @@ function sendQuickChat(phrase) {
 function onQuickChat(msg) {
   const isSelf = msg.from_id === S.playerId;
   const label = isSelf ? 'Tú' : msg.from_name;
-  log(`${msg.from_avatar} ${label}: "${msg.phrase}"`, 'chat');
+  log(`${msg.from_avatar} ${label}: ${msg.phrase}`, 'chat');
   // Si el emisor es un espectador (no tiene carta en la mesa) → mostrar en el display central
   const isPlayer = isSelf || !!document.querySelector(`#other-players .player-card[data-pid="${msg.from_id}"]`);
   if (isPlayer) {
     _showQuickChatBubble(msg.from_id, msg.phrase);
   } else {
-    showSpectatorQcDisplay(`${msg.from_avatar} ${msg.from_name}: "${msg.phrase}"`);
+    showSpectatorQcDisplay(`${msg.from_avatar} ${msg.from_name}: ${msg.phrase}`);
   }
 }
 
@@ -1884,7 +1884,7 @@ function showSpectatorQcDisplay(phrase) {
   const el = document.getElementById('spectator-qc-display');
   if (!el) return;
   if (_spectatorQcTimer) { clearTimeout(_spectatorQcTimer); _spectatorQcTimer = null; }
-  el.textContent = `"${phrase}"`;
+  el.textContent = phrase;
   el.style.display = 'block';
   el.classList.remove('spectator-qc-fadeout');
   // Forzar reflow para reiniciar animación
