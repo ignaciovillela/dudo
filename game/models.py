@@ -17,6 +17,7 @@ class Player:
     selected_bid: Optional["Bid"] = None  # apuesta seleccionada para timeout
     is_bot: bool = False
     bot_difficulty: str = "medium"  # easy | medium | hard
+    anon_id: Optional[str] = None   # ID anónimo persistente del cliente (para memoria entre partidas)
 
     def to_public_dict(self):
         return {
@@ -37,6 +38,7 @@ class Bid:
     face: int
     player_id: str
     player_name: str
+    elapsed_seconds: float = 0.0   # tiempo desde que era su turno hasta que apostó
 
     def to_dict(self):
         return {

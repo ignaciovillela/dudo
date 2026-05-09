@@ -133,6 +133,101 @@ class BotStrategy(ABC):
             and game.is_valid_paso(bot_id)
         )
 
+    @staticmethod
+    def _pick_bid(
+        scored: list,
+        min_prob: float,
+        aggression: float = 0.15,
+    ):
+        """
+        Elige una apuesta de la lista scored = [(bid, prob), ...].
+
+        Estrategia:
+        - Filtra candidatos con prob >= min_prob.
+        - La mayoría de las veces (1 - aggression) elige en el tercio inferior
+          de cantidad entre los válidos — apuesta moderada, da espacio a la ronda.
+        - Con probabilidad aggression escala alto (tercio superior de cantidad).
+        - Si no hay candidatos válidos, elige el de mayor prob disponible.
+
+        aggression ∈ [0, 1]: qué tan seguido escala al máximo.
+        """
+        good = [(b, p) for b, p in scored if p >= min_prob]
+        if not good:
+            # fallback: mejor prob disponible
+            scored_copy = sorted(scored, key=lambda x: -x[1])
+            return scored_copy[0][0]
+
+        # Ordenar por cantidad ascendente
+        good.sort(key=lambda x: x[0].quantity)
+        n = len(good)
+        low_third  = good[:max(1, n // 3)]
+        high_third = good[max(0, n - n // 3):]
+
+        if random.random() < aggression:
+            # Escala agresivo: elige del tercio superior de cantidades
+            chosen = random.choice(high_third)[0]
+        else:
+            # Apuesta moderada: elige del tercio inferior de cantidades
+            # pero dentro de ese tercio prefiere la de mayor prob
+            low_third.sort(key=lambda x: -x[1])
+            chosen = low_third[0][0]
+
+        return chosen
+
+    @staticmethod
+    def prob_paso_is_bluff(game: "Game", passer_id: str) -> float:
+        """
+        Estima la probabilidad de que el paso sea MENTIRA (el pasador no tiene
+        una mano válida) desde el punto de vista de un bot observador.
+
+        Un paso es válido si los dados del pasador son:
+          - todos distintos  (escalera)
+          - todos iguales    (generala)
+          - full house       (3+2)
+        Requiere exactamente 5 dados.
+
+        Si el pasador tiene < 5 dados → el paso es SIEMPRE mentira (imposible).
+        Si el pasador tiene 5 dados el bot no conoce esos dados, pero puede
+        estimar la probabilidad de mano válida combinatoriamente:
+          P(escalera)   ≈ 6!/(6^5) * 1   = 720/7776  ≈ 0.0926
+          P(generala)   ≈ 6/6^5          = 6/7776     ≈ 0.0008
+          P(full house) ≈ C(6,2)*2*10/6^5 = 1800/7776 ≈ 0.2315
+          Total válido  ≈ 0.3248  →  P(bluff) ≈ 0.675
+
+        Retorna P(mentira) ∈ [0, 1].
+        """
+        passer = game.players.get(passer_id)
+        if passer is None:
+            return 0.5  # desconocido
+
+        dice_count = passer.dice_count
+        if dice_count < 5:
+            # Con menos de 5 dados es imposible pasar legítimamente
+            return 1.0
+
+        # Con exactamente 5 dados: probabilidad combinatoria de mano válida
+        # (sin información adicional sobre los dados del pasador)
+        # escalera: 5! * C(6,5) maneras de tener 5 valores distintos de 6
+        # = 120 * 6 = 720 de 6^5 = 7776 outcomes ordenados
+        p_escalera   = 720  / 7776   # ≈ 0.0926
+        # generala: 6 valores posibles × 1 cada uno
+        p_generala   = 6    / 7776   # ≈ 0.0008
+        # full house: elegir cuál valor es el trío (6) × elegir el par (5)
+        # × formas de repartir las posiciones = 6*5 * C(5,3) = 30*10 = 300 * 6 orderingsbase
+        # En outcomes ordenados: 6 * 5 * C(5,2) * 1 = 6*5*10 * (numero orderings)
+        # Fórmula correcta: C(6,1)*C(5,1) * (5!/(3!*2!)) = 6*5*10 = 300 outcomes distintos
+        # de valores; × 1 (ya ordenados internamente): 300*1 = 300... recompute:
+        # Manos full house como multisets: C(6,1) elegir trío × C(5,1) elegir par = 30
+        # Por mano → número de arreglos = 5!/(3!*2!) = 10
+        # Total outcomes ordenados = 30 * 10 = 300... pero eso da 300/7776 ≈ 3.8%
+        # Revisión: 6^5 = 7776 outcomes. Full house: 6 opciones para trío, 5 para par,
+        # C(5,3)=10 posiciones → 6*5*10 = 300. Correcto.
+        p_full_house = 300  / 7776   # ≈ 0.0386
+        # NOTA: en la práctica los jugadores humanos no pasan a menos que tengan
+        # la mano — el paso "mentira" es raro pero posible como bluff puro.
+        p_valid = p_escalera + p_generala + p_full_house   # ≈ 0.132
+        return 1.0 - p_valid  # P(bluff) ≈ 0.868
+
     # -- Interfaz pública ----------------------------------------------------
 
     @abstractmethod
@@ -170,6 +265,16 @@ class EasyBot(BotStrategy):
         if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
             if prob < self.DUDO_THRESHOLD and random.random() > self.DUDO_NOISE:
+                return {"action": "dudo"}
+
+        # -- Dudo de paso activo --
+        # Solo duda si la probabilidad de que sea mentira es alta.
+        # Con < 5 dados del pasador: prob_bluff = 1.0 → siempre duda (con ruido).
+        if game.last_paso is not None:
+            p_bluff = self.prob_paso_is_bluff(game, game.last_paso["player_id"])
+            # EasyBot duda el paso solo si es claramente mentira (< 5 dados)
+            # y con su propio umbral relajado + ruido
+            if p_bluff >= 0.90 and random.random() > self.DUDO_NOISE:
                 return {"action": "dudo"}
 
         # -- Paso ocasional --
@@ -236,7 +341,13 @@ class MediumBot(BotStrategy):
             if prob < self.DUDO_THRESHOLD:
                 return {"action": "dudo"}
 
-        if game.last_paso is not None and game.current_bid is None:
+        if game.last_paso is not None:
+            p_bluff = self.prob_paso_is_bluff(game, game.last_paso["player_id"])
+            # Duda si el paso es claramente imposible (< 5 dados: p_bluff=1.0)
+            # o si la probabilidad de mentira supera su umbral propio
+            if p_bluff >= 0.90:
+                return {"action": "dudo"}
+            # Con 5 dados del pasador: p_bluff ≈ 0.87, duda con 28% de frecuencia base
             if random.random() < 0.28:
                 return {"action": "dudo"}
 
@@ -261,13 +372,7 @@ class MediumBot(BotStrategy):
                 chosen = weak[0][0]
                 return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
 
-        good = [(b, p) for b, p in scored if p >= self.BID_MIN_PROB]
-        if good:
-            good.sort(key=lambda x: (x[0].quantity, x[1]), reverse=True)
-            chosen = good[0][0]
-        else:
-            scored.sort(key=lambda x: -x[1])
-            chosen = scored[0][0]
+        chosen = self._pick_bid(scored, self.BID_MIN_PROB, aggression=0.15)
 
         return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
 
@@ -315,7 +420,10 @@ class HardBot(BotStrategy):
             if prob < self.DUDO_THRESHOLD:
                 return {"action": "dudo"}
 
-        if game.last_paso is not None and game.current_bid is None:
+        if game.last_paso is not None:
+            p_bluff = self.prob_paso_is_bluff(game, game.last_paso["player_id"])
+            if p_bluff >= 0.90:
+                return {"action": "dudo"}
             if random.random() < 0.35:
                 return {"action": "dudo"}
 
@@ -340,13 +448,7 @@ class HardBot(BotStrategy):
                 chosen = weak[0][0]
                 return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
 
-        good = [(b, p) for b, p in scored if p >= self.BID_MIN_PROB]
-        if good:
-            good.sort(key=lambda x: (x[0].quantity, x[1]), reverse=True)
-            chosen = good[0][0]
-        else:
-            scored.sort(key=lambda x: -x[1])
-            chosen = scored[0][0]
+        chosen = self._pick_bid(scored, self.BID_MIN_PROB, aggression=0.15)
 
         return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
 
@@ -384,40 +486,129 @@ class HardBot(BotStrategy):
 @dataclass
 class _PlayerStats:
     """
-    Historial de un rival para modelado de comportamiento.
+    Historial de comportamiento de un rival, alimentado retroactivamente.
 
-    Patrones rastreados:
-    - bluff_rate: % de veces que mintió cuando fue dudado con éxito
-    - face_bluff_counts: cuántas veces mintió apostando cada cara concreta
-    - face_bid_counts: cuántas veces apostó cada cara (verdad o mentira)
-    - copy_count: cuántas veces copió la cantidad del bid anterior (+0 o +1 en misma cara)
-    - total_rounds_observed: rondas en las que el bot lo ha observado
+    Estrategia de aprendizaje
+    -------------------------
+    Cada vez que se resuelve un dudo/calzo se conocen TODOS los dados de la mesa
+    (campo all_dice del payload). Con eso se recorre bid_history de la ronda y
+    para cada apuesta se calcula si era verdad o mentira. Así acumulamos datos
+    de TODAS las jugadas, no solo de las que fueron dudadas.
+
+    Campos de bid
+    -------------
+    face_bid_counts[cara]    — total de apuestas con esa cara
+    face_bluff_counts[cara]  — cuántas eran mentira (retroactivo por all_dice)
+    qty_bucket_counts[b]     — total de apuestas por bucket de cantidad (1=baja,2=media,3=alta)
+    qty_bucket_bluff[b]      — cuántas de esas eran mentira
+    bids_total               — total de apuestas vistas
+    bids_bluff               — total de apuestas que eran mentira
+    copy_count               — veces que copió la apuesta anterior (+0/+1 misma cara)
+
+    Campos de paso
+    --------------
+    paso_count               — veces que hizo paso
+    paso_bluff_count         — pasos que eran mentira (dudados con éxito)
+    paso_dice_sum            — suma de dados al pasar (para avg_dice_when_paso)
+
+    Notas
+    -----
+    - bluff_rate = bids_bluff / bids_total  (global, retroactivo)
+    - face_bluff_rate(cara) = face_bluff_counts[cara] / face_bid_counts[cara]
+    - qty_bluff_rate(bucket) = qty_bucket_bluff[b] / qty_bucket_counts[b]
+    - paso_bluff_rate = paso_bluff_count / paso_count
+    - avg_dice_when_paso = paso_dice_sum / paso_count
     """
-    bids_made:             int = 0
-    times_caught_bluffing: int = 0
-    # Por cara (1-6): veces que apostó esa cara siendo mentira
-    face_bluff_counts:  dict = field(default_factory=lambda: defaultdict(int))
-    # Por cara (1-6): veces que apostó esa cara (verdad o mentira)
-    face_bid_counts:    dict = field(default_factory=lambda: defaultdict(int))
-    # Cuántas veces "copió" al anterior (incrementó qty en 1 o 0 en la misma cara)
-    copy_count:         int = 0
-    total_rounds:       int = 0
+    # Apuestas (retroactivas)
+    bids_total:          int = 0
+    bids_bluff:          int = 0
+    face_bid_counts:     dict = field(default_factory=lambda: defaultdict(int))
+    face_bluff_counts:   dict = field(default_factory=lambda: defaultdict(int))
+    qty_bucket_counts:   dict = field(default_factory=lambda: defaultdict(int))
+    qty_bucket_bluff:    dict = field(default_factory=lambda: defaultdict(int))
+    copy_count:          int = 0
+    total_rounds:        int = 0
+
+    # Paso
+    paso_count:          int = 0
+    paso_bluff_count:    int = 0
+    paso_dice_sum:       int = 0
+
+    # Tiempo de decisión al apostar (solo apuestas, no dudo/calzo/paso)
+    bid_time_bluff_sum:  float = 0.0   # suma de elapsed cuando la apuesta era mentira
+    bid_time_bluff_n:    int   = 0
+    bid_time_truth_sum:  float = 0.0   # suma de elapsed cuando la apuesta era verdad
+    bid_time_truth_n:    int   = 0
 
     @property
     def bluff_rate(self) -> float:
-        return self.times_caught_bluffing / max(self.bids_made, 1)
+        return self.bids_bluff / max(self.bids_total, 1)
 
     def face_bluff_rate(self, face: int) -> float:
-        """Tasa de mentira específica para una cara."""
         total = self.face_bid_counts.get(face, 0)
-        if total < 3:          # sin suficientes muestras, usar tasa global
+        if total < 3:
             return self.bluff_rate
         return self.face_bluff_counts.get(face, 0) / total
 
+    def qty_bluff_rate(self, bucket: int) -> float:
+        total = self.qty_bucket_counts.get(bucket, 0)
+        if total < 3:
+            return self.bluff_rate
+        return self.qty_bucket_bluff.get(bucket, 0) / total
+
+    @property
+    def paso_bluff_rate(self) -> float:
+        return self.paso_bluff_count / max(self.paso_count, 1)
+
+    @property
+    def avg_dice_when_paso(self) -> float:
+        return self.paso_dice_sum / max(self.paso_count, 1)
+
     @property
     def copy_rate(self) -> float:
-        """Frecuencia con la que copia la apuesta anterior en lugar de subir de verdad."""
-        return self.copy_count / max(self.bids_made, 1)
+        return self.copy_count / max(self.bids_total, 1)
+
+    @property
+    def avg_decision_time(self) -> float:
+        """Promedio de tiempo de decisión sobre todas las apuestas con tiempo registrado."""
+        n = self.bid_time_bluff_n + self.bid_time_truth_n
+        s = self.bid_time_bluff_sum + self.bid_time_truth_sum
+        return s / max(n, 1)
+
+    @property
+    def avg_bluff_time(self) -> float:
+        return self.bid_time_bluff_sum / max(self.bid_time_bluff_n, 1)
+
+    @property
+    def avg_truth_time(self) -> float:
+        return self.bid_time_truth_sum / max(self.bid_time_truth_n, 1)
+
+    @property
+    def time_sample_count(self) -> int:
+        return self.bid_time_bluff_n + self.bid_time_truth_n
+
+    def merge_from_db(self, row: dict) -> None:
+        """Fusiona una fila de player_bid_stats desde la DB (acumula, no reemplaza)."""
+        face   = row["face"]
+        bucket = row["qty_bucket"]
+        bt     = row["bids_total"]
+        bb     = row["bids_bluff"]
+        self.bids_total                    += bt
+        self.bids_bluff                    += bb
+        self.face_bid_counts[face]         += bt
+        self.face_bluff_counts[face]       += bb
+        self.qty_bucket_counts[bucket]     += bt
+        self.qty_bucket_bluff[bucket]      += bb
+        self.bid_time_bluff_sum            += row.get("bid_time_bluff_sum", 0.0)
+        self.bid_time_bluff_n              += row.get("bid_time_bluff_n", 0)
+        self.bid_time_truth_sum            += row.get("bid_time_truth_sum", 0.0)
+        self.bid_time_truth_n              += row.get("bid_time_truth_n", 0)
+
+    def merge_paso_from_db(self, row: dict) -> None:
+        """Fusiona una fila de player_paso_stats desde la DB."""
+        self.paso_count      += row["pasos_total"]
+        self.paso_bluff_count += row["pasos_bluff"]
+        self.paso_dice_sum   += row["paso_dice_sum"]
 
 
 @dataclass
@@ -427,6 +618,10 @@ class _BotMemory:
     player_stats: dict = field(default_factory=lambda: defaultdict(_PlayerStats))
     # Historial de bids de la ronda en curso: list[Bid] (caché local para detectar copiado)
     round_bids:   list = field(default_factory=list)
+    # Pasos hechos en la ronda: {player_id: dice_count_at_time}
+    round_pasos:  dict = field(default_factory=dict)
+    # Flag: ya se fusionaron los stats de DB para esta instancia de bot
+    _db_merged:   bool = False
 
 
 class VeryHardBot(BotStrategy):
@@ -482,16 +677,62 @@ class VeryHardBot(BotStrategy):
     PASO_PROB_THRESHOLD_LOW_DICE = 0.85
     PASO_RAND                    = 0.50
 
-    # Dudo de paso activo
-    DUDO_PASO_PROB = 0.40
+    # Dudo de paso activo — base; ajustado por _dudo_paso_threshold
+    DUDO_PASO_PROB_BASE      = 0.40
+    DUDO_PASO_PROB_MAX       = 0.90   # si sabemos que siempre miente
+    DUDO_PASO_PROB_MIN       = 0.15   # si sabemos que casi nunca miente
 
     def __init__(self):
         self._memory: dict[str, _BotMemory] = defaultdict(_BotMemory)
 
+    # ------------------------------------------------------------------ helpers de identidad
+
+    @staticmethod
+    def _stable_id(game: "Game", player_id: str) -> str:
+        """
+        Retorna un identificador estable para el jugador entre partidas.
+        Usa anon_id si está disponible (jugadores humanos con localStorage),
+        o player_id como fallback (bots y jugadores sin ID anónimo).
+        """
+        p = game.players.get(player_id)
+        if p and p.anon_id:
+            return p.anon_id
+        return player_id
+
     # ------------------------------------------------------------------ decide
 
-    def decide(self, game: "Game", bot_id: str) -> dict:
+    def _get_mem(self, bot_id: str, game: "Game") -> "_BotMemory":
+        """
+        Retorna la memoria de este bot, fusionando stats globales (de DB) si
+        es la primera vez que este bot_id participa en una partida.
+        """
         mem = self._memory[bot_id]
+        global_mem = self._memory.get("__global__")
+        if global_mem and not mem._db_merged:
+            # Copiar stats de jugadores humanos que están en esta partida
+            for pid, player in game.players.items():
+                if player.anon_id and player.anon_id in global_mem.player_stats:
+                    key = player.anon_id
+                    if key not in mem.player_stats:
+                        # Shallow-copy del objeto de stats global
+                        src = global_mem.player_stats[key]
+                        dst = mem.player_stats[key]
+                        dst.bids_total        = src.bids_total
+                        dst.bids_bluff        = src.bids_bluff
+                        dst.face_bid_counts   = dict(src.face_bid_counts)
+                        dst.face_bluff_counts = dict(src.face_bluff_counts)
+                        dst.qty_bucket_counts = dict(src.qty_bucket_counts)
+                        dst.qty_bucket_bluff  = dict(src.qty_bucket_bluff)
+                        dst.copy_count        = src.copy_count
+                        dst.total_rounds      = src.total_rounds
+                        dst.paso_count        = src.paso_count
+                        dst.paso_bluff_count  = src.paso_bluff_count
+                        dst.paso_dice_sum     = src.paso_dice_sum
+            mem._db_merged = True
+        return mem
+
+    def decide(self, game: "Game", bot_id: str) -> dict:
+        mem = self._get_mem(bot_id, game)
         self._sync_round_bids(game, bot_id, mem)
 
         own_dice   = game.players[bot_id].dice
@@ -520,8 +761,14 @@ class VeryHardBot(BotStrategy):
             if prob < threshold:
                 return {"action": "dudo"}
 
-        if game.last_paso is not None and game.current_bid is None:
-            if random.random() < self.DUDO_PASO_PROB:
+        if game.last_paso is not None:
+            passer_id  = game.last_paso["player_id"]
+            dudo_prob  = self._dudo_paso_threshold(mem, passer_id, game)
+            p_bluff    = self.prob_paso_is_bluff(game, passer_id)
+            # Si es imposible físicamente (< 5 dados) → siempre duda
+            if p_bluff >= 1.0:
+                return {"action": "dudo"}
+            if random.random() < dudo_prob:
                 return {"action": "dudo"}
 
         paso_threshold = self.PASO_PROB_THRESHOLD_LOW_DICE if low_dice else self.PASO_PROB_THRESHOLD
@@ -534,50 +781,120 @@ class VeryHardBot(BotStrategy):
 
     # ------------------------------------------------------------------ feedback del servidor
 
-    def on_reveal(self, bot_id: str, result: dict):
-        """
-        Llamado por el manager tras cada dudo resuelto.
-        result es el dict que ya se broadcast a los clientes:
-          action, bid (dict), bid_holds, challenger_id, loser_id, all_dice, ...
+    @staticmethod
+    def _qty_bucket(qty: int, total_dice: int) -> int:
+        """Clasifica una cantidad de apuesta en bucket 1=baja, 2=media, 3=alta."""
+        expected = total_dice / 6  # valor esperado de cualquier cara sin comodines
+        if qty <= expected * 0.7:
+            return 1
+        if qty >= expected * 1.3:
+            return 3
+        return 2
 
-        Actualiza:
-        - times_caught_bluffing si el apostador perdió el dudo
-        - face_bluff_counts / face_bid_counts con la cara apostada
-        - copy_count según patrones de bid de la ronda (via round_bids de la memoria)
+    def on_round_reveal(self, bot_id: str, game: "Game", all_dice: dict[str, list[int]]) -> None:
         """
-        action = result.get("action")
-        if action not in ("dudo", "calzo"):
+        Llamado tras cada dudo/calzo cuando se conocen todos los dados de la mesa.
+        Recorre TODA la bid_history de la ronda y para cada apuesta calcula
+        retroactivamente si era verdad o mentira usando los dados reales.
+
+        Esto permite aprender de TODAS las jugadas, no solo de las dudadas.
+
+        all_dice: {player_id: [d1, d2, ...]}  — dados reales de todos
+        """
+        mem        = self._get_mem(bot_id, game)
+        total_dice = sum(len(v) for v in all_dice.values())
+        if total_dice == 0:
             return
 
-        mem = self._memory[bot_id]
+        # Construir conteo global de dados por cara (con comodines solo para caras != 1)
+        # Los comodines (1) cuentan para todas las caras excepto cuando la cara bid es 1
+        aces = sum(1 for dice in all_dice.values() for d in dice if d == 1)
 
-        if action == "dudo":
-            bid_dict  = result.get("bid") or {}
-            bidder_id = bid_dict.get("player_id")
-            face      = bid_dict.get("face")
-            bid_holds = result.get("bid_holds", True)
-            loser_id  = result.get("loser_id")
+        def count_face(face: int) -> int:
+            if face == 1:
+                return sum(1 for dice in all_dice.values() for d in dice if d == 1)
+            return sum(1 for dice in all_dice.values() for d in dice if d == face) + aces
 
-            if bidder_id and bidder_id != bot_id and face:
-                stats = mem.player_stats[bidder_id]
-                stats.face_bid_counts[face] = stats.face_bid_counts.get(face, 0) + 1
-                # Si el apostador perdió el dudo → estaba mintiendo
-                if loser_id == bidder_id:
-                    stats.times_caught_bluffing += 1
-                    stats.face_bluff_counts[face] = stats.face_bluff_counts.get(face, 0) + 1
+        for bid in mem.round_bids:
+            pid     = getattr(bid, "player_id", None)
+            face    = getattr(bid, "face", None)
+            qty     = getattr(bid, "quantity", None)
+            elapsed = getattr(bid, "elapsed_seconds", 0.0)
+            if pid is None or face is None or qty is None:
+                continue
 
-        elif action == "calzo":
-            # Calzo exacto: el apostador decía la verdad — registrar cara como honesta
-            bid_dict  = result.get("bid") or {}
-            bidder_id = bid_dict.get("player_id")
-            face      = bid_dict.get("face")
-            if bidder_id and bidder_id != bot_id and face:
-                stats = mem.player_stats[bidder_id]
-                stats.face_bid_counts[face] = stats.face_bid_counts.get(face, 0) + 1
-                # No incrementamos bluff_count — fue verdad
+            key    = self._stable_id(game, pid)
+            stats  = mem.player_stats[key]
+            bucket = self._qty_bucket(qty, total_dice)
+            is_bluff = count_face(face) < qty
 
-        # Detectar copiado en la ronda usando round_bids acumulados
+            stats.bids_total += 1
+            stats.face_bid_counts[face]     += 1
+            stats.qty_bucket_counts[bucket] += 1
+            if is_bluff:
+                stats.bids_bluff += 1
+                stats.face_bluff_counts[face]   += 1
+                stats.qty_bucket_bluff[bucket]  += 1
+
+            # Acumular tiempo de decisión si hay dato válido (>0 = fue registrado)
+            if elapsed > 0:
+                if is_bluff:
+                    stats.bid_time_bluff_sum += elapsed
+                    stats.bid_time_bluff_n   += 1
+                else:
+                    stats.bid_time_truth_sum += elapsed
+                    stats.bid_time_truth_n   += 1
+
         self._detect_copy_patterns(mem)
+
+    def on_reveal(self, bot_id: str, result: dict, game: "Game | None" = None):
+        """
+        Llamado por el manager tras cada dudo/calzo resuelto.
+        Delega el aprendizaje retroactivo a on_round_reveal() que usa all_dice.
+        Aquí solo maneja el caso de paso (que no tiene all_dice completo).
+        """
+        action = result.get("action")
+        if action not in ("dudo", "calzo", "paso"):
+            return
+
+        mem = self._get_mem(bot_id, game) if game else self._memory[bot_id]
+
+        def stable(pid: str) -> str:
+            return self._stable_id(game, pid) if game else pid
+
+        if action in ("dudo", "calzo"):
+            # El aprendizaje retroactivo de bids se hace en on_round_reveal().
+            # Solo queda procesar all_dice si está disponible aquí también
+            # (on_round_reveal se llama desde notify_reveal en el manager).
+            pass
+
+        elif action == "paso":
+            passer_id  = result.get("passer_id")
+            paso_valid = result.get("paso_valid", True)
+            if passer_id and passer_id != bot_id:
+                key   = stable(passer_id)
+                stats = mem.player_stats[key]
+                if passer_id not in mem.round_pasos:
+                    stats.paso_count    += 1
+                    stats.paso_dice_sum += 5
+                    mem.round_pasos[passer_id] = 5
+                if not paso_valid:
+                    stats.paso_bluff_count += 1
+
+    def on_paso_made(self, bot_id: str, passer_id: str, passer_dice_count: int, stable_passer_id: str | None = None):
+        """
+        Llamado por el manager cuando alguien hace un paso (antes de ser dudado).
+        Registra dados al momento del paso para avg_dice_when_paso.
+        """
+        if passer_id == bot_id:
+            return
+        mem   = self._memory[bot_id]  # no necesita game aquí
+        key   = stable_passer_id or passer_id
+        stats = mem.player_stats[key]
+        if passer_id not in mem.round_pasos:
+            stats.paso_count    += 1
+            stats.paso_dice_sum += passer_dice_count
+            mem.round_pasos[passer_id] = passer_dice_count
 
     # ------------------------------------------------------------------ helpers internos
 
@@ -585,18 +902,13 @@ class VeryHardBot(BotStrategy):
         """
         Mantiene mem.round_bids sincronizado con game.bid_history.
         No registra bids propios. Detecta inicio de ronda nueva para limpiar.
+        Los conteos de bids se actualizan retroactivamente en on_round_reveal().
         """
         current_round = game.round_number
         if current_round != mem.last_round:
-            # Nueva ronda: actualizar bids_made con los bids del historial previo
-            # que aún no hayamos contado (on_reveal los procesa uno a uno, pero
-            # bids_made necesita el total).
-            for bid in mem.round_bids:
-                pid = getattr(bid, "player_id", None)
-                if pid and pid != bot_id:
-                    mem.player_stats[pid].bids_made += 1
-            mem.round_bids = []
-            mem.last_round = current_round
+            mem.round_bids  = []
+            mem.round_pasos = {}
+            mem.last_round  = current_round
 
         # Añadir bids nuevos que game.bid_history tenga y round_bids no
         known = len(mem.round_bids)
@@ -622,35 +934,87 @@ class VeryHardBot(BotStrategy):
             if same_face and 0 <= qty_diff <= 1:
                 mem.player_stats[pid].copy_count += 1
 
+    def _dudo_paso_threshold(self, mem: _BotMemory, passer_id: str, game: "Game") -> float:
+        """
+        Probabilidad de dudar el paso activo, ajustada por el historial del pasador.
+
+        Factores:
+        1. Si el pasador tiene < 5 dados → siempre mentira (retorna 1.0).
+        2. paso_bluff_rate histórico: si suele mentir al paso → más probable dudar.
+        3. avg_dice_when_paso: si suele pasar con pocos dados → más probable dudar.
+        4. Sin historial suficiente → usa la base.
+        """
+        passer = game.players.get(passer_id)
+        if passer and passer.dice_count < 5:
+            return 1.0  # físicamente imposible → siempre duda
+
+        key   = self._stable_id(game, passer_id)
+        stats = mem.player_stats.get(key)
+        if stats is None or stats.paso_count < 2:
+            return self.DUDO_PASO_PROB_BASE
+
+        prob = self.DUDO_PASO_PROB_BASE
+
+        br = stats.paso_bluff_rate
+        if br > 0.60:
+            prob = min(prob + 0.30, self.DUDO_PASO_PROB_MAX)
+        elif br > 0.40:
+            prob = min(prob + 0.15, self.DUDO_PASO_PROB_MAX)
+        elif br < 0.10:
+            prob = max(prob - 0.20, self.DUDO_PASO_PROB_MIN)
+
+        avg = stats.avg_dice_when_paso
+        if avg < 4.0:
+            prob = min(prob + 0.15, self.DUDO_PASO_PROB_MAX)
+
+        return prob
+
     def _dudo_threshold(self, mem: _BotMemory, bid: "Bid", game: "Game") -> float:
         """
-        Umbral de dudo enriquecido:
-        1. Base según bluff_rate global del apostador.
-        2. Bonus si la cara que apostó tiene una tasa de mentira alta (≥ 2 muestras).
-        3. Bonus si en esta ronda el jugador ha copiado la apuesta anterior.
+        Umbral de dudo enriquecido con modelado de rivales y ML.
+
+        Señales usadas:
+        1. bluff_rate global retroactivo (todas las apuestas, no solo dudadas).
+        2. face_bluff_rate para la cara concreta apostada.
+        3. qty_bluff_rate para el bucket de cantidad (baja/media/alta).
+        4. copy_rate en esta ronda: copiador = señal de juego débil.
+        5. Tiempo de decisión: comparado contra promedio histórico del jugador,
+           y contra su patrón diferenciado bluff-vs-verdad.
+        6. BluffModel ML: si hay suficientes datos, ajusta el umbral con P(bluff).
         """
+        from game.player_model import bluff_model  # import local para evitar circular
+
         bidder_id = bid.player_id
-        stats     = mem.player_stats.get(bidder_id)
+        key       = self._stable_id(game, bidder_id)
+        stats     = mem.player_stats.get(key)
 
         if stats is None:
             return self.DUDO_THRESHOLD_BASE
 
-        # 1. Base global
+        total_dice = game.total_dice()
+        bucket     = self._qty_bucket(bid.quantity, total_dice)
+        elapsed    = getattr(bid, "elapsed_seconds", 0.0)
+
+        # 1. Base global retroactiva
         br = stats.bluff_rate
         if br > 0.40:
             threshold = self.DUDO_THRESHOLD_HIGH
-        elif br < 0.10 and stats.bids_made >= 5:
+        elif br < 0.10 and stats.bids_total >= 5:
             threshold = self.DUDO_THRESHOLD_LOW
         else:
             threshold = self.DUDO_THRESHOLD_BASE
 
-        # 2. Cara específica: si suele mentir con esta cara, dudar más fácil
+        # 2. Cara específica
         face_br = stats.face_bluff_rate(bid.face)
         if face_br > 0.50 and stats.face_bid_counts.get(bid.face, 0) >= 2:
             threshold += self.DUDO_FACE_BONUS
 
-        # 3. Copiado en esta ronda: indicio de juego débil/bluff
-        #    Detectar si el bid actual es copia del anterior en bid_history
+        # 3. Bucket de cantidad
+        qty_br = stats.qty_bluff_rate(bucket)
+        if qty_br > 0.55 and stats.qty_bucket_counts.get(bucket, 0) >= 3:
+            threshold += 0.04
+
+        # 4. Copiado en esta ronda
         bids = mem.round_bids
         if len(bids) >= 2:
             prev = bids[-2]
@@ -660,7 +1024,35 @@ class VeryHardBot(BotStrategy):
                     and 0 <= getattr(curr, "quantity", 0) - getattr(prev, "quantity", 0) <= 1):
                 threshold += self.DUDO_COPY_BONUS
 
-        return min(threshold, 0.45)   # techo para no dudar ciegamente siempre
+        # 5. Tiempo de decisión
+        if elapsed > 0 and stats.time_sample_count >= 5:
+            own_avg = stats.avg_decision_time
+            ratio   = elapsed / max(own_avg, 0.5)
+
+            # Anomalía: mucho más rápido o mucho más lento que su propio promedio
+            if ratio < 0.40 or ratio > 2.5:
+                threshold += 0.03
+
+            # Comparar contra patrones diferenciados bluff vs verdad
+            if stats.bid_time_bluff_n >= 3 and stats.bid_time_truth_n >= 3:
+                bluff_avg = stats.avg_bluff_time
+                truth_avg = stats.avg_truth_time
+                # Solo aplicar si hay diferencia notable entre sus patrones
+                if abs(bluff_avg - truth_avg) > 2.0:
+                    dist_bluff = abs(elapsed - bluff_avg)
+                    dist_truth = abs(elapsed - truth_avg)
+                    if dist_bluff < dist_truth:
+                        threshold += 0.04   # tiempo más parecido a cuando miente
+                    else:
+                        threshold -= 0.02   # tiempo más parecido a cuando dice verdad
+
+        # 6. ML
+        p_bluff_ml = bluff_model.predict_bluff(key, bid.face, bucket, elapsed, stats)
+        if p_bluff_ml is not None:
+            ml_signal = (p_bluff_ml - 0.5) * 0.20  # rango ±0.10
+            threshold += ml_signal
+
+        return min(threshold, 0.45)
 
     def _gavilan_allowed(self, game: "Game", bot_id: str) -> bool:
         foreign_bids = sum(
@@ -728,13 +1120,7 @@ class VeryHardBot(BotStrategy):
                 chosen = weak[0][0]
                 return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
 
-        good = [(b, p) for b, p in scored if p >= min_prob]
-        if good:
-            good.sort(key=lambda x: (x[0].quantity, x[1]), reverse=True)
-            chosen = good[0][0]
-        else:
-            scored.sort(key=lambda x: -x[1])
-            chosen = scored[0][0]
+        chosen = self._pick_bid(scored, min_prob, aggression=0.20)
 
         return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
 
@@ -774,15 +1160,42 @@ def decide(game: "Game", bot_id: str) -> dict:
 
 def notify_reveal(game: "Game", result: dict):
     """
-    Llamado por el manager tras resolver un dudo o calzo.
+    Llamado por el manager tras resolver un dudo o calzo (o dudo de paso).
     Notifica a todos los VeryHardBots activos en la partida para que
     actualicen su memoria con el resultado real.
 
-    result: el mismo dict que se broadcast como tipo "reveal".
+    Si el resultado incluye all_dice, se usa para aprendizaje retroactivo
+    de TODAS las apuestas de la ronda (no solo la que fue dudada).
     """
     vh = _REGISTRY.get("very_hard")
     if not isinstance(vh, VeryHardBot):
         return
+
+    all_dice_raw: dict = result.get("all_dice") or {}
+    # all_dice_raw puede ser {player_id: [d1, d2, ...]} o vacío para paso sin reveal
+    all_dice: dict[str, list[int]] = {
+        pid: list(dice) for pid, dice in all_dice_raw.items()
+        if isinstance(dice, (list, tuple))
+    }
+
     for pid, player in game.players.items():
         if player.is_bot and player.bot_difficulty == "very_hard":
-            vh.on_reveal(pid, result)
+            vh.on_reveal(pid, result, game)
+            if all_dice:
+                vh.on_round_reveal(pid, game, all_dice)
+
+
+def notify_paso(game: "Game", passer_id: str):
+    """
+    Llamado por el manager cuando un jugador hace un paso.
+    Permite al VeryHard registrar el paso en su memoria estadística.
+    """
+    vh = _REGISTRY.get("very_hard")
+    if not isinstance(vh, VeryHardBot):
+        return
+    passer = game.players.get(passer_id)
+    passer_dice = passer.dice_count if passer else 5
+    stable_passer = vh._stable_id(game, passer_id)
+    for pid, player in game.players.items():
+        if player.is_bot and player.bot_difficulty == "very_hard" and pid != passer_id:
+            vh.on_paso_made(pid, passer_id, passer_dice, stable_passer)

@@ -39,128 +39,190 @@
 
 <!-- ═══════════════════════════════  LOBBY  ══════════════════════════════ -->
 <div id="lobby-screen" class="screen active">
-  <div class="lobby-decor" aria-hidden="true">
-    <div class="decor-die face-5 d1"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
-    <div class="decor-die face-3 d2"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
-    <div class="decor-die face-6 d3"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
-    <div class="decor-die face-4 d4"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
-    <div class="decor-die face-2 d5"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
-    <div class="decor-die face-1 d6"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
-    <div class="decor-die face-5 d7"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
 
-    <div class="decor-cup c1"></div>
-    <div class="decor-cup c2"></div>
-    <div class="decor-cup c3"></div>
-
-    <div class="decor-beer b1"></div>
-    <div class="decor-beer b2"></div>
+  <!-- Partículas decorativas de fondo -->
+  <div class="lobby-bg" aria-hidden="true">
+    <div class="lbg-die lbg-d1"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="lbg-die lbg-d2 face-6"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="lbg-die lbg-d3 face-3"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="lbg-die lbg-d4 face-2"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+    <div class="lbg-die lbg-d5 face-4"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
   </div>
-  <div class="lobby-wrap">
-    <div class="lobby-logo">
-      <div class="logo-dice-row">
-        <span class="logo-die">⚄</span>
-        <span class="logo-die main-die">⚅</span>
-        <span class="logo-die">⚂</span>
-      </div>
-      <h1>DUDO</h1>
-      <p class="tagline">El Juego de los Cachos</p>
-    </div>
 
-    <div class="lobby-card" id="lobby-form">
-      <div class="field-group">
-        <label><i class="fa-regular fa-user" aria-hidden="true"></i> Tu nombre</label>
-        <input id="inp-name" type="text" placeholder="Ingresa tu nombre" maxlength="20"
-               onkeydown="if(event.key==='Enter') joinRoom()" />
-      </div>
-      <div class="field-group">
-        <label><i class="fa-regular fa-face-smile" aria-hidden="true"></i> Tu avatar</label>
-        <div class="avatar-picker-wrap">
-          <div id="avatar-picker" class="avatar-picker-row" aria-label="Selector de avatar"></div>
-          <button id="btn-avatar-toggle" class="btn btn-sm avatar-toggle" type="button" onclick="toggleAvatarPicker()">Ver todos</button>
+  <!-- Layout principal: izquierda branding + derecha formulario -->
+  <div class="lobby-layout">
+
+    <!-- ── Columna izquierda: Branding ── -->
+    <div class="lobby-brand">
+      <div class="brand-inner">
+        <div class="brand-dice-display" aria-hidden="true">
+          <div class="bdd-die bdd-d1 face-5"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+          <div class="bdd-die bdd-d2 face-6"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
+          <div class="bdd-die bdd-d3 face-1"><span class="pip p1"></span><span class="pip p2"></span><span class="pip p3"></span><span class="pip p4"></span><span class="pip p5"></span><span class="pip p6"></span><span class="pip p7"></span><span class="pip p8"></span><span class="pip p9"></span></div>
         </div>
-      </div>
-      <div class="field-group">
-        <label><i class="fa-solid fa-hashtag" aria-hidden="true"></i> Código de sala</label>
-        <div class="row-group">
-          <input id="inp-room" type="text" placeholder="ej: sala1" maxlength="20"
-                 onkeydown="if(event.key==='Enter') joinRoom()" />
-          <button class="btn btn-gold" onclick="joinRoom()"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>Unirse</button>
-        </div>
+        <h1 class="brand-title">DUDO</h1>
+        <p class="brand-subtitle">El Juego de los Cachos</p>
+        <div class="brand-divider"></div>
+        <ul class="brand-features">
+          <li><i class="fa-solid fa-dice"></i> Apuesta, duda y calza</li>
+          <li><i class="fa-solid fa-users"></i> Hasta 8 jugadores online</li>
+          <li><i class="fa-solid fa-robot"></i> Bots con IA adaptativa</li>
+          <li><i class="fa-solid fa-bolt"></i> Sin registro — entra y juega</li>
+        </ul>
       </div>
     </div>
 
-    <div class="lobby-card" id="lobby-room" style="display:none">
-      <div class="room-header">
-        <span class="room-label"><i class="fa-solid fa-door-open" aria-hidden="true"></i> Sala:</span>
-        <strong id="disp-room-code" class="room-code"></strong>
-        <button id="btn-copy-room" class="btn btn-sm" onclick="copyRoomCode()"><i class="fa-regular fa-copy" aria-hidden="true"></i>Copiar</button>
-      </div>
-      <div id="lobby-player-list" class="lobby-player-list"></div>
+    <!-- ── Columna derecha: formulario/sala ── -->
+    <div class="lobby-panel">
 
-      <div class="rules-panel">
-        <div class="rules-title"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Reglas de sala</div>
-        <div id="host-rules-controls" class="rules-controls" style="display:none">
-          <label class="check-row">
-            <input id="rule-elimination-loser" type="checkbox" onchange="onHostRulesChanged()" />
-            <span class="rule-line">Modo perdedor <button type="button" class="rule-help" data-tooltip="Modo perdedor: termina cuando alguien pierde todos sus dados.&#10;Modo ganador: gana el ultimo jugador con dados." aria-label="Detalle de modo de partida"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
-          </label>
-          <label class="check-row">
-            <input id="rule-allow-gavilan" type="checkbox" onchange="onHostRulesChanged()" />
-            <span class="rule-line">Permitir Gavilan <button type="button" class="rule-help" data-tooltip="Permite dudar o calzar fuera de turno." aria-label="Detalle de Gavilan"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
-          </label>
-          <label class="check-row">
-            <input id="rule-calzo-on-turn" type="checkbox" onchange="onHostRulesChanged()" />
-            <span class="rule-line">Calzo recupera en mi turno <button type="button" class="rule-help" data-tooltip="Si esta activo, un calzo correcto recupera dado tambien en tu turno. Si esta desactivado, solo recupera fuera de turno." aria-label="Detalle de recuperacion por calzo"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
-          </label>
-          <label class="check-row">
-            <input id="rule-allow-throwable-emojis" type="checkbox" onchange="onHostRulesChanged()" />
-            <span class="rule-line">Permitir lanzar emojis <button type="button" class="rule-help" data-tooltip="Permite que los jugadores lancen emojis a otros durante la partida." aria-label="Detalle de emojis lanzables"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button></span>
-          </label>
-          <label class="check-row timeout-row">
-            <span class="rule-line">Tiempo por turno</span>
-            <div id="rule-turn-timeout" class="timeout-options" role="radiogroup" aria-label="Tiempo por turno">
-              <input class="timeout-input" type="radio" id="timeout-0" name="turn-timeout" value="0" onchange="onHostRulesChanged()" checked />
-              <label class="timeout-opt" for="timeout-0">Sin limite</label>
-              <input class="timeout-input" type="radio" id="timeout-30" name="turn-timeout" value="30" onchange="onHostRulesChanged()" />
-              <label class="timeout-opt" for="timeout-30">30s</label>
-              <input class="timeout-input" type="radio" id="timeout-60" name="turn-timeout" value="60" onchange="onHostRulesChanged()" />
-              <label class="timeout-opt" for="timeout-60">60s</label>
-              <input class="timeout-input" type="radio" id="timeout-90" name="turn-timeout" value="90" onchange="onHostRulesChanged()" />
-              <label class="timeout-opt" for="timeout-90">90s</label>
+      <!-- Form: unirse -->
+      <div class="lp-card lp-card--form" id="lobby-form">
+        <div class="lp-card-header">
+          <h2 class="lp-card-title">Entrar a partida</h2>
+        </div>
+
+        <div class="field-group">
+          <label for="inp-name"><i class="fa-regular fa-user" aria-hidden="true"></i> Tu nombre</label>
+          <input id="inp-name" type="text" placeholder="¿Cómo te llaman?" maxlength="20"
+                 onkeydown="if(event.key==='Enter') joinRoom()" autocomplete="nickname" />
+        </div>
+
+        <div class="field-group">
+          <label><i class="fa-regular fa-face-smile" aria-hidden="true"></i> Tu avatar</label>
+          <div class="avatar-picker-wrap">
+            <div id="avatar-picker" class="avatar-picker-row" aria-label="Selector de avatar"></div>
+            <button id="btn-avatar-toggle" class="btn btn-sm avatar-toggle" type="button" onclick="toggleAvatarPicker()">Ver todos</button>
+          </div>
+        </div>
+
+        <div class="lp-room-join">
+          <div class="field-group">
+            <label for="inp-room"><i class="fa-solid fa-hashtag" aria-hidden="true"></i> Código de sala</label>
+            <input id="inp-room" type="text" placeholder="ej: mesa1" maxlength="20"
+                   onkeydown="if(event.key==='Enter') joinRoom()" autocomplete="off" />
+          </div>
+          <button class="btn btn-join-main" onclick="joinRoom()">
+            <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+            <span>Unirse</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Room: sala unida -->
+      <div class="lp-card lp-card--room" id="lobby-room" style="display:none">
+
+        <!-- Room header -->
+        <div class="lp-room-header">
+          <div class="lp-room-info">
+            <span class="lp-room-eyebrow"><i class="fa-solid fa-door-open" aria-hidden="true"></i> Sala activa</span>
+            <div class="lp-room-code-row">
+              <strong id="disp-room-code" class="lp-room-code"></strong>
+              <button id="btn-copy-room" class="btn btn-icon-sm" onclick="copyRoomCode()" title="Copiar código">
+                <i class="fa-regular fa-copy" aria-hidden="true"></i>
+              </button>
             </div>
-          </label>
+          </div>
+          <div class="lp-room-header-actions">
+            <button class="btn btn-sm btn-subaction" type="button" onclick="openStatsModal()" title="Mis estadísticas">
+              <i class="fa-solid fa-chart-bar" aria-hidden="true"></i>
+            </button>
+            <button class="btn btn-sm btn-subaction" type="button" onclick="openAchievementsModal()" title="Logros">
+              <i class="fa-solid fa-trophy" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
-        <ul id="rules-summary" class="rules-summary"></ul>
-      </div>
 
-      <div class="lobby-actions">
-        <button id="btn-ready" class="btn btn-gold" onclick="toggleReady()"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>¡Listo!</span></button>
-        <button id="btn-start" class="btn btn-start" onclick="startGame()" style="display:none">
-          <i class="fa-solid fa-play" aria-hidden="true"></i>Iniciar Juego
-        </button>
-        <button id="btn-become-spectator" class="btn btn-sm btn-spectator-toggle" style="display:none" onclick="becomeSpectator()" title="Pasarte a espectador y liberar tu lugar">
-          <i class="fa-solid fa-eye" aria-hidden="true"></i> Ser espectador
-        </button>
-        <button id="btn-become-player" class="btn btn-sm btn-spectator-toggle" style="display:none" onclick="becomePlayer()" title="Unirte como jugador">
-          <i class="fa-solid fa-user-plus" aria-hidden="true"></i> Unirme a partida
-        </button>
-      </div>
-      <div id="host-bot-controls" class="host-bot-controls" style="display:none">
-        <span class="bot-controls-label"><i class="fa-solid fa-robot" aria-hidden="true"></i> Agregar bot:</span>
-        <button class="btn btn-sm btn-bot btn-bot--easy" type="button" onclick="addBot('easy')" title="Bot fácil: juega aleatoriamente">Fácil</button>
-        <button class="btn btn-sm btn-bot btn-bot--medium" type="button" onclick="addBot('medium')" title="Bot medio: usa probabilidades básicas">Medio</button>
-        <button class="btn btn-sm btn-bot btn-bot--hard" type="button" onclick="addBot('hard')" title="Bot difícil: calcula probabilidades con sus dados">Difícil</button>
-        <button class="btn btn-sm btn-bot btn-bot--very-hard" type="button" onclick="addBot('very_hard')" title="Bot muy difícil: memoria, modelado de rivales, Gavilán y bluff">Muy difícil</button>
-      </div>
-      <div class="lobby-subactions">
-        <button class="btn btn-sm" type="button" onclick="openStatsModal()">📊 Mis stats</button>
-        <button class="btn btn-sm" type="button" onclick="openAchievementsModal()">🏆 Logros</button>
-        <div id="level-badge" class="level-badge"></div>
-      </div>
-      <p class="hint">Mínimo 2 jugadores · El juego comienza cuando todos estén listos.<br/>
-        Los <strong>unos</strong> son comodines (cuentan para cualquier cara).</p>
-    </div>
-  </div>
+        <!-- Player list -->
+        <div id="lobby-player-list" class="lp-player-list"></div>
+
+        <!-- Bot controls (host only) -->
+        <div id="host-bot-controls" class="lp-bot-controls" style="display:none">
+          <span class="lp-bot-label"><i class="fa-solid fa-robot" aria-hidden="true"></i> Agregar bot</span>
+          <div class="lp-bot-buttons">
+            <button class="btn btn-sm btn-bot btn-bot--easy"      type="button" onclick="addBot('easy')"      title="Bot fácil: juega aleatoriamente">Fácil</button>
+            <button class="btn btn-sm btn-bot btn-bot--medium"    type="button" onclick="addBot('medium')"    title="Bot medio: usa probabilidades básicas">Medio</button>
+            <button class="btn btn-sm btn-bot btn-bot--hard"      type="button" onclick="addBot('hard')"      title="Bot difícil: calcula probabilidades con sus dados">Difícil</button>
+            <button class="btn btn-sm btn-bot btn-bot--very-hard" type="button" onclick="addBot('very_hard')" title="Bot muy difícil: memoria, modelado de rivales, Gavilán y bluff">Experto</button>
+          </div>
+        </div>
+
+        <!-- Rules panel -->
+        <details class="lp-rules">
+          <summary class="lp-rules-summary">
+            <i class="fa-solid fa-sliders" aria-hidden="true"></i> Reglas de sala
+            <i class="fa-solid fa-chevron-down lp-rules-chevron" aria-hidden="true"></i>
+          </summary>
+          <div class="lp-rules-body">
+            <div id="host-rules-controls" class="rules-controls" style="display:none">
+              <label class="check-row">
+                <input id="rule-elimination-loser" type="checkbox" onchange="onHostRulesChanged()" />
+                <span class="rule-line">Modo perdedor
+                  <button type="button" class="rule-help" data-tooltip="Modo perdedor: termina cuando alguien pierde todos sus dados.&#10;Modo ganador: gana el ultimo jugador con dados." aria-label="Detalle de modo de partida"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                </span>
+              </label>
+              <label class="check-row">
+                <input id="rule-allow-gavilan" type="checkbox" onchange="onHostRulesChanged()" />
+                <span class="rule-line">Permitir Gavilán
+                  <button type="button" class="rule-help" data-tooltip="Permite dudar o calzar fuera de turno." aria-label="Detalle de Gavilan"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                </span>
+              </label>
+              <label class="check-row">
+                <input id="rule-calzo-on-turn" type="checkbox" onchange="onHostRulesChanged()" />
+                <span class="rule-line">Calzo recupera en mi turno
+                  <button type="button" class="rule-help" data-tooltip="Si esta activo, un calzo correcto recupera dado tambien en tu turno. Si esta desactivado, solo recupera fuera de turno." aria-label="Detalle de recuperacion por calzo"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                </span>
+              </label>
+              <label class="check-row">
+                <input id="rule-allow-throwable-emojis" type="checkbox" onchange="onHostRulesChanged()" />
+                <span class="rule-line">Permitir lanzar emojis
+                  <button type="button" class="rule-help" data-tooltip="Permite que los jugadores lancen emojis a otros durante la partida." aria-label="Detalle de emojis lanzables"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                </span>
+              </label>
+              <label class="check-row timeout-row">
+                <span class="rule-line">Tiempo por turno</span>
+                <div id="rule-turn-timeout" class="timeout-options" role="radiogroup" aria-label="Tiempo por turno">
+                  <input class="timeout-input" type="radio" id="timeout-0"  name="turn-timeout" value="0"  onchange="onHostRulesChanged()" checked />
+                  <label class="timeout-opt" for="timeout-0">∞</label>
+                  <input class="timeout-input" type="radio" id="timeout-30" name="turn-timeout" value="30" onchange="onHostRulesChanged()" />
+                  <label class="timeout-opt" for="timeout-30">30s</label>
+                  <input class="timeout-input" type="radio" id="timeout-60" name="turn-timeout" value="60" onchange="onHostRulesChanged()" />
+                  <label class="timeout-opt" for="timeout-60">60s</label>
+                  <input class="timeout-input" type="radio" id="timeout-90" name="turn-timeout" value="90" onchange="onHostRulesChanged()" />
+                  <label class="timeout-opt" for="timeout-90">90s</label>
+                </div>
+              </label>
+            </div>
+            <ul id="rules-summary" class="rules-summary"></ul>
+          </div>
+        </details>
+
+        <!-- Actions -->
+        <div class="lp-actions">
+          <button id="btn-ready" class="btn btn-ready-main" onclick="toggleReady()">
+            <i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>¡Listo!</span>
+          </button>
+          <button id="btn-start" class="btn btn-start-main" onclick="startGame()" style="display:none">
+            <i class="fa-solid fa-play" aria-hidden="true"></i>Iniciar Juego
+          </button>
+          <button id="btn-become-spectator" class="btn btn-sm btn-spec" style="display:none" onclick="becomeSpectator()" title="Pasarte a espectador">
+            <i class="fa-solid fa-eye" aria-hidden="true"></i> Espectador
+          </button>
+          <button id="btn-become-player" class="btn btn-sm btn-spec" style="display:none" onclick="becomePlayer()">
+            <i class="fa-solid fa-user-plus" aria-hidden="true"></i> Unirme
+          </button>
+        </div>
+
+        <!-- Footer: level badge + hint -->
+        <div class="lp-footer">
+          <div id="level-badge" class="level-badge"></div>
+          <p class="lp-hint">
+            Mínimo 2 jugadores · Los <strong>unos</strong> son comodines.
+          </p>
+        </div>
+
+      </div><!-- .lp-card--room -->
+    </div><!-- .lobby-panel -->
+  </div><!-- .lobby-layout -->
 </div>
 
 <!-- ═══════════════════════════════  GAME  ═══════════════════════════════ -->
@@ -267,11 +329,12 @@
       <!-- Stats -->
       <div class="panel panel-stats">
         <div class="stat">
-          <span class="stat-lbl"><i class="fa-solid fa-trophy" aria-hidden="true"></i> Ronda</span>
+          <span class="stat-lbl"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i> Ronda</span>
           <span id="disp-round" class="stat-val">—</span>
         </div>
+        <div class="stat-divider"></div>
         <div class="stat">
-          <span class="stat-lbl"><i class="fa-solid fa-dice" aria-hidden="true"></i> Dados en mesa</span>
+          <span class="stat-lbl"><i class="fa-solid fa-dice" aria-hidden="true"></i> Dados</span>
           <span id="disp-total" class="stat-val">—</span>
         </div>
       </div>

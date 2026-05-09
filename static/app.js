@@ -664,6 +664,7 @@ function closeAchievementsModal() {
 const AUDIO_STORAGE_KEY = 'dudoMuted';
 const RULES_STORAGE_KEY = 'dudoRules';
 const STATS_STORAGE_KEY = 'dudoStats';
+const ANON_ID_KEY       = 'dudoAnonId';
 // LEVEL_STORAGE_KEY is defined above in the LEVELS section
 
 const EMPTY_STATS = {
@@ -710,6 +711,62 @@ function loadSession() {
 
 function clearSession() {
   try { localStorage.removeItem(SESSION_STORAGE_KEY); } catch (_) {}
+}
+
+/**
+ * Retorna un ID anónimo persistente en sessionStorage para identificar
+ * al jugador humano entre partidas (sin requerir registro).
+ * El ID se genera una sola vez y se guarda en localStorage.
+ */
+function getOrCreateAnonId() {
+  try {
+    let id = localStorage.getItem(ANON_ID_KEY);
+    if (!id) {
+      // Genera un UUID v4 simplificado
+      id = 'anon-' + ([1e7]+-1e3+-4e3+-8e3+-1e11).toString()
+        .replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
+      localStorage.setItem(ANON_ID_KEY, id);
+    }
+    return id;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Fetch persistent stats from the server and merge them into localStorage,
+ * always preferring the server's values (they are the authoritative source).
+ * Called once after joining a room.
+ */
+async function syncStatsFromServer() {
+  const anonId = getOrCreateAnonId();
+  if (!anonId) return;
+  try {
+    const res = await fetch(`/api/player/${encodeURIComponent(anonId)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.found) return;
+
+    // Merge level / XP (server wins)
+    const levelData = loadLevelData();
+    if (data.xp > levelData.xp) {
+      saveLevelData({ xp: data.xp, level: xpToLevel(data.xp) });
+      renderLevelBadge();
+      renderAvatarPicker();
+    }
+
+    // Merge game stats (server wins for games_played / games_won;
+    // keep local counters for per-session detail that server doesn't track yet)
+    const stats = loadStats();
+    let changed = false;
+    if (data.games_played > stats.gamesPlayed) { stats.gamesPlayed = data.games_played; changed = true; }
+    if (data.games_won   > stats.gamesWon)    { stats.gamesWon    = data.games_won;    changed = true; }
+    if (changed) saveStats(stats);
+  } catch (_) {
+    // Network or parse error — silently ignore, local data stays
+  }
 }
 
 function loadStats() {
@@ -1118,7 +1175,8 @@ function onConnected(msg) {
     S.playerAvatar = session.avatar;
   }
   const reconnect_id = (session && session.room === S.roomId) ? session.playerId : null;
-  send({ type: 'join', name: S.playerName, avatar: S.playerAvatar, reconnect_id });
+  const anon_id = getOrCreateAnonId();
+  send({ type: 'join', name: S.playerName, avatar: S.playerAvatar, reconnect_id, anon_id });
 }
 
 function onJoined(msg) {
@@ -1132,6 +1190,9 @@ function onJoined(msg) {
   S.spectatorCount = msg.spectator_count ?? 0;
   updateSpectatorCount();
   saveSession();
+
+  // Sync persistent stats from server (non-blocking)
+  syncStatsFromServer();
 
   document.getElementById('disp-room-code').textContent = S.roomId;
   document.getElementById('lobby-form').style.display = 'none';
@@ -1813,9 +1874,8 @@ function onGameOver(msg) {
   const goStandings = document.getElementById('go-standings');
   if (goStandings && Array.isArray(msg.standings) && msg.standings.length > 1) {
     goStandings.innerHTML = '';
-    const total = msg.standings.length;
-    msg.standings.slice().reverse().forEach((entry, i) => {
-      const pos = total - i;
+    msg.standings.forEach((entry, i) => {
+      const pos = i + 1;
       const li = document.createElement('li');
       li.className = 'go-standing-row';
       const isSelf = entry.id === S.playerId;
@@ -2595,9 +2655,13 @@ function renderOtherPlayers() {
       (p.dice_count <= 0 ? ' eliminated' : '');
     card.dataset.pid = pid;
 
+    const avatarEl = document.createElement('div');
+    avatarEl.className = 'player-card-avatar';
+    avatarEl.textContent = p.avatar || '🎲';
+
     const nameEl = document.createElement('div');
     nameEl.className = 'player-card-name';
-    nameEl.textContent = `${p.avatar || '🎲'} ${p.name}`;
+    nameEl.textContent = p.name;
 
     const headerEl = document.createElement('div');
     headerEl.className = 'player-card-header';
@@ -2663,6 +2727,7 @@ function renderOtherPlayers() {
     // Selector de emoji inline (aparece al hover sobre la card)
     const emojiBar = buildEmojiBar(pid);
 
+    card.appendChild(avatarEl);
     card.appendChild(headerEl);
     if (offlineEl) card.appendChild(offlineEl);
     card.appendChild(diceRow);

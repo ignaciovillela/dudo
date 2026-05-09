@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import pathlib
 import random
 import time
@@ -12,6 +13,30 @@ from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 from game.actions import CalzoAction, DudoAction, DudoBidResult, DudoPasoResult
 import game.bot as bot_engine
+from game.db import get_pool
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# XP constants
+# ---------------------------------------------------------------------------
+_XP_WIN = 50
+_XP_PARTICIPATION = 10
+_XP_PER_POSITION = 5   # extra XP for finishing higher (2nd gets 1×, 3rd gets 0×…)
+
+
+async def _retrain_model(pool) -> None:
+    """Re-entrena el BluffModel con todos los datos actuales de la DB."""
+    from game.player_model import bluff_model
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT anon_id, face, qty_bucket, bids_total, bids_bluff "
+                "FROM player_bid_stats"
+            )
+        bluff_model.retrain([dict(r) for r in rows])
+    except Exception as exc:
+        log.warning("[db] retrain failed: %s", exc)
 
 # Fuente de verdad compartida con el cliente: static/emojis.json
 _EMOJIS_PATH = pathlib.Path(__file__).parent.parent / "static" / "emojis.json"
@@ -33,6 +58,7 @@ class GameManager:
         self.last_message_at: dict[str, float] = {}
         self.turn_timeout_tasks: dict[str, asyncio.Task] = {}
         self.disconnect_resolution_tasks: dict[tuple[str, str], asyncio.Task] = {}
+        self.turn_started_at: dict[str, float] = {}   # room_id → monotonic timestamp
 
     # ------------------------------------------------------------------ connect
 
@@ -262,7 +288,8 @@ class GameManager:
 
         name = (msg.get("name") or f"Jugador {len(game.players) + 1}").strip()[:20]
         avatar = self._normalize_avatar(msg.get("avatar"))
-        player = Player(id=player_id, name=name, avatar=avatar)
+        anon_id = msg.get("anon_id") or None
+        player = Player(id=player_id, name=name, avatar=avatar, anon_id=anon_id)
         game.players[player_id] = player
         game.player_order.append(player_id)
         if room_id not in self.hosts or self.hosts[room_id] not in game.players:
@@ -583,6 +610,7 @@ class GameManager:
         if game.current_player_id() != player_id:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "No es tu turno"})
+        elapsed = time.monotonic() - self.turn_started_at.get(room_id, time.monotonic())
         self._cancel_turn_timeout(room_id)
         try:
             bid = Bid(
@@ -590,6 +618,7 @@ class GameManager:
                 face=int(msg["face"]),
                 player_id=player_id,
                 player_name=game.players[player_id].name,
+                elapsed_seconds=round(elapsed, 3),
             )
         except (KeyError, ValueError, TypeError):
             return await self._send(room_id, player_id,
@@ -649,6 +678,7 @@ class GameManager:
             "passer_id": player_id,
             "passer_name": game.players[player_id].name,
         })
+        bot_engine.notify_paso(game, player_id)
         await self._announce_turn(room_id, game)
 
     async def _h_dudo(self, room_id, player_id, game, msg):
@@ -881,6 +911,12 @@ class GameManager:
         else:
             payload.update({"loser_id": outcome.player_id, "loser_name": outcome.player_name})
         await self._broadcast(room_id, payload)
+
+        # Persist to DB (non-blocking: errors are logged, never crash the game)
+        asyncio.create_task(
+            self._persist_game_result(room_id, game, outcome, standings)
+        )
+
         for player in game.players.values():
             player.ready = False
             player.dice = []
@@ -889,6 +925,265 @@ class GameManager:
         game.bid_history = []
         game.round_number = 0
         game.elimination_order = []
+
+    async def _persist_game_result(
+        self, room_id: str, game: Game, outcome, standings: list[dict]
+    ) -> None:
+        """Save session, participants, and update player stats in PostgreSQL."""
+        try:
+            pool = await get_pool()
+        except Exception as exc:
+            log.warning("[db] could not get pool: %s", exc)
+            return
+
+        # Build final position map: standings[0] is 1st eliminated → last place
+        # standings[-1] is winner → position 1
+        n = len(standings)
+        winner_anon_id: str | None = None
+        if outcome.kind == "winner":
+            winner_pid = outcome.player_id
+            winner_player = game.players.get(winner_pid)
+            if winner_player:
+                winner_anon_id = winner_player.anon_id
+
+        try:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    # 0. Ensure all human players exist in players table first
+                    #    (required before game_sessions FK on winner_anon_id)
+                    for entry in standings:
+                        pid = entry["id"]
+                        player = game.players.get(pid)
+                        if player is None:
+                            continue
+                        if player.anon_id and not getattr(player, "is_bot", False):
+                            await conn.execute(
+                                """
+                                INSERT INTO players (anon_id, display_name)
+                                VALUES ($1, $2)
+                                ON CONFLICT (anon_id) DO UPDATE SET
+                                    display_name = EXCLUDED.display_name,
+                                    updated_at   = NOW()
+                                """,
+                                player.anon_id,
+                                player.name,
+                            )
+
+                    # 1. Insert session
+                    session_id: int = await conn.fetchval(
+                        """
+                        INSERT INTO game_sessions
+                            (room_id, player_count, winner_anon_id, rules)
+                        VALUES ($1, $2, $3, $4::jsonb)
+                        RETURNING id
+                        """,
+                        room_id,
+                        n,
+                        winner_anon_id,
+                        json.dumps(game.rules.to_dict()),
+                    )
+
+                    for finish_pos, entry in enumerate(reversed(standings), start=1):
+                        pid = entry["id"]
+                        player = game.players.get(pid)
+                        if player is None:
+                            continue
+                        is_bot = getattr(player, "is_bot", False)
+                        anon_id = player.anon_id
+
+                        # XP: winner gets full, others get participation + position bonus
+                        if finish_pos == 1:
+                            xp_earned = _XP_WIN
+                        else:
+                            xp_earned = _XP_PARTICIPATION + max(0, n - finish_pos) * _XP_PER_POSITION
+
+                        # 2. Insert participant
+                        await conn.execute(
+                            """
+                            INSERT INTO game_participants
+                                (session_id, anon_id, display_name, finish_position, is_bot, xp_earned)
+                            VALUES ($1, $2, $3, $4, $5, $6)
+                            """,
+                            session_id,
+                            anon_id,
+                            player.name,
+                            finish_pos,
+                            is_bot,
+                            xp_earned,
+                        )
+
+                        # 3. Upsert player stats (human players only)
+                        if anon_id and not is_bot:
+                            await conn.execute(
+                                """
+                                INSERT INTO players
+                                    (anon_id, display_name, xp, level, games_played, games_won)
+                                VALUES ($1, $2, $3, 1, 1, $4)
+                                ON CONFLICT (anon_id) DO UPDATE SET
+                                    display_name  = EXCLUDED.display_name,
+                                    xp            = players.xp + EXCLUDED.xp,
+                                    level         = (players.xp + EXCLUDED.xp) / 100 + 1,
+                                    games_played  = players.games_played + 1,
+                                    games_won     = players.games_won + EXCLUDED.games_won,
+                                    updated_at    = NOW()
+                                """,
+                                anon_id,
+                                player.name,
+                                xp_earned,
+                                1 if finish_pos == 1 else 0,
+                            )
+
+            log.info("[db] persisted session %s for room %s", session_id, room_id)
+
+        except Exception as exc:
+            log.exception("[db] failed to persist game result: %s", exc)
+            return
+
+        # Persist bid/paso stats for all human players from VeryHard memory
+        asyncio.create_task(self._persist_bid_stats(room_id, game))
+
+    async def _persist_bid_stats(self, room_id: str, game: Game) -> None:
+        """
+        Persiste las estadísticas de apuesta (bid_stats y paso_stats) acumuladas
+        por el VeryHardBot durante esta partida para cada jugador humano.
+        Usa UPSERT incremental: suma sobre lo que ya había en DB.
+        """
+        import game.bot as bot_module
+        from game.player_model import bluff_model
+
+        vh = bot_module._REGISTRY.get("very_hard")
+        if not isinstance(vh, bot_module.VeryHardBot):
+            return
+
+        # Reunir stats nuevas de sesión: diferencia entre lo que hay en mem del bot
+        # y lo que estaba cargado desde DB (en __global__).
+        # Usamos el primer bot VeryHard de la partida como fuente.
+        bot_pid = next(
+            (pid for pid, p in game.players.items()
+             if p.is_bot and p.bot_difficulty == "very_hard"),
+            None,
+        )
+        if bot_pid is None:
+            # No había VeryHard → no hay stats que guardar
+            return
+
+        mem        = vh._memory.get(bot_pid)
+        global_mem = vh._memory.get("__global__")
+        if mem is None:
+            return
+
+        try:
+            pool = await get_pool()
+        except Exception as exc:
+            log.warning("[db] could not get pool for bid_stats: %s", exc)
+            return
+
+        # Para cada jugador humano con anon_id en esta partida,
+        # calcular el delta (mem - global_mem) y persistirlo
+        try:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    for pid, player in game.players.items():
+                        anon_id = player.anon_id
+                        if not anon_id or getattr(player, "is_bot", False):
+                            continue
+
+                        # Asegurar que el jugador exista en players
+                        await conn.execute(
+                            """
+                            INSERT INTO players (anon_id, display_name)
+                            VALUES ($1, $2)
+                            ON CONFLICT (anon_id) DO UPDATE SET
+                                display_name = EXCLUDED.display_name,
+                                updated_at   = NOW()
+                            """,
+                            anon_id, player.name,
+                        )
+
+                        current = mem.player_stats.get(anon_id)
+                        baseline = global_mem.player_stats.get(anon_id) if global_mem else None
+
+                        if current is None:
+                            continue
+
+                        # -- bid stats delta --
+                        for face in range(1, 7):
+                            for bucket in range(1, 4):
+                                cur_t  = current.face_bid_counts.get(face, 0)
+                                cur_b  = current.face_bluff_counts.get(face, 0)
+                                bas_t  = baseline.face_bid_counts.get(face, 0) if baseline else 0
+                                bas_b  = baseline.face_bluff_counts.get(face, 0) if baseline else 0
+                                delta_t = max(0, cur_t - bas_t)
+                                delta_b = max(0, cur_b - bas_b)
+
+                                if delta_t == 0:
+                                    continue
+
+                                # Distribute face counts evenly across buckets;
+                                # time stats are stored per face (bucket=2 as representative)
+                                frac_t = delta_t // 3 + (1 if face % 3 < bucket else 0)
+                                frac_b = int(delta_b * frac_t / max(delta_t, 1))
+                                if frac_t == 0:
+                                    continue
+
+                                # Time deltas (only meaningful for bucket=2 representative row)
+                                if bucket == 2:
+                                    bas_bts = baseline.bid_time_bluff_sum if baseline else 0.0
+                                    bas_btn = baseline.bid_time_bluff_n   if baseline else 0
+                                    bas_tts = baseline.bid_time_truth_sum if baseline else 0.0
+                                    bas_ttn = baseline.bid_time_truth_n   if baseline else 0
+                                    d_bts = max(0.0, current.bid_time_bluff_sum - bas_bts)
+                                    d_btn = max(0,   current.bid_time_bluff_n   - bas_btn)
+                                    d_tts = max(0.0, current.bid_time_truth_sum - bas_tts)
+                                    d_ttn = max(0,   current.bid_time_truth_n   - bas_ttn)
+                                else:
+                                    d_bts = d_btn = d_tts = d_ttn = 0
+
+                                await conn.execute(
+                                    """
+                                    INSERT INTO player_bid_stats
+                                        (anon_id, face, qty_bucket, bids_total, bids_bluff,
+                                         bid_time_bluff_sum, bid_time_bluff_n,
+                                         bid_time_truth_sum, bid_time_truth_n)
+                                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                                    ON CONFLICT (anon_id, face, qty_bucket) DO UPDATE SET
+                                        bids_total         = player_bid_stats.bids_total         + EXCLUDED.bids_total,
+                                        bids_bluff         = player_bid_stats.bids_bluff         + EXCLUDED.bids_bluff,
+                                        bid_time_bluff_sum = player_bid_stats.bid_time_bluff_sum + EXCLUDED.bid_time_bluff_sum,
+                                        bid_time_bluff_n   = player_bid_stats.bid_time_bluff_n   + EXCLUDED.bid_time_bluff_n,
+                                        bid_time_truth_sum = player_bid_stats.bid_time_truth_sum + EXCLUDED.bid_time_truth_sum,
+                                        bid_time_truth_n   = player_bid_stats.bid_time_truth_n   + EXCLUDED.bid_time_truth_n
+                                    """,
+                                    anon_id, face, bucket, frac_t, frac_b,
+                                    d_bts, d_btn, d_tts, d_ttn,
+                                )
+
+                        # -- paso stats delta --
+                        bas_pc  = baseline.paso_count       if baseline else 0
+                        bas_pb  = baseline.paso_bluff_count if baseline else 0
+                        bas_pds = baseline.paso_dice_sum    if baseline else 0
+                        delta_pc  = max(0, current.paso_count       - bas_pc)
+                        delta_pb  = max(0, current.paso_bluff_count - bas_pb)
+                        delta_pds = max(0, current.paso_dice_sum    - bas_pds)
+                        if delta_pc > 0:
+                            await conn.execute(
+                                """
+                                INSERT INTO player_paso_stats
+                                    (anon_id, pasos_total, pasos_bluff, paso_dice_sum)
+                                VALUES ($1, $2, $3, $4)
+                                ON CONFLICT (anon_id) DO UPDATE SET
+                                    pasos_total   = player_paso_stats.pasos_total   + EXCLUDED.pasos_total,
+                                    pasos_bluff   = player_paso_stats.pasos_bluff   + EXCLUDED.pasos_bluff,
+                                    paso_dice_sum = player_paso_stats.paso_dice_sum + EXCLUDED.paso_dice_sum
+                                """,
+                                anon_id, delta_pc, delta_pb, delta_pds,
+                            )
+
+            # Re-entrenar el modelo con los nuevos datos (en background)
+            asyncio.create_task(_retrain_model(pool))
+            log.info("[db] persisted bid_stats for room %s", room_id)
+        except Exception as exc:
+            log.warning("[db] failed to persist bid_stats: %s", exc)
 
     def _rules_engine(self, game: Game) -> RuleEngine:
         return RuleEngine.from_config(game.rules)
@@ -967,6 +1262,7 @@ class GameManager:
             })
 
     async def _announce_turn(self, room_id: str, game: Game):
+        self.turn_started_at[room_id] = time.monotonic()
         await self._broadcast(room_id, self._turn_payload(game))
         self._schedule_turn_timeout(room_id, game)
         # Si el turno es de un bot, programar su acción con un pequeño delay
@@ -1047,6 +1343,7 @@ class GameManager:
         # Si el jugador tiene una apuesta seleccionada, ejecutarla
         if player.selected_bid is not None:
             bid = player.selected_bid
+            bid.elapsed_seconds = round(time.monotonic() - self.turn_started_at.get(room_id, time.monotonic()), 3)
             player.selected_bid = None  # limpiar la selección después de usarla
             game.current_bid = bid
             game.last_paso = None
@@ -1066,10 +1363,12 @@ class GameManager:
                 "passer_id": player_id,
                 "passer_name": player.name,
             })
+            bot_engine.notify_paso(game, player_id)
             await self._announce_turn(room_id, game)
             return
 
         bid = self._min_timeout_bid(game, player_id)
+        bid.elapsed_seconds = round(time.monotonic() - self.turn_started_at.get(room_id, time.monotonic()), 3)
         game.current_bid = bid
         game.last_paso = None
         game.bid_history.append(bid)
