@@ -721,6 +721,7 @@ class GameManager:
                 "bid_holds": result.bid_holds,
                 "is_gavilan": result.is_gavilan,
                 "loser_id": result.loser_id,
+                "challenger_gained": result.challenger_gained,
                 "all_dice": game.all_dice_reveal(),
                 "reveal_seconds": REVEAL_SECONDS,
             }

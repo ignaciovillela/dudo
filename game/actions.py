@@ -37,6 +37,7 @@ class DudoBidResult:
     bid_holds: bool        # True → la apuesta se sostuvo → pierde el challenger
     loser_id: str
     is_gavilan: bool       # el challenger actuó fuera de turno
+    challenger_gained: bool  # el gavilán ganó un dado por dudar bien fuera de turno
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,13 @@ class DudoAction:
         bid_holds = actual >= bid.quantity
         loser_id = pid if bid_holds else bid.player_id
 
+        # Gavilán exitoso (dudó bien fuera de turno y la apuesta no se sostiene)
+        challenger_gained = False
+        if is_gavilan and not bid_holds:
+            p = game.players[pid]
+            if p.dice_count < 5:
+                challenger_gained = True
+
         return DudoBidResult(
             bid=bid,
             challenger_id=pid,
@@ -143,6 +151,7 @@ class DudoAction:
             bid_holds=bid_holds,
             loser_id=loser_id,
             is_gavilan=is_gavilan,
+            challenger_gained=challenger_gained,
         )
 
     def _resolve_paso(self, is_gavilan: bool) -> DudoPasoResult:
@@ -188,6 +197,8 @@ class DudoAction:
                 game.players[result.challenger_id].dice_count += 1
         else:
             game.current_bid = None
+            if result.challenger_gained:
+                game.players[result.challenger_id].dice_count += 1
 
 
 # ---------------------------------------------------------------------------

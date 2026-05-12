@@ -1590,10 +1590,12 @@ function onBidMade(msg) {
   hideTimeoutActionHint();
   S.currentBid = msg.bid;
   S.activePaso = null;  // la apuesta reemplaza al paso como acción activa
+  S.hasFirstAction = true;
   const b = msg.bid;
   const name = S.players[b.player_id]?.name || b.player_name;
   log(`${name}: ${b.quantity} × ${faceName(b.face)}`, 'bid');
   updateBidDisplay();
+  updateDirectionIndicator();
   updateControls();
 }
 
@@ -1602,9 +1604,11 @@ function onPasoMade(msg) {
   hideTimeoutActionHint();
   S.activePaso = { player_id: msg.passer_id, player_name: msg.passer_name };
   if (msg.passer_id === S.playerId) S.hasPassed = true;
+  S.hasFirstAction = true;
   const name = S.players[msg.passer_id]?.name || msg.passer_name;
   log(`${name}: PASO`, 'paso');
   updateBidDisplay();
+  updateDirectionIndicator();
   updateControls();
 }
 
