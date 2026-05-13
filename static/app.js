@@ -222,8 +222,8 @@ const S = {
   bestStreaks: {},     // pid → best streak this game
 
   // UI bid inputs
-  bidQty:         1,
-  bidFace:        2,
+  bidQty:         null,
+  bidFace:        null,
 
   // Reconnect
   manualClose:    false,
@@ -515,6 +515,8 @@ function renderLevelBadge() {
 // ─────────────────────────────────────────────────────────────────────────────
 const AVATAR_VISIBLE_LIMIT = 8;
 let avatarPickerExpanded = false;
+let renameAvatarPickerExpanded = false;
+let renameSelectedAvatar = '🎲';
 
 function orderedAvatars(selected) {
   const picked = AVATAR_OPTIONS.includes(selected) ? selected : '🎲';
@@ -578,6 +580,79 @@ function renderAvatarPicker() {
 
   row.classList.toggle('expanded', avatarPickerExpanded);
   toggle.textContent = avatarPickerExpanded ? 'Contraer' : 'Ver todos';
+}
+
+function openRenameModal() {
+  const p = S.players[S.playerId];
+  if (!p) return;
+  renameSelectedAvatar = p.avatar || '🎲';
+  renameAvatarPickerExpanded = false;
+  const inp = document.getElementById('rename-inp-name');
+  if (inp) inp.value = p.name || '';
+  renderRenameAvatarPicker();
+  const modal = document.getElementById('rename-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeRenameModal() {
+  const modal = document.getElementById('rename-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function renderRenameAvatarPicker() {
+  const row = document.getElementById('rename-avatar-picker');
+  const toggle = document.getElementById('rename-btn-avatar-toggle');
+  if (!row || !toggle) return;
+  row.innerHTML = '';
+  const ordered = orderedAvatars(renameSelectedAvatar);
+  const { level } = loadLevelData();
+  ordered.forEach((avatar, idx) => {
+    const unlocked = isAvatarUnlocked(avatar);
+    const entry = AVATAR_LEVEL_MAP.find(e => e.emoji === avatar);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    let cls = 'avatar-chip';
+    if (avatar === renameSelectedAvatar) cls += ' selected';
+    if (!unlocked) cls += ' locked';
+    if (!renameAvatarPickerExpanded && idx >= AVATAR_VISIBLE_LIMIT) cls += ' hidden-chip';
+    btn.className = cls;
+    if (unlocked) {
+      btn.textContent = avatar;
+      btn.setAttribute('aria-label', `Seleccionar avatar ${avatar}`);
+      btn.onclick = () => selectRenameAvatar(avatar);
+    } else {
+      btn.innerHTML = `<span class="avatar-locked-emoji">${avatar}</span><span class="avatar-lock-icon">🔒</span>`;
+      btn.setAttribute('aria-label', `Avatar ${avatar} bloqueado hasta nivel ${entry ? entry.level : '?'}`);
+      btn.title = `Se desbloquea en nivel ${entry ? entry.level : '?'}`;
+      btn.disabled = true;
+    }
+    row.appendChild(btn);
+  });
+  row.classList.toggle('expanded', renameAvatarPickerExpanded);
+  toggle.textContent = renameAvatarPickerExpanded ? 'Contraer' : 'Ver todos';
+}
+
+function toggleRenameAvatarPicker() {
+  renameAvatarPickerExpanded = !renameAvatarPickerExpanded;
+  renderRenameAvatarPicker();
+}
+
+function selectRenameAvatar(avatar) {
+  if (!AVATAR_OPTIONS.includes(avatar)) return;
+  if (!isAvatarUnlocked(avatar)) return;
+  renameSelectedAvatar = avatar;
+  renderRenameAvatarPicker();
+}
+
+function submitRename() {
+  const inp = document.getElementById('rename-inp-name');
+  const name = (inp?.value || '').trim();
+  if (!name) { inp?.focus(); return; }
+  send({ type: 'rename', name, avatar: renameSelectedAvatar });
+  S.playerName = name;
+  S.playerAvatar = renameSelectedAvatar;
+  persistLobbyIdentity(name);
+  closeRenameModal();
 }
 
 // ══════════════════════════════  LOGROS  ══════════════════════════════════════
@@ -1157,6 +1232,9 @@ function handleMsg(msg) {
     became_spectator:   onBecameSpectator,
     became_player:      onBecamePlayer,
     player_kicked:      onPlayerKicked,
+    player_left:        onPlayerLeft,
+    player_renamed:     onPlayerRenamed,
+    reordered:          onReordered,
     kicked:             onKicked,
     error:              onError,
     emoji_thrown:       onEmojiThrown,
@@ -1449,6 +1527,31 @@ function onPlayerJoined(msg) {
   S.playerOrder.push(msg.player.id);
   renderLobbyPlayers();
   log(`${msg.player.name} se unió`, 'system');
+}
+
+function onPlayerLeft(msg) {
+  delete S.players[msg.player_id];
+  S.playerOrder = msg.player_order || S.playerOrder.filter(pid => pid !== msg.player_id);
+  renderLobbyPlayers();
+  updateStartButton();
+  log(`${msg.player_name} salió de la sala`, 'system');
+}
+
+function onReordered(msg) {
+  S.playerOrder = msg.player_order;
+  renderLobbyPlayers();
+}
+
+function onPlayerRenamed(msg) {
+  const p = S.players[msg.player_id];
+  if (!p) return;
+  p.name = msg.name;
+  p.avatar = msg.avatar;
+  if (msg.player_id === S.playerId) {
+    S.playerName = msg.name;
+    S.playerAvatar = msg.avatar;
+  }
+  renderLobbyPlayers();
 }
 
 function onPlayerReady(msg) {
@@ -2571,15 +2674,159 @@ function startTurnCountdown(seconds) {
 }
 
 // ══════════════════════════════════  RENDER  ══════════════════════════════════
+
+// ── Drag & drop state ──
+let _dnd = { dragPid: null };
+
+function _lobbyDragStart(e, pid) {
+  _dnd.dragPid = pid;
+  e.currentTarget.classList.add('dnd-dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', pid);
+}
+
+function _clearDndIndicators() {
+  document.querySelectorAll('.lobby-player-row').forEach(r =>
+    r.classList.remove('dnd-drop-above', 'dnd-drop-below', 'dnd-dragging'));
+}
+
+function _lobbyDragEnd() { _clearDndIndicators(); }
+
+function _rowDragOver(e, rowEl) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const rect = rowEl.getBoundingClientRect();
+  document.querySelectorAll('.lobby-player-row').forEach(r =>
+    r.classList.remove('dnd-drop-above', 'dnd-drop-below'));
+  rowEl.classList.add(e.clientY < rect.top + rect.height / 2 ? 'dnd-drop-above' : 'dnd-drop-below');
+}
+
+function _rowDrop(e, rowEl) {
+  e.preventDefault();
+  const list = document.getElementById('lobby-player-list');
+  const rows = [...list.querySelectorAll('.lobby-player-row[data-pid]')];
+  const idx = rows.indexOf(rowEl);
+  if (idx === -1) return;
+  const rect = rowEl.getBoundingClientRect();
+  _lobbyZoneDrop(e.clientY < rect.top + rect.height / 2 ? idx : idx + 1);
+}
+
+function _lobbyZoneDrop(zoneIdx) {
+  _clearDndIndicators();
+  if (!_dnd.dragPid) return;
+  if (!S.isHost && _dnd.dragPid !== S.playerId) return;
+
+  // Compute fromIdx from current DOM (avoids stale closure indices)
+  const list = document.getElementById('lobby-player-list');
+  const rows = [...list.querySelectorAll('.lobby-player-row[data-pid]')];
+  const fromIdx = rows.findIndex(r => r.dataset.pid === _dnd.dragPid);
+  if (fromIdx === -1) return;
+
+  const targetIdx = zoneIdx <= fromIdx ? zoneIdx : zoneIdx - 1;
+  _dnd = { dragPid: null };
+  if (fromIdx === targetIdx) return;
+
+  const newOrder = [...S.playerOrder];
+  const [moved] = newOrder.splice(fromIdx, 1);
+  newOrder.splice(targetIdx, 0, moved);
+  S.playerOrder = newOrder;
+
+  // FLIP: snapshot before moving the DOM node
+  const beforeTops = {};
+  rows.forEach(r => { beforeTops[r.dataset.pid] = r.getBoundingClientRect().top; });
+
+  // Move node in-place (no innerHTML clear → animation survives server confirmation)
+  const draggedRow = rows[fromIdx];
+  if (targetIdx >= rows.length - 1) {
+    list.appendChild(draggedRow);
+  } else {
+    list.insertBefore(draggedRow, rows[targetIdx < fromIdx ? targetIdx : targetIdx + 1]);
+  }
+
+  // FLIP animate
+  list.querySelectorAll('.lobby-player-row[data-pid]').forEach(el => {
+    const delta = beforeTops[el.dataset.pid] - el.getBoundingClientRect().top;
+    if (Math.abs(delta) < 1) return;
+    el.style.transition = 'none';
+    el.style.transform = `translateY(${delta}px)`;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+      el.style.transform = 'translateY(0)';
+    }));
+  });
+
+  send({ type: 'reorder', order: newOrder });
+}
+
 function renderLobbyPlayers() {
   const list = document.getElementById('lobby-player-list');
-  list.innerHTML = '';
   const hostId = S.hostId || S.playerOrder[0];
-  for (const pid of S.playerOrder) {
+  const canDrag = S.phase === 'lobby' && !S.isSpectator;
+
+  // Guard: if DOM order already matches S.playerOrder, update badges in-place.
+  // This prevents server confirmations from clearing the DOM mid-animation.
+  const domRows = [...list.querySelectorAll('.lobby-player-row[data-pid]')];
+  const domPids = domRows.map(el => el.dataset.pid);
+  if (domPids.length > 0 && domPids.length === S.playerOrder.length &&
+      S.playerOrder.every((pid, i) => domPids[i] === pid)) {
+    domRows.forEach(row => {
+      const pid = row.dataset.pid;
+      const p = S.players[pid];
+      if (!p) return;
+      const wasDragging = row.classList.contains('dnd-dragging');
+      row.className = 'lobby-player-row' + (hostId === pid ? ' is-host' : '') + (p.connected ? '' : ' inactive');
+      if (wasDragging) row.classList.add('dnd-dragging');
+      const av = row.querySelector('.player-avatar');
+      if (av) { av.textContent = p.avatar || '🎲'; av.style.background = playerColor(pid); }
+      const nameEl = row.querySelector('.player-pname');
+      if (nameEl) nameEl.textContent = p.name;
+      const badge = row.querySelector('.ready-badge');
+      if (badge && !p.is_bot) {
+        badge.className = 'ready-badge' + (p.connected ? (p.ready ? ' ready' : '') : ' inactive');
+        badge.innerHTML = !p.connected
+          ? '<i class="fa-solid fa-plug-circle-xmark" aria-hidden="true"></i> Inactivo'
+          : (p.ready
+            ? '<i class="fa-solid fa-check" aria-hidden="true"></i> Listo'
+            : '<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando');
+      }
+    });
+    const botControls = document.getElementById('host-bot-controls');
+    if (botControls) botControls.style.display = S.isHost && S.phase === 'lobby' ? 'flex' : 'none';
+    renderLobbySpectatorControls();
+    return;
+  }
+
+  // Full rebuild with FLIP (player join/leave, phase change, first render, etc.)
+  const beforeTops = {};
+  domRows.forEach(el => { beforeTops[el.dataset.pid] = el.getBoundingClientRect().top; });
+
+  list.innerHTML = '';
+
+  S.playerOrder.forEach((pid, idx) => {
     const p = S.players[pid];
-    if (!p) continue;
+    if (!p) return;
     const row = document.createElement('div');
     row.className = 'lobby-player-row' + (hostId === pid ? ' is-host' : '') + (p.connected ? '' : ' inactive');
+    row.dataset.pid = pid;
+
+    const draggable = canDrag && (S.isHost || pid === S.playerId);
+    if (draggable) {
+      row.draggable = true;
+      row.addEventListener('dragstart', e => _lobbyDragStart(e, pid));
+      row.addEventListener('dragend',   () => _lobbyDragEnd());
+    }
+    if (canDrag) {
+      row.addEventListener('dragover', e => _rowDragOver(e, row));
+      row.addEventListener('drop',     e => _rowDrop(e, row));
+    }
+
+    if (draggable) {
+      const handle = document.createElement('span');
+      handle.className = 'dnd-handle';
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical" aria-hidden="true"></i>';
+      handle.title = 'Arrastrar para reordenar';
+      row.appendChild(handle);
+    }
 
     const av = document.createElement('div');
     av.className = 'player-avatar';
@@ -2605,6 +2852,21 @@ function renderLobbyPlayers() {
           : '<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando');
     }
 
+    row.appendChild(av);
+    row.appendChild(name);
+    row.appendChild(badge);
+
+    if (pid === S.playerId && S.phase === 'lobby' && !S.isSpectator) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'edit-btn';
+      editBtn.title = 'Editar nombre y avatar';
+      editBtn.setAttribute('aria-label', 'Editar nombre y avatar');
+      editBtn.innerHTML = '<i class="fa-solid fa-pen" aria-hidden="true"></i>';
+      editBtn.onclick = () => openRenameModal();
+      row.appendChild(editBtn);
+    }
+
     if (S.isHost && pid !== S.playerId) {
       const actionBtn = document.createElement('button');
       actionBtn.type = 'button';
@@ -2620,23 +2882,29 @@ function renderLobbyPlayers() {
         actionBtn.innerHTML = '<i class="fa-solid fa-user-xmark" aria-hidden="true"></i>';
         actionBtn.onclick = () => openKickConfirm(pid, p.name);
       }
-      row.appendChild(av);
       row.appendChild(actionBtn);
-      row.appendChild(name);
-      row.appendChild(badge);
-    } else {
-      row.appendChild(av);
-      row.appendChild(name);
-      row.appendChild(badge);
     }
+
     list.appendChild(row);
+  });
+
+  // FLIP animate (e.g. player joins while another is already in list)
+  if (Object.keys(beforeTops).length > 0) {
+    list.querySelectorAll('.lobby-player-row[data-pid]').forEach(el => {
+      const delta = (beforeTops[el.dataset.pid] ?? null) !== null
+        ? beforeTops[el.dataset.pid] - el.getBoundingClientRect().top : 0;
+      if (Math.abs(delta) < 1) return;
+      el.style.transition = 'none';
+      el.style.transform = `translateY(${delta}px)`;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+        el.style.transform = 'translateY(0)';
+      }));
+    });
   }
 
-  // Mostrar/ocultar controles de bot (solo host, solo lobby)
   const botControls = document.getElementById('host-bot-controls');
-  if (botControls) {
-    botControls.style.display = S.isHost && S.phase === 'lobby' ? 'flex' : 'none';
-  }
+  if (botControls) botControls.style.display = S.isHost && S.phase === 'lobby' ? 'flex' : 'none';
   renderLobbySpectatorControls();
 }
 
@@ -2644,9 +2912,14 @@ function renderOtherPlayers() {
   const container = document.getElementById('other-players');
   container.innerHTML = '';
 
-  // Orden: jugadores que vienen después de mí en el turno, de forma circular
-  for (const pid of turnOrderFrom(S.playerId)) {
-    if (pid === S.playerId) continue;
+  // Orden visual fijo (horario): siempre desde el siguiente en S.playerOrder, sin aplicar direction
+  const myIdx = S.playerOrder.indexOf(S.playerId);
+  const n = S.playerOrder.length;
+  const visualOrder = [];
+  for (let i = 1; i < n; i++) {
+    visualOrder.push(S.playerOrder[(myIdx + i) % n]);
+  }
+  for (const pid of visualOrder) {
     const p = S.players[pid];
     if (!p) continue;
 
@@ -2903,8 +3176,8 @@ function updateControls() {
   document.getElementById('wait-msg').style.display   = isMyTurn ? 'none' : 'block';
   document.getElementById('wait-msg').textContent = 'Esperando tu turno…';
 
-  // Stepper cantidad y face picker
-  document.querySelectorAll('.stepper-qty button').forEach(b => b.disabled = !isMyTurn);
+  // Qty grid y face picker
+  document.querySelectorAll('.qty-cell').forEach(b => b.disabled = !isMyTurn);
   document.querySelectorAll('.face-btn').forEach(b => b.disabled = !isMyTurn);
 }
 
@@ -2952,7 +3225,15 @@ function minQtyForFace(face) {
 
 function selectFace(face) {
   S.bidFace = face;
-  S.bidQty  = minQtyForFace(face);
+  if (S.bidQty === null) {
+    S.bidQty = minQtyForFace(face);
+  }
+  saveBidSelection();
+  refreshBidInputUI();
+}
+
+function selectQty(n) {
+  S.bidQty = n;
   saveBidSelection();
   refreshBidInputUI();
 }
@@ -2960,7 +3241,7 @@ function selectFace(face) {
 function adjBid(which, delta) {
   if (which === 'q') {
     const min = minQtyForFace(S.bidFace);
-    S.bidQty = Math.max(min, S.bidQty + delta);
+    S.bidQty = Math.max(min, (S.bidQty ?? min) + delta);
   }
   saveBidSelection();
   refreshBidInputUI();
@@ -2968,8 +3249,8 @@ function adjBid(which, delta) {
 
 function resetBidInputs() {
   if (!S.currentBid) {
-    S.bidFace = 2;
-    S.bidQty  = 1;
+    S.bidFace = null;
+    S.bidQty  = null;
   } else {
     S.bidFace = S.currentBid.face;
     S.bidQty  = minQtyForFace(S.bidFace);
@@ -3042,8 +3323,29 @@ function updateBidProb() {
 }
 
 function refreshBidInputUI() {
-  // Cantidad
-  document.getElementById('bb-qty').textContent = S.bidQty;
+  // Quantity grid
+  const grid = document.getElementById('qty-grid');
+  if (grid) {
+    const total = Math.max(S.totalDice || 6, 6);
+    const min   = S.bidFace !== null ? minQtyForFace(S.bidFace) : 1;
+    grid.innerHTML = '';
+    for (let n = 1; n <= total; n++) {
+      const cell = document.createElement('button');
+      cell.className = 'qty-cell';
+      if (n === S.bidQty)  cell.classList.add('selected');
+      if (S.bidFace !== null && n < min) cell.classList.add('qty-invalid');
+      cell.textContent = n;
+      cell.onclick = () => selectQty(n);
+      grid.appendChild(cell);
+    }
+    // Scroll grid to show selected row (direct scrollTop, no sidebar interference)
+    const row = S.bidQty !== null ? Math.floor((S.bidQty - 1) / 6) : 0;
+    const firstCell = grid.querySelector('.qty-cell');
+    if (firstCell) {
+      const cellH = firstCell.getBoundingClientRect().height || 38;
+      grid.scrollTop = row * (cellH + 4);
+    }
+  }
 
   // Face picker: render si no está inicializado aún
   const picker = document.getElementById('face-picker');
@@ -3074,11 +3376,12 @@ function refreshBidInputUI() {
     btn.classList.toggle('face-invalid', false); // siempre seleccionable, se ajusta al hacer click
   });
 
-  // Hint de mínimo
-  const hint = document.getElementById('bb-min-hint');
-  if (hint) {
-    const min = minQtyForFace(S.bidFace);
-    hint.textContent = min > 1 ? `(mín. ${min})` : '';
+  // Bid button: visual invalid state
+  const btnBid = document.getElementById('btn-bid');
+  if (btnBid) {
+    const incomplete = S.bidFace === null || S.bidQty === null;
+    const min = S.bidFace !== null ? minQtyForFace(S.bidFace) : 1;
+    btnBid.classList.toggle('bid-invalid', incomplete || S.bidQty < min);
   }
 
   updateBidProb();
@@ -3092,6 +3395,15 @@ function saveBidSelection() {
 
 function sendBid() {
   if (S.isSpectator) return;
+  if (S.bidFace === null || S.bidQty === null) {
+    showToast('Seleccioná cantidad y pinta antes de apostar', true);
+    return;
+  }
+  const min = minQtyForFace(S.bidFace);
+  if (S.bidQty < min) {
+    showToast(`Apuesta inválida: mínimo ${min} para esta pinta`, true);
+    return;
+  }
   playSfx('click');
   send({ type: 'bid', quantity: S.bidQty, face: S.bidFace });
 }
@@ -3139,6 +3451,20 @@ function applyEliminatedMode(eliminated) {
 }
 
 // ══════════════════════════════════  LOBBY ACTIONS  ════════════════════════════
+function leaveRoom() {
+  playSfx('click');
+  send({ type: 'leave' });
+  clearSession();
+  S.manualClose = true;
+  if (S.ws && S.ws.readyState === WebSocket.OPEN) S.ws.close();
+  S.roomId = '';
+  S.players = {};
+  S.playerOrder = [];
+  showScreen('lobby');
+  document.getElementById('lobby-form').style.display = 'block';
+  document.getElementById('lobby-room').style.display = 'none';
+}
+
 function joinRoom() {
   const name = document.getElementById('inp-name').value.trim();
   const room = document.getElementById('inp-room').value.trim();
@@ -3476,6 +3802,10 @@ window.rejectNotificationPrompt = rejectNotificationPrompt;
 window.toggleAvatarPicker = toggleAvatarPicker;
 window.closeKickConfirm = closeKickConfirm;
 window.confirmKickPlayer = confirmKickPlayer;
+window.openRenameModal = openRenameModal;
+window.closeRenameModal = closeRenameModal;
+window.toggleRenameAvatarPicker = toggleRenameAvatarPicker;
+window.submitRename = submitRename;
 
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (function () {

@@ -129,6 +129,9 @@
             <button class="btn btn-sm btn-subaction" type="button" onclick="openAchievementsModal()" title="Logros">
               <i class="fa-solid fa-trophy" aria-hidden="true"></i>
             </button>
+            <button class="btn btn-sm btn-leave" type="button" onclick="leaveRoom()" title="Salir de la sala">
+              <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
+            </button>
           </div>
         </div>
 
@@ -298,12 +301,8 @@
         <div class="bid-builder">
           <label class="bb-label">Pinta</label>
           <div id="face-picker" class="face-picker"></div>
-          <label class="bb-label">Cantidad <span id="bb-min-hint" class="bb-min-hint"></span></label>
-          <div class="stepper stepper-qty">
-            <button onclick="adjBid('q',-1)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
-            <span id="bb-qty">1</span>
-            <button onclick="adjBid('q',1)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
-          </div>
+          <label class="bb-label">Cantidad</label>
+          <div id="qty-grid" class="qty-grid"></div>
           <span id="bid-prob" class="bid-prob" style="display:none"></span>
         </div>
         <div class="action-btns">
@@ -392,6 +391,28 @@
     <div class="lobby-actions">
       <button class="btn btn-danger" type="button" onclick="confirmKickPlayer()">Expulsar</button>
       <button class="btn btn-sm" type="button" onclick="closeKickConfirm()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="rename-modal" class="stats-modal" style="display:none">
+  <div class="stats-box rename-box">
+    <h2><i class="fa-solid fa-pen" aria-hidden="true"></i> Editar perfil</h2>
+    <div class="field-group">
+      <label for="rename-inp-name"><i class="fa-regular fa-user" aria-hidden="true"></i> Tu nombre</label>
+      <input id="rename-inp-name" type="text" placeholder="¿Cómo te llaman?" maxlength="20"
+             onkeydown="if(event.key==='Enter') submitRename()" autocomplete="nickname" />
+    </div>
+    <div class="field-group">
+      <label><i class="fa-regular fa-face-smile" aria-hidden="true"></i> Tu avatar</label>
+      <div class="avatar-picker-wrap">
+        <div id="rename-avatar-picker" class="avatar-picker-row" aria-label="Selector de avatar"></div>
+        <button id="rename-btn-avatar-toggle" class="btn btn-sm avatar-toggle" type="button" onclick="toggleRenameAvatarPicker()">Ver todos</button>
+      </div>
+    </div>
+    <div class="rename-actions">
+      <button class="btn btn-gold" type="button" onclick="submitRename()">Guardar</button>
+      <button class="btn btn-sm" type="button" onclick="closeRenameModal()">Cancelar</button>
     </div>
   </div>
 </div>

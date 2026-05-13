@@ -719,10 +719,10 @@ class VeryHardBot(BotStrategy):
                         dst = mem.player_stats[key]
                         dst.bids_total        = src.bids_total
                         dst.bids_bluff        = src.bids_bluff
-                        dst.face_bid_counts   = dict(src.face_bid_counts)
-                        dst.face_bluff_counts = dict(src.face_bluff_counts)
-                        dst.qty_bucket_counts = dict(src.qty_bucket_counts)
-                        dst.qty_bucket_bluff  = dict(src.qty_bucket_bluff)
+                        dst.face_bid_counts   = defaultdict(int, src.face_bid_counts)
+                        dst.face_bluff_counts = defaultdict(int, src.face_bluff_counts)
+                        dst.qty_bucket_counts = defaultdict(int, src.qty_bucket_counts)
+                        dst.qty_bucket_bluff  = defaultdict(int, src.qty_bucket_bluff)
                         dst.copy_count        = src.copy_count
                         dst.total_rounds      = src.total_rounds
                         dst.paso_count        = src.paso_count

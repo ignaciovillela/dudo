@@ -150,7 +150,7 @@ class GameManager:
             _spectator_allowed |= {"set_rules", "kick_player", "add_bot", "remove_bot", "start"}
         if player_id in game.spectators and msg_type not in _spectator_allowed:
             return
-        if msg_type not in {"join", "connected", "select_bid", "become_spectator", "become_player", "add_bot", "remove_bot"} and not self._allow_message(player_id):
+        if msg_type not in {"join", "connected", "select_bid", "become_spectator", "become_player", "add_bot", "remove_bot", "leave", "reorder"} and not self._allow_message(player_id):
             return
         handlers = {
             "join":      self._h_join,
@@ -158,6 +158,9 @@ class GameManager:
             "start":     self._h_start,
             "set_rules": self._h_set_rules,
             "kick_player": self._h_kick_player,
+            "leave":     self._h_leave,
+            "reorder":   self._h_reorder,
+            "rename":    self._h_rename,
             "add_bot":   self._h_add_bot,
             "remove_bot": self._h_remove_bot,
             "become_spectator": self._h_become_spectator,
@@ -323,6 +326,21 @@ class GameManager:
             await self._broadcast(room_id, {
                 "type": "all_ready",
             })
+
+    async def _h_rename(self, room_id, player_id, game, msg):
+        if player_id not in game.players or game.phase != "lobby":
+            return
+        player = game.players[player_id]
+        new_name = (msg.get("name") or player.name).strip()[:20] or player.name
+        new_avatar = self._normalize_avatar(msg.get("avatar")) if msg.get("avatar") else player.avatar
+        player.name = new_name
+        player.avatar = new_avatar
+        await self._broadcast(room_id, {
+            "type": "player_renamed",
+            "player_id": player_id,
+            "name": new_name,
+            "avatar": new_avatar,
+        })
 
     async def _h_start(self, room_id, player_id, game, msg):
         if self._host_id(room_id, game) != player_id:
@@ -583,6 +601,86 @@ class GameManager:
             "spectator_id": player_id,
             "spectator_name": spectator_name,
             "spectator_count": len(game.spectators),
+        })
+
+    async def _h_leave(self, room_id, player_id, game, msg):
+        """El jugador abandona la sala voluntariamente (solo en lobby)."""
+        if game.phase != "lobby":
+            return
+        if player_id not in game.players:
+            return
+
+        player = game.players[player_id]
+        was_host = self._host_id(room_id, game) == player_id
+
+        # Limpiar conexión y datos del jugador
+        ws = self.connections.get(room_id, {}).pop(player_id, None)
+        del game.players[player_id]
+        if player_id in game.player_order:
+            game.player_order.remove(player_id)
+
+        # Notificar al jugador que salió
+        if ws:
+            try:
+                await ws.close(code=1000)
+            except Exception:
+                pass
+
+        # Si era el host, reasignar
+        new_host_msg = None
+        if was_host and game.player_order:
+            new_host_id = game.player_order[0]
+            self.hosts[room_id] = new_host_id
+            new_host_msg = {
+                "type": "new_host",
+                "new_host_id": new_host_id,
+                "new_host_name": game.players[new_host_id].name,
+            }
+
+        await self._broadcast(room_id, {
+            "type": "player_left",
+            "player_id": player_id,
+            "player_name": player.name,
+            "player_order": game.player_order,
+        })
+        if new_host_msg:
+            await self._broadcast(room_id, new_host_msg)
+
+    async def _h_reorder(self, room_id, player_id, game, msg):
+        """Reordena jugadores en el lobby via drag & drop."""
+        if game.phase != "lobby":
+            return
+        if player_id not in game.players:
+            return
+
+        new_order = msg.get("order")
+        if not isinstance(new_order, list):
+            return
+
+        is_host = self._host_id(room_id, game) == player_id
+
+        if is_host:
+            # El líder puede reordenar a todos: validar que sea permutación exacta
+            if set(new_order) != set(game.player_order) or len(new_order) != len(game.player_order):
+                return
+            game.player_order = new_order
+        else:
+            # No-líder: solo puede mover su propia posición
+            # new_order debe contener exactamente a player_id en una posición diferente
+            # y el resto en el mismo orden relativo
+            current = game.player_order
+            if set(new_order) != set(current) or len(new_order) != len(current):
+                return
+            # Verificar que solo player_id cambió de posición (los demás mantienen orden relativo)
+            others_current = [p for p in current if p != player_id]
+            others_new = [p for p in new_order if p != player_id]
+            if others_current != others_new:
+                return
+            game.player_order = new_order
+
+        await self._broadcast(room_id, {
+            "type": "reordered",
+            "player_order": game.player_order,
         })
 
     async def _h_direction(self, room_id, player_id, game, msg):
@@ -872,6 +970,8 @@ class GameManager:
         game.last_paso = None
         game.passed_players = set()
         game.bid_history = []
+        for p in game.players.values():
+            p.selected_bid = None
         game.roll_all_dice()
         game.set_current_player(first_player_id)
         game.round_first_player = first_player_id
@@ -887,18 +987,19 @@ class GameManager:
         game.phase = "lobby"
         self._cancel_turn_timeout(room_id)
 
-        # Construir standings: eliminados en orden + ganador/sobreviviente al final
-        standings = list(game.elimination_order)
-        # El/los jugadores con dados > 0 van al final (ganadores/sobrevivientes)
+        # Construir standings: ganador primero (posición 1), luego por orden de eliminación inverso
+        survivors = []
         for pid in game.player_order:
             p = game.players.get(pid)
             if p and p.dice_count > 0:
-                standings.append({
+                survivors.append({
                     "id": pid,
                     "name": p.name,
                     "avatar": p.avatar,
                     "round": game.round_number,
                 })
+        # survivors first (winner = pos 1), then eliminated in reverse order (last eliminated = pos 2, etc.)
+        standings = survivors + list(reversed(game.elimination_order))
 
         payload = {
             "type": "game_over",
@@ -937,8 +1038,7 @@ class GameManager:
             log.warning("[db] could not get pool: %s", exc)
             return
 
-        # Build final position map: standings[0] is 1st eliminated → last place
-        # standings[-1] is winner → position 1
+        # standings[0] is winner → position 1; standings[-1] is 1st eliminated → last place
         n = len(standings)
         winner_anon_id: str | None = None
         if outcome.kind == "winner":
@@ -984,7 +1084,7 @@ class GameManager:
                         json.dumps(game.rules.to_dict()),
                     )
 
-                    for finish_pos, entry in enumerate(reversed(standings), start=1):
+                    for finish_pos, entry in enumerate(standings, start=1):
                         pid = entry["id"]
                         player = game.players.get(pid)
                         if player is None:
@@ -1341,11 +1441,11 @@ class GameManager:
         if not player:
             return
 
-        # Si el jugador tiene una apuesta seleccionada, ejecutarla
-        if player.selected_bid is not None:
+        # Si el jugador tiene una apuesta seleccionada y es válida, ejecutarla
+        if player.selected_bid is not None and game.is_valid_bid(player.selected_bid):
             bid = player.selected_bid
             bid.elapsed_seconds = round(time.monotonic() - self.turn_started_at.get(room_id, time.monotonic()), 3)
-            player.selected_bid = None  # limpiar la selección después de usarla
+            player.selected_bid = None
             game.current_bid = bid
             game.last_paso = None
             game.bid_history.append(bid)
@@ -1353,6 +1453,7 @@ class GameManager:
             await self._broadcast(room_id, {"type": "bid_made", "bid": bid.to_dict()})
             await self._announce_turn(room_id, game)
             return
+        player.selected_bid = None
 
         # Comportamiento original si no hay apuesta seleccionada
         if game.current_bid is not None and player_id not in game.passed_players:
@@ -1422,6 +1523,16 @@ class GameManager:
                 await self._run_bot_action(room_id, current_game, bot_id)
             except asyncio.CancelledError:
                 return
+            except Exception as e:
+                import traceback
+                print(f"[bot error] {bot_id}: {e}\n{''.join(traceback.format_exc())}")
+                current_game = self.games.get(room_id)
+                if (current_game and current_game.phase == "playing"
+                        and current_game.current_player_id() == bot_id):
+                    fallback = self._min_timeout_bid(current_game, bot_id)
+                    self._cancel_turn_timeout(room_id)
+                    await self._h_bid(room_id, bot_id, current_game,
+                                      {"quantity": fallback.quantity, "face": fallback.face})
 
         asyncio.create_task(_runner())
 
