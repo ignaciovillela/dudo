@@ -2439,6 +2439,38 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   animation: bid-btn-pop 0.2s ease;
 }
 
+.bid-shortcuts {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.bid-shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.bid-shortcuts kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+  font-family: inherit;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
 .wait-msg {
   margin-top: 14px;
   font-size: 0.76rem;

@@ -3111,8 +3111,10 @@ function updateControls() {
     // Ocultar bid builder y botones de acción — el espectador no juega
     const bidBuilder = document.querySelector('#bid-panel .bid-builder');
     const actionBtns = document.querySelector('#bid-panel .action-btns');
+    const shortcuts = document.querySelector('#bid-panel .bid-shortcuts');
     if (bidBuilder) bidBuilder.style.display = 'none';
     if (actionBtns) actionBtns.style.display = 'none';
+    if (shortcuts)  shortcuts.style.display  = 'none';
     document.getElementById('bid-panel').style.opacity = '1';
     document.getElementById('wait-msg').style.display = 'block';
     document.getElementById('wait-msg').textContent = 'Modo espectador';
@@ -3241,20 +3243,16 @@ function selectQty(n) {
 function adjBid(which, delta) {
   if (which === 'q') {
     const min = minQtyForFace(S.bidFace);
-    S.bidQty = Math.max(min, (S.bidQty ?? min) + delta);
+    const max = S.totalDice ?? min;
+    S.bidQty = Math.min(max, Math.max(min, (S.bidQty ?? min) + delta));
   }
   saveBidSelection();
   refreshBidInputUI();
 }
 
 function resetBidInputs() {
-  if (!S.currentBid) {
-    S.bidFace = null;
-    S.bidQty  = null;
-  } else {
-    S.bidFace = S.currentBid.face;
-    S.bidQty  = minQtyForFace(S.bidFace);
-  }
+  S.bidFace = null;
+  S.bidQty  = null;
   refreshBidInputUI();
 }
 
@@ -3837,6 +3835,51 @@ window.submitRename = submitRename;
 // Desbloquea audio en la primera interacción del usuario (requisito del navegador).
 ['pointerdown', 'keydown'].forEach(evt => {
   window.addEventListener(evt, unlockAudio, { once: true });
+});
+
+// Atajos de teclado para la selección de apuesta.
+document.addEventListener('keydown', e => {
+  if (S.isSpectator) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const isMyTurn = S.currentPid === S.playerId && S.phase === 'playing';
+  const key = e.key.toLowerCase();
+
+  // Acciones fuera de turno (dudo/calzo con gavilán) y en turno
+  if (key === 'a') { e.preventDefault(); sendDudo();  return; }
+  if (key === 's') { e.preventDefault(); sendCalzo(); return; }
+
+  if (!isMyTurn) return;
+
+  if (key === 'd') { e.preventDefault(); sendPaso(); return; }
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    resetBidInputs();
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendBid();
+    return;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    adjBid('q', +1);
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    adjBid('q', -1);
+    return;
+  }
+  const face = parseInt(e.key, 10);
+  if (face >= 1 && face <= 6) {
+    if (S.bidFace === face) {
+      adjBid('q', +1);
+    } else {
+      selectFace(face);
+    }
+  }
 });
 
 // Inicializar hover de emojis una sola vez al cargar (cubre reconexiones y espectadores)
