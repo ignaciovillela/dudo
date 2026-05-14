@@ -313,13 +313,13 @@ class BluffModel:
     async def load_player_stats_into_bot(pool) -> None:
         """
         Carga player_bid_stats y player_paso_stats de la DB y las inyecta
-        en la memoria del ExpertBot singleton.
+        en la memoria del VeryHardBot singleton.
 
         Se llama una sola vez al inicio del servidor.
         """
         import game.bot as bot_module
-        vh = bot_module._REGISTRY.get("expert")
-        if not isinstance(vh, bot_module.ExpertBot):
+        vh = bot_module._REGISTRY.get("very_hard")
+        if not isinstance(vh, bot_module.VeryHardBot):
             return
 
         try:

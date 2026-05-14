@@ -453,14 +453,15 @@ class GameManager:
                                     {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
 
         difficulty = msg.get("difficulty", "medium")
-        if difficulty not in {"easy", "medium", "hard", "expert"}:
+        if difficulty not in {"easy", "medium", "hard", "very_hard", "expert"}:
             difficulty = "medium"
 
         bot_names = {
             "easy":      ["Botín", "Novato", "Pipón", "Torpe"],
             "medium":    ["Calculín", "Medio", "Astuto", "Listo"],
             "hard":      ["Maestro", "Genio", "Experto", "HAL"],
-            "expert": ["Oráculo", "Némesis", "Profeta", "Centinela"],
+            "very_hard": ["Oráculo", "Némesis", "Profeta", "Centinela"],
+            "expert":    ["Absoluto", "Nexus", "Axioma", "Sísifo"],
         }
         existing_bot_names = {p.name for p in game.players.values() if p.is_bot}
         candidates = [n for n in bot_names[difficulty] if n not in existing_bot_names]
@@ -1152,12 +1153,12 @@ class GameManager:
         import game.bot as bot_module
         from game.player_model import bluff_model
 
-        # Buscar bot activo en la partida (expert tiene prioridad sobre expert)
+        # Buscar bot activo en la partida (expert tiene prioridad sobre very_hard)
         vh      = None
         bot_pid = None
-        for difficulty in ("expert", "expert"):
+        for difficulty in ("expert", "very_hard"):
             strategy = bot_module._REGISTRY.get(difficulty)
-            if not isinstance(strategy, bot_module.ExpertBot):
+            if not isinstance(strategy, bot_module.VeryHardBot):
                 continue
             candidate = next(
                 (pid for pid, p in game.players.items()
@@ -1515,7 +1516,7 @@ class GameManager:
     # ------------------------------------------------------------------ bot actions
 
     # Delay de pensamiento por dificultad (segundos)
-    _BOT_THINK_DELAY = {"easy": 1.8, "medium": 1.2, "hard": 0.7}
+    _BOT_THINK_DELAY = {"easy": 1.8, "medium": 1.2, "hard": 0.7, "very_hard": 0.5, "expert": 0.5}
 
     def _schedule_bot_action(self, room_id: str, game: Game, bot_id: str):
         difficulty = game.players[bot_id].bot_difficulty

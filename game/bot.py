@@ -6,7 +6,8 @@ Arquitectura: patrón plugin.
   - EasyBot       — usa sus dados pero con umbrales relajados y algo de ruido
   - MediumBot     — bayesiano con umbrales razonables, sin Calzo
   - HardBot       — bayesiano completo: prioriza caras propias, Calzo selectivo, duda precisa
-  - ExpertBot   — memoria de rondas, modelado de rivales, bluff, Gavilán adaptativo
+  - VeryHardBot   — memoria de rondas, modelado de rivales, bluff, Gavilán adaptativo
+  - ExpertBot     — VeryHardBot + comportamiento in-game, contexto multi-jugador, Nash-aware
 
 Punto de entrada público: decide(game, bot_id) -> dict
 """
@@ -625,9 +626,9 @@ class _BotMemory:
     _db_merged:   bool = False
 
 
-class ExpertBot(BotStrategy):
+class VeryHardBot(BotStrategy):
     """
-    Bot experto.
+    Bot muy difícil.
 
     Características:
     - Memoria persistente por bot_id con historial real de rivales.
@@ -1135,9 +1136,9 @@ class ExpertBot(BotStrategy):
 
 
 # ---------------------------------------------------------------------------
-# ExpertBot — sistema híbrido de cuatro capas sobre ExpertBot
+# ExpertBot — sistema híbrido de cuatro capas sobre VeryHardBot
 #
-# [1] ML Signal Layer       — Gradient Boosting heredado de ExpertBot (sin cambios)
+# [1] ML Signal Layer       — Gradient Boosting heredado de VeryHardBot (sin cambios)
 # [2] In-Game Behavior      — modelado dinámico por jugador dentro de la partida
 # [3] Multi-Player Context  — análisis posicional con múltiples jugadores
 # [4] Nash-Aware Stabilizer — limita desviación del juego óptimo aproximado
@@ -1256,9 +1257,9 @@ class NashBaselineState:
         self.current_total_dice = game.total_dice()
 
 
-class ExpertBot(ExpertBot):
+class ExpertBot(VeryHardBot):
     """
-    Bot Expert — hereda todo ExpertBot y añade tres capas extra:
+    Bot Expert — hereda de VeryHardBot y añade tres capas extra:
     comportamiento in-game, análisis multi-jugador y estabilización Nash-aware.
     """
 
@@ -1703,19 +1704,19 @@ class ExpertBot(ExpertBot):
 
     def _get_mem(self, bot_id: str, game: "Game") -> "_BotMemory":
         """
-        Override: si no tenemos global_mem propio, usamos el de ExpertBot
+        Override: si no tenemos global_mem propio, usamos el de VeryHardBot
         (que contiene los stats de DB cargados en startup).
         """
         mem        = self._memory[bot_id]
         global_mem = self._memory.get("__global__")
 
-        # Fallback: usar la memoria global del ExpertBot singleton
+        # Fallback: usar la memoria global del VeryHardBot singleton
         if global_mem is None:
             try:
-                vh = _REGISTRY.get("expert")
+                vh = _REGISTRY.get("very_hard")
             except NameError:
                 vh = None
-            if isinstance(vh, ExpertBot) and vh is not self:
+            if isinstance(vh, VeryHardBot) and vh is not self:
                 global_mem = vh._memory.get("__global__")
 
         if global_mem and not mem._db_merged:
@@ -1749,7 +1750,7 @@ _REGISTRY: dict[str, BotStrategy] = {
     "easy":      EasyBot(),
     "medium":    MediumBot(),
     "hard":      HardBot(),
-    "expert": ExpertBot(),
+    "very_hard": VeryHardBot(),
     "expert":    ExpertBot(),
 }
 
@@ -1778,9 +1779,9 @@ def notify_reveal(game: "Game", result: dict):
         if isinstance(dice, (list, tuple))
     }
 
-    for difficulty in ("expert", "expert"):
+    for difficulty in ("very_hard", "expert"):
         strategy = _REGISTRY.get(difficulty)
-        if not isinstance(strategy, ExpertBot):
+        if not isinstance(strategy, VeryHardBot):
             continue
         for pid, player in game.players.items():
             if player.is_bot and player.bot_difficulty == difficulty:
@@ -1797,9 +1798,9 @@ def notify_paso(game: "Game", passer_id: str):
     passer      = game.players.get(passer_id)
     passer_dice = passer.dice_count if passer else 5
 
-    for difficulty in ("expert", "expert"):
+    for difficulty in ("very_hard", "expert"):
         strategy = _REGISTRY.get(difficulty)
-        if not isinstance(strategy, ExpertBot):
+        if not isinstance(strategy, VeryHardBot):
             continue
         stable_passer = strategy._stable_id(game, passer_id)
         for pid, player in game.players.items():

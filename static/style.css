@@ -687,7 +687,8 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .lobby-player-row .ready-badge.bot-badge--easy      { background: rgba(39,174,96,0.14);  color: #2ecc71; border-color: rgba(39,174,96,0.3); }
 .lobby-player-row .ready-badge.bot-badge--medium    { background: rgba(232,184,109,0.14); color: #e8b86d; border-color: rgba(232,184,109,0.3); }
 .lobby-player-row .ready-badge.bot-badge--hard      { background: rgba(230,126,34,0.14);  color: #e67e22; border-color: rgba(230,126,34,0.3); }
-.lobby-player-row .ready-badge.bot-badge--expert { background: rgba(192,57,43,0.14);   color: #e74c3c; border-color: rgba(192,57,43,0.35); }
+.lobby-player-row .ready-badge.bot-badge--very-hard { background: rgba(192,57,43,0.14);   color: #e74c3c; border-color: rgba(192,57,43,0.35); }
+.lobby-player-row .ready-badge.bot-badge--expert    { background: rgba(142,68,173,0.14);  color: #9b59b6; border-color: rgba(142,68,173,0.35); }
 
 /* ── Bot controls ── */
 .lp-bot-controls {
@@ -715,8 +716,10 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .btn-bot--medium:hover    { background: rgba(232,184,109,0.25); }
 .btn-bot--hard      { background: rgba(230,126,34,0.13);  color: #e67e22; border: 1px solid rgba(230,126,34,0.3); }
 .btn-bot--hard:hover      { background: rgba(230,126,34,0.25); }
-.btn-bot--expert { background: rgba(192,57,43,0.13);   color: #e74c3c; border: 1px solid rgba(192,57,43,0.35); }
-.btn-bot--expert:hover { background: rgba(192,57,43,0.25); }
+.btn-bot--very-hard { background: rgba(192,57,43,0.13);   color: #e74c3c; border: 1px solid rgba(192,57,43,0.35); }
+.btn-bot--very-hard:hover { background: rgba(192,57,43,0.25); }
+.btn-bot--expert    { background: rgba(142,68,173,0.13);  color: #9b59b6; border: 1px solid rgba(142,68,173,0.35); }
+.btn-bot--expert:hover    { background: rgba(142,68,173,0.25); }
 
 /* ── Rules (collapsible <details>) ── */
 .lp-rules {
@@ -1134,7 +1137,8 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .player-bot-tag.bot-tag--easy      { color: #2ecc71; background: rgba(39,174,96,0.15);  border-color: rgba(39,174,96,0.35); }
 .player-bot-tag.bot-tag--medium    { color: #e8b86d; background: rgba(232,184,109,0.15); border-color: rgba(232,184,109,0.35); }
 .player-bot-tag.bot-tag--hard      { color: #e67e22; background: rgba(230,126,34,0.15); border-color: rgba(230,126,34,0.35); }
-.player-bot-tag.bot-tag--expert { color: #e74c3c; background: rgba(192,57,43,0.15);  border-color: rgba(192,57,43,0.40); }
+.player-bot-tag.bot-tag--very-hard { color: #e74c3c; background: rgba(192,57,43,0.15);  border-color: rgba(192,57,43,0.40); }
+.player-bot-tag.bot-tag--expert    { color: #9b59b6; background: rgba(142,68,173,0.15); border-color: rgba(142,68,173,0.40); }
 
 .player-card-header {
   display: flex;

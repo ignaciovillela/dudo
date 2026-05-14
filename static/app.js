@@ -2861,7 +2861,7 @@ function renderLobbyPlayers() {
 
     const badge = document.createElement('div');
     if (p.is_bot) {
-      const diffLabel = { easy: 'Fácil', medium: 'Medio', hard: 'Difícil', expert: 'Experto' }[p.bot_difficulty] || 'Bot';
+      const diffLabel = { easy: 'Fácil', medium: 'Medio', hard: 'Difícil', very_hard: 'Muy difícil', expert: 'Experto' }[p.bot_difficulty] || 'Bot';
       const diffClass = `bot-badge--${(p.bot_difficulty || 'medium').replace('_', '-')}`;
       badge.className = `ready-badge ready bot-badge ${diffClass}`;
       badge.innerHTML = `<i class="fa-solid fa-robot" aria-hidden="true"></i> Bot · ${diffLabel}`;
@@ -3008,7 +3008,7 @@ function renderOtherPlayers() {
       const botTag = document.createElement('span');
       const diffClass = `bot-tag--${(p.bot_difficulty || 'medium').replace('_', '-')}`;
       botTag.className = `player-bot-tag ${diffClass}`;
-      botTag.title = { easy: 'Bot fácil', medium: 'Bot medio', hard: 'Bot difícil', expert: 'Bot experto' }[p.bot_difficulty] || 'Bot';
+      botTag.title = { easy: 'Bot fácil', medium: 'Bot medio', hard: 'Bot difícil', very_hard: 'Bot muy difícil', expert: 'Bot experto' }[p.bot_difficulty] || 'Bot';
       botTag.innerHTML = '<i class="fa-solid fa-robot" aria-hidden="true"></i>';
       headerEl.appendChild(botTag);
     }
