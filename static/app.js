@@ -3894,6 +3894,16 @@ document.addEventListener('keydown', e => {
     adjBid('q', -1);
     return;
   }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    selectFace(Math.max(1, (S.bidFace ?? 2) - 1));
+    return;
+  }
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    selectFace(Math.min(6, (S.bidFace ?? 1) + 1));
+    return;
+  }
   const face = parseInt(e.key, 10);
   if (face >= 1 && face <= 6) {
     if (S.bidFace === face) {
