@@ -8,7 +8,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
 ## [0.3.11] - 2026-05-08
 
 ### Added
-- Bot **Muy difícil** (`very_hard`): nueva estrategia `VeryHardBot` en `game/bot.py` con memoria de rondas, modelado de rivales, bluff deliberado, Gavilán adaptativo y Calzo perfecto.
+- Bot **Experto** (`expert`): nueva estrategia `ExpertBot` en `game/bot.py` con memoria de rondas, modelado de rivales, bluff deliberado, Gavilán adaptativo y Calzo perfecto.
   - **Memoria de rondas**: registra bids por rival en cada ronda para estimar su tasa de bluff.
   - **Modelado de rivales**: ajusta el umbral de dudo dinámicamente — sube a 0.30 contra apostadores con historial de bluff alto (>40%) y baja a 0.14 contra jugadores muy conservadores (<10% con ≥5 bids registrados).
   - **Gavilán adaptativo**: intenta Gavilán fuera de turno solo si la expectativa supera la cantidad apostada, con gate aleatorio (55%); si tiene 5 dados es muy reticente (umbral 98%, gate 20%); espera al menos 1 bid ajeno en la ronda antes de intervenir.
@@ -16,7 +16,7 @@ Como aun no hay tags de version en git, se usan versiones internas por fecha par
   - **Bluff deliberado**: 12% de las veces apuesta intencionalmente débil para manipular al siguiente jugador.
   - **Agresividad adaptativa**: con ≤3 dados acepta bids con umbral menor (45% en lugar de 55%) y sube el umbral de paso (85% en lugar de 75%), aumentando la presión cuando está acorralado.
   - Nombres de bot exclusivos: Oráculo, Némesis, Profeta, Centinela.
-- Botón **Muy difícil** en los controles de bots del lobby; badge morado distintivo en la lista de jugadores.
+- Botón **Experto** en los controles de bots del lobby; badge morado distintivo en la lista de jugadores.
 
 ### Fixed
 - El host conserva el liderazgo al pasarse a espectador en el lobby: `_h_become_spectator` ya no transfiere `self.hosts`; `_host_id` acepta al host en `spectators` además de en `players`.

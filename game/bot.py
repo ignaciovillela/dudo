@@ -6,7 +6,7 @@ Arquitectura: patrón plugin.
   - EasyBot       — usa sus dados pero con umbrales relajados y algo de ruido
   - MediumBot     — bayesiano con umbrales razonables, sin Calzo
   - HardBot       — bayesiano completo: prioriza caras propias, Calzo selectivo, duda precisa
-  - VeryHardBot   — memoria de rondas, modelado de rivales, bluff, Gavilán adaptativo
+  - ExpertBot   — memoria de rondas, modelado de rivales, bluff, Gavilán adaptativo
 
 Punto de entrada público: decide(game, bot_id) -> dict
 """
@@ -160,8 +160,9 @@ class BotStrategy(ABC):
         # Ordenar por cantidad ascendente
         good.sort(key=lambda x: x[0].quantity)
         n = len(good)
-        low_third  = good[:max(1, n // 3)]
-        high_third = good[max(0, n - n // 3):]
+        third      = max(1, n // 3)
+        low_third  = good[:third]
+        high_third = good[-third:]  # siempre al menos 1 elemento
 
         if random.random() < aggression:
             # Escala agresivo: elige del tercio superior de cantidades
@@ -480,7 +481,7 @@ class HardBot(BotStrategy):
 
 
 # ---------------------------------------------------------------------------
-# VeryHardBot — memoria de rondas, modelado de rivales, bluff, Gavilán
+# ExpertBot — memoria de rondas, modelado de rivales, bluff, Gavilán
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -613,7 +614,7 @@ class _PlayerStats:
 
 @dataclass
 class _BotMemory:
-    """Estado persistente entre rondas para un bot VeryHard concreto."""
+    """Estado persistente entre rondas para un bot Expert concreto."""
     last_round:   int  = -1
     player_stats: dict = field(default_factory=lambda: defaultdict(_PlayerStats))
     # Historial de bids de la ronda en curso: list[Bid] (caché local para detectar copiado)
@@ -624,9 +625,9 @@ class _BotMemory:
     _db_merged:   bool = False
 
 
-class VeryHardBot(BotStrategy):
+class ExpertBot(BotStrategy):
     """
-    Bot muy difícil.
+    Bot experto.
 
     Características:
     - Memoria persistente por bot_id con historial real de rivales.
@@ -1134,6 +1135,613 @@ class VeryHardBot(BotStrategy):
 
 
 # ---------------------------------------------------------------------------
+# ExpertBot — sistema híbrido de cuatro capas sobre ExpertBot
+#
+# [1] ML Signal Layer       — Gradient Boosting heredado de ExpertBot (sin cambios)
+# [2] In-Game Behavior      — modelado dinámico por jugador dentro de la partida
+# [3] Multi-Player Context  — análisis posicional con múltiples jugadores
+# [4] Nash-Aware Stabilizer — limita desviación del juego óptimo aproximado
+#
+# FinalThreshold = Expert_threshold
+#                + InGameBehaviorSignal
+#                + MultiPlayerContextSignal
+#                + PositioningSignal
+#                + NashBaselineAdjustment
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class InGamePlayerState:
+    """
+    Estado comportamental de un jugador observado en la partida actual.
+    Se resetea automáticamente cada partida (bot_id es UUID nuevo por partida).
+    Complementa _PlayerStats (histórico entre partidas) con señales en tiempo real.
+    """
+    actions_total:   int = 0
+    bids_game:       int = 0
+    dudos_game:      int = 0
+    calzos_game:     int = 0
+    pasos_game:      int = 0
+    # Resultados de duelos propios (ellos dudaron/calzaron)
+    duelos_won:      int = 0
+    duelos_lost:     int = 0
+    calzos_hit:      int = 0
+    calzos_missed:   int = 0
+    # Bluff/verdad clasificados retroactivamente por on_round_reveal
+    bluffs_observed: int = 0
+    truths_observed: int = 0
+    # Ventana de últimas 8 acciones
+    recent_actions: list = field(default_factory=list)
+
+    @property
+    def aggression_index(self) -> float:
+        total = self.bids_game + self.dudos_game + self.calzos_game
+        return self.dudos_game / max(total, 1)
+
+    @property
+    def calzo_tendency(self) -> float:
+        total = self.bids_game + self.dudos_game + self.calzos_game
+        return self.calzos_game / max(total, 1)
+
+    @property
+    def pass_tendency(self) -> float:
+        return self.pasos_game / max(self.actions_total, 1)
+
+    @property
+    def ingame_bluff_rate(self) -> float:
+        total = self.bluffs_observed + self.truths_observed
+        return self.bluffs_observed / max(total, 1) if total else 0.5
+
+    @property
+    def dudo_success_rate(self) -> float:
+        total = self.duelos_won + self.duelos_lost
+        return self.duelos_won / max(total, 1)
+
+    @property
+    def volatility_index(self) -> float:
+        if self.actions_total < 4:
+            return 0.5
+        t = max(self.actions_total, 1)
+        probs = [self.bids_game / t, self.dudos_game / t,
+                 self.calzos_game / t, self.pasos_game / t]
+        return min(sum((p - 0.25) ** 2 for p in probs), 1.0)
+
+    def add_action(self, action_type: str) -> None:
+        self.actions_total += 1
+        self.recent_actions.append(action_type)
+        if len(self.recent_actions) > 8:
+            self.recent_actions.pop(0)
+        if action_type == "bid":
+            self.bids_game += 1
+        elif action_type == "dudo":
+            self.dudos_game += 1
+        elif action_type == "calzo":
+            self.calzos_game += 1
+        elif action_type == "paso":
+            self.pasos_game += 1
+
+
+@dataclass
+class NashBaselineState:
+    """
+    Estado Nash-aware de la mesa. Controla desviación máxima del juego óptimo aproximado.
+
+    nash_drift_limit escala con el stage del juego:
+      early (>70% dados): ±0.10 — conservador
+      mid   (40-70%):     ±0.17 — equilibrado
+      late  (<40%):       ±0.25 — explotación máxima
+    """
+    total_dice_initial:       int   = 10
+    current_total_dice:       int   = 10
+    average_table_aggression: float = 0.0
+    exploit_streak:           int   = 0    # rondas consecutivas explotando al límite
+
+    @property
+    def game_stage(self) -> str:
+        ratio = self.current_total_dice / max(self.total_dice_initial, 1)
+        if ratio > 0.70:
+            return "early"
+        if ratio > 0.40:
+            return "mid"
+        return "late"
+
+    @property
+    def nash_drift_limit(self) -> float:
+        base = {"early": 0.10, "mid": 0.17, "late": 0.25}[self.game_stage]
+        if self.exploit_streak >= 3:
+            base *= 0.70   # anti-overfitting
+        return base
+
+    def update(self, game: "Game") -> None:
+        self.current_total_dice = game.total_dice()
+
+
+class ExpertBot(ExpertBot):
+    """
+    Bot Expert — hereda todo ExpertBot y añade tres capas extra:
+    comportamiento in-game, análisis multi-jugador y estabilización Nash-aware.
+    """
+
+    EXPERT_CALZO_PROB_MIN = 0.72
+    EXPERT_BID_MIN_PROB   = 0.52
+    EXPERT_BLUFF_PROB     = 0.10
+
+    def __init__(self):
+        super().__init__()
+        # bot_id → {stable_player_id → InGamePlayerState}
+        self._igps: dict[str, dict[str, InGamePlayerState]] = defaultdict(dict)
+        # bot_id → NashBaselineState
+        self._nash: dict[str, NashBaselineState] = {}
+        # watermark para evitar doble-conteo al sincronizar round_bids con IGPS
+        self._igps_watermark: dict[str, int] = defaultdict(int)
+        # bot_id activo durante decide() — se usa en _dudo_threshold
+        self._current_bot_id: str = ""
+
+    # ------------------------------------------------------------------ IGPS / Nash
+
+    def _get_igps(self, bot_id: str, player_key: str) -> InGamePlayerState:
+        d = self._igps[bot_id]
+        if player_key not in d:
+            d[player_key] = InGamePlayerState()
+        return d[player_key]
+
+    def _get_nash(self, bot_id: str, game: "Game") -> NashBaselineState:
+        if bot_id not in self._nash:
+            total = game.total_dice()
+            self._nash[bot_id] = NashBaselineState(
+                total_dice_initial=total,
+                current_total_dice=total,
+            )
+        n = self._nash[bot_id]
+        n.update(game)
+        return n
+
+    def _update_table_aggression(self, bot_id: str) -> None:
+        d = self._igps.get(bot_id, {})
+        if not d:
+            return
+        nash = self._nash.get(bot_id)
+        if nash is None:
+            return
+        avg = sum(s.aggression_index for s in d.values()) / len(d)
+        nash.average_table_aggression = 0.7 * nash.average_table_aggression + 0.3 * avg
+
+    # ------------------------------------------------------------------ señales
+
+    def _ingame_behavior_signal(
+        self, igps: InGamePlayerState, stats: "_PlayerStats"
+    ) -> float:
+        """
+        Capa 2: ajuste al umbral de dudo por comportamiento observado en esta partida.
+        Retorna valor en [-0.10, +0.12].
+        """
+        if igps.actions_total < 3:
+            return 0.0
+
+        signal = 0.0
+        obs = igps.bluffs_observed + igps.truths_observed
+
+        # Diferencia entre tasa de bluff in-game y la histórica
+        if obs >= 2:
+            delta = igps.ingame_bluff_rate - stats.bluff_rate
+            signal += delta * 0.18  # aprox ±0.09
+
+        # Calza mucho: sus bids tienen respaldo real → menos dudo
+        if igps.calzo_tendency > 0.30 and igps.calzos_game >= 2:
+            signal -= 0.04
+
+        # Muy agresivo dudando: cuando apuesta, está seguro → menos dudo
+        if igps.aggression_index > 0.55 and igps.dudos_game >= 2:
+            signal -= 0.04
+
+        # Alta volatilidad: comportamiento errático → conservadurismo
+        if igps.volatility_index > 0.65 and igps.actions_total >= 5:
+            signal -= 0.03
+
+        # Calzo exitoso reciente (últimas 4 acciones): mano fuerte en este momento
+        recent_calzos = igps.recent_actions[-4:].count("calzo")
+        if recent_calzos >= 2:
+            signal -= 0.04
+
+        return max(-0.10, min(0.12, signal))
+
+    def _multiplayer_context_signal(
+        self,
+        igps_dict: dict,
+        game: "Game",
+        bid_player_key: str,
+        bot_id: str,
+    ) -> float:
+        """
+        Capa 3: señal de posición y comportamiento de mesa.
+        Solo relevante con ≥3 jugadores. Retorna valor en [-0.06, +0.08].
+        """
+        order = game.player_order
+        n = len(order)
+        if n < 3:
+            return 0.0
+
+        signal = 0.0
+        try:
+            bot_pos    = order.index(bot_id)
+            bidder_pos = (order.index(game.current_bid.player_id)
+                          if game.current_bid else -1)
+        except ValueError:
+            return 0.0
+
+        if bidder_pos >= 0:
+            dist = (bot_pos - bidder_pos) % n
+            proximity = 1.0 / max(dist, 1)
+            igps_b = igps_dict.get(bid_player_key)
+            if igps_b and igps_b.actions_total >= 3:
+                if igps_b.ingame_bluff_rate > 0.55:
+                    signal += proximity * 0.04
+                # Calzo-spammer próximo: sus bids tienen respaldo → menos dudo
+                if igps_b.calzo_tendency > 0.30 and dist == 1:
+                    signal -= 0.03
+
+        # Mesa muy agresiva: más jugadores que dudan frecuentemente
+        aggressive = sum(
+            1 for s in igps_dict.values()
+            if s.aggression_index > 0.50 and s.actions_total >= 3
+        )
+        if aggressive >= 2:
+            signal += 0.02
+
+        return max(-0.06, min(0.08, signal))
+
+    def _positioning_signal(self, game: "Game") -> float:
+        """Penalización si somos los que abren la ronda (menos información)."""
+        return -0.03 if game.current_bid is None else 0.0
+
+    def _player_exploitability(
+        self, igps: InGamePlayerState, stats: "_PlayerStats"
+    ) -> float:
+        """Cuán predecible y explotable es el jugador [0, 1]."""
+        score = 0.40
+        if stats.bids_total >= 20:
+            score += 0.15
+        elif stats.bids_total >= 8:
+            score += 0.07
+        if igps.actions_total >= 6 and igps.volatility_index < 0.30:
+            score += 0.20
+        elif igps.volatility_index > 0.70:
+            score -= 0.20
+        if stats.bluff_rate > 0.50:
+            score += 0.10
+        obs = igps.bluffs_observed + igps.truths_observed
+        if obs >= 3 and igps.ingame_bluff_rate > 0.55:
+            score += 0.10
+        return max(0.0, min(1.0, score))
+
+    def _nash_adjustment(
+        self,
+        nash: NashBaselineState,
+        exploit_signal: float,
+        exploitability: float,
+    ) -> float:
+        """
+        Capa 4: escala exploit_signal por exploitability y lo clampea al drift limit.
+        Actualiza exploit_streak para anti-overfitting.
+        """
+        raw     = exploit_signal * exploitability
+        limit   = nash.nash_drift_limit
+        clamped = max(-limit, min(limit, raw))
+        if abs(clamped) > limit * 0.75:
+            nash.exploit_streak += 1
+        else:
+            nash.exploit_streak = max(0, nash.exploit_streak - 1)
+        return clamped
+
+    # ------------------------------------------------------------------ decide
+
+    def _sync_round_bids(self, game: "Game", bot_id: str, mem: "_BotMemory") -> None:
+        """Extiende el padre para alimentar IGPS con cada nueva apuesta vista."""
+        cur_round = game.round_number
+        if cur_round != mem.last_round:
+            self._igps_watermark[bot_id] = 0
+
+        super()._sync_round_bids(game, bot_id, mem)
+
+        watermark  = self._igps_watermark[bot_id]
+        new_bids   = mem.round_bids[watermark:]
+        for bid in new_bids:
+            pid = getattr(bid, "player_id", None)
+            if pid:
+                key = self._stable_id(game, pid)
+                self._get_igps(bot_id, key).add_action("bid")
+        self._igps_watermark[bot_id] = len(mem.round_bids)
+
+    def decide(self, game: "Game", bot_id: str) -> dict:
+        self._current_bot_id = bot_id
+        mem      = self._get_mem(bot_id, game)
+        nash     = self._get_nash(bot_id, game)
+        self._sync_round_bids(game, bot_id, mem)
+        self._update_table_aggression(bot_id)
+
+        own_dice   = game.players[bot_id].dice
+        dice_count = len(own_dice)
+        low_dice   = dice_count <= self.AGGRESSION_LOW_DICE
+
+        if game.current_bid is not None:
+            bid  = game.current_bid
+            prob = self.prob_bid_holds_bayesian(game, bid, bot_id)
+
+            # Gavilán (heredado)
+            if (bid.player_id != bot_id
+                    and game.current_player_id() != bot_id
+                    and self._gavilan_allowed(game, bot_id)):
+                if self._try_gavilan(game, bot_id, own_dice, dice_count, prob):
+                    return {"action": "dudo"}
+
+            # Calzo — con lógica de evitar calzar a calzo-spammers
+            if (prob >= self.EXPERT_CALZO_PROB_MIN
+                    and bid.player_id != bot_id
+                    and self._calzo_makes_sense(game, own_dice)
+                    and not self._skip_calzo_vs_spammer(bot_id, bid.player_id, game)):
+                return {"action": "calzo"}
+
+            # Dudo — umbral enriquecido con las 4 capas
+            threshold = self._dudo_threshold(mem, bid, game)
+            if prob < threshold:
+                return {"action": "dudo"}
+
+        if game.last_paso is not None:
+            passer_id = game.last_paso["player_id"]
+            dudo_prob = self._dudo_paso_threshold(mem, passer_id, game)
+            p_bluff   = self.prob_paso_is_bluff(game, passer_id)
+            if p_bluff >= 1.0:
+                return {"action": "dudo"}
+            if random.random() < dudo_prob:
+                return {"action": "dudo"}
+
+        paso_threshold = (self.PASO_PROB_THRESHOLD_LOW_DICE if low_dice
+                          else self.PASO_PROB_THRESHOLD)
+        if self.can_paso(game, bot_id) and game.current_bid is not None:
+            prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+            if prob > paso_threshold and random.random() < self.PASO_RAND:
+                return {"action": "paso"}
+
+        return self._expert_choose_bid(game, bot_id, own_dice, low_dice, nash)
+
+    def _skip_calzo_vs_spammer(
+        self, bot_id: str, bidder_id: str, game: "Game"
+    ) -> bool:
+        """Evita calzar a jugadores que calzan mucho (probablemente tienen dados fuertes)."""
+        key  = self._stable_id(game, bidder_id)
+        igps = self._igps[bot_id].get(key)
+        if igps and igps.calzo_tendency > 0.40 and igps.calzos_game >= 2:
+            return random.random() < 0.55
+        return False
+
+    def _dudo_threshold(self, mem: "_BotMemory", bid: "Bid", game: "Game") -> float:
+        """
+        Override: añade capas 2-4 al umbral base del ExpertBot (capas 1 + ML).
+        """
+        base = super()._dudo_threshold(mem, bid, game)
+
+        bot_id = self._current_bot_id
+        if not bot_id:
+            return base
+
+        bidder_id = bid.player_id
+        key       = self._stable_id(game, bidder_id)
+        stats     = mem.player_stats.get(key)
+        if stats is None:
+            return base
+
+        igps      = self._get_igps(bot_id, key)
+        igps_dict = self._igps.get(bot_id, {})
+        nash      = self._get_nash(bot_id, game)
+
+        # Capa 2: comportamiento in-game
+        igbs = self._ingame_behavior_signal(igps, stats)
+
+        # Capa 3: contexto multi-jugador
+        mps  = self._multiplayer_context_signal(igps_dict, game, key, bot_id)
+
+        # Posicionamiento
+        pos  = self._positioning_signal(game)
+
+        # Capa 4: Nash-aware
+        exploit_signal = igbs + mps
+        exploitability = self._player_exploitability(igps, stats)
+        nash_adj       = self._nash_adjustment(nash, exploit_signal, exploitability)
+
+        final = base + nash_adj + pos
+        return max(0.08, min(0.50, final))
+
+    def _expert_choose_bid(
+        self,
+        game: "Game",
+        bot_id: str,
+        own_dice: list,
+        low_dice: bool,
+        nash: NashBaselineState,
+    ) -> dict:
+        """Bid con agresividad adaptada al contexto de la mesa."""
+        igps_dict  = self._igps.get(bot_id, {})
+        aggression = 0.20
+
+        # Late game → más agresivo
+        if nash.game_stage == "late":
+            aggression += 0.08
+        elif nash.game_stage == "early":
+            aggression -= 0.03
+
+        # Jugadores pasivos → más presión
+        passive = sum(
+            1 for s in igps_dict.values()
+            if s.pass_tendency > 0.40 and s.actions_total >= 4
+        )
+        if passive >= 1:
+            aggression += 0.05
+
+        # Jugadores agresivos → variar para inducir error
+        aggressive = sum(
+            1 for s in igps_dict.values()
+            if s.aggression_index > 0.55 and s.actions_total >= 4
+        )
+        if aggressive >= 1:
+            aggression -= 0.04
+
+        # Caras a deprioritizar: evitar dar calzo fácil a calzo-spammers
+        avoid_face = None
+        if game.current_bid is not None:
+            for pid, player in game.players.items():
+                if pid == bot_id:
+                    continue
+                key = self._stable_id(game, pid)
+                s = igps_dict.get(key)
+                if s and s.calzo_tendency > 0.35 and s.calzos_game >= 2:
+                    avoid_face = game.current_bid.face
+                    break
+
+        strong = self._strong_faces(own_dice)
+        if avoid_face is not None:
+            strong = ([f for f in strong if f != avoid_face]
+                      + [f for f in strong if f == avoid_face])
+
+        candidates = self.candidate_bids(game, bot_id, max_candidates=40,
+                                         prefer_faces=strong)
+        if not candidates:
+            return ({"action": "dudo"} if game.current_bid
+                    else {"action": "bid", "quantity": 1, "face": 2})
+
+        scored   = [(b, self.prob_bid_holds_bayesian(game, b, bot_id))
+                    for b in candidates]
+        min_prob = self.BID_MIN_PROB_LOW_DICE if low_dice else self.EXPERT_BID_MIN_PROB
+
+        # Bluff deliberado controlado
+        if random.random() < self.EXPERT_BLUFF_PROB:
+            weak = [(b, p) for b, p in scored if p < 0.45]
+            if weak:
+                weak.sort(key=lambda x: x[1], reverse=True)
+                chosen = weak[0][0]
+                return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
+
+        aggression = max(0.05, min(0.40, aggression))
+        chosen = self._pick_bid(scored, min_prob, aggression=aggression)
+        return {"action": "bid", "quantity": chosen.quantity, "face": chosen.face}
+
+    # ------------------------------------------------------------------ feedback del servidor
+
+    def on_round_reveal(
+        self, bot_id: str, game: "Game", all_dice: dict[str, list[int]]
+    ) -> None:
+        """Extiende el padre para clasificar bids como bluff/verdad en IGPS."""
+        super().on_round_reveal(bot_id, game, all_dice)
+
+        total_dice = sum(len(v) for v in all_dice.values())
+        if total_dice == 0:
+            return
+
+        aces = sum(1 for dice in all_dice.values() for d in dice if d == 1)
+
+        def count_face(face: int) -> int:
+            if face == 1:
+                return sum(1 for dice in all_dice.values() for d in dice if d == 1)
+            return (sum(1 for dice in all_dice.values() for d in dice if d == face)
+                    + aces)
+
+        mem = self._get_mem(bot_id, game)
+        for bid in mem.round_bids:
+            pid  = getattr(bid, "player_id", None)
+            face = getattr(bid, "face", None)
+            qty  = getattr(bid, "quantity", None)
+            if pid is None or face is None or qty is None:
+                continue
+            key  = self._stable_id(game, pid)
+            igps = self._get_igps(bot_id, key)
+            if count_face(face) < qty:
+                igps.bluffs_observed += 1
+            else:
+                igps.truths_observed += 1
+
+    def on_reveal(self, bot_id: str, result: dict, game: "Game | None" = None) -> None:
+        """Extiende el padre para registrar resultados de duelos/calzos en IGPS."""
+        super().on_reveal(bot_id, result, game)
+        if game is None:
+            return
+
+        action = result.get("action")
+        challenger_id = result.get("challenger_id")
+        if not challenger_id or challenger_id == bot_id:
+            return
+
+        key  = self._stable_id(game, challenger_id)
+        igps = self._get_igps(bot_id, key)
+
+        if action == "dudo":
+            loser_id = result.get("loser_id")
+            # bid_holds=True → apostador ganó → challenger perdió el dudo
+            if result.get("bid_holds"):
+                igps.duelos_lost += 1
+            else:
+                igps.duelos_won += 1
+            igps.add_action("dudo")
+
+        elif action == "calzo":
+            if result.get("calzo_success"):
+                igps.calzos_hit += 1
+            else:
+                igps.calzos_missed += 1
+            igps.add_action("calzo")
+
+    def on_paso_made(
+        self,
+        bot_id: str,
+        passer_id: str,
+        passer_dice_count: int,
+        stable_passer_id: str | None = None,
+    ) -> None:
+        """Extiende el padre para registrar paso en IGPS del pasador."""
+        super().on_paso_made(bot_id, passer_id, passer_dice_count, stable_passer_id)
+        key  = stable_passer_id or passer_id
+        igps = self._get_igps(bot_id, key)
+        igps.add_action("paso")
+
+    def _get_mem(self, bot_id: str, game: "Game") -> "_BotMemory":
+        """
+        Override: si no tenemos global_mem propio, usamos el de ExpertBot
+        (que contiene los stats de DB cargados en startup).
+        """
+        mem        = self._memory[bot_id]
+        global_mem = self._memory.get("__global__")
+
+        # Fallback: usar la memoria global del ExpertBot singleton
+        if global_mem is None:
+            try:
+                vh = _REGISTRY.get("expert")
+            except NameError:
+                vh = None
+            if isinstance(vh, ExpertBot) and vh is not self:
+                global_mem = vh._memory.get("__global__")
+
+        if global_mem and not mem._db_merged:
+            for pid, player in game.players.items():
+                if player.anon_id and player.anon_id in global_mem.player_stats:
+                    key = player.anon_id
+                    if key not in mem.player_stats:
+                        src = global_mem.player_stats[key]
+                        dst = mem.player_stats[key]
+                        dst.bids_total        = src.bids_total
+                        dst.bids_bluff        = src.bids_bluff
+                        dst.face_bid_counts   = defaultdict(int, src.face_bid_counts)
+                        dst.face_bluff_counts = defaultdict(int, src.face_bluff_counts)
+                        dst.qty_bucket_counts = defaultdict(int, src.qty_bucket_counts)
+                        dst.qty_bucket_bluff  = defaultdict(int, src.qty_bucket_bluff)
+                        dst.copy_count        = src.copy_count
+                        dst.total_rounds      = src.total_rounds
+                        dst.paso_count        = src.paso_count
+                        dst.paso_bluff_count  = src.paso_bluff_count
+                        dst.paso_dice_sum     = src.paso_dice_sum
+            mem._db_merged = True
+
+        return mem
+
+
+# ---------------------------------------------------------------------------
 # Registro de estrategias
 # ---------------------------------------------------------------------------
 
@@ -1141,7 +1749,8 @@ _REGISTRY: dict[str, BotStrategy] = {
     "easy":      EasyBot(),
     "medium":    MediumBot(),
     "hard":      HardBot(),
-    "very_hard": VeryHardBot(),
+    "expert": ExpertBot(),
+    "expert":    ExpertBot(),
 }
 
 
@@ -1161,41 +1770,38 @@ def decide(game: "Game", bot_id: str) -> dict:
 def notify_reveal(game: "Game", result: dict):
     """
     Llamado por el manager tras resolver un dudo o calzo (o dudo de paso).
-    Notifica a todos los VeryHardBots activos en la partida para que
-    actualicen su memoria con el resultado real.
-
-    Si el resultado incluye all_dice, se usa para aprendizaje retroactivo
-    de TODAS las apuestas de la ronda (no solo la que fue dudada).
+    Notifica a todos los ExpertBots y ExpertBots activos en la partida.
     """
-    vh = _REGISTRY.get("very_hard")
-    if not isinstance(vh, VeryHardBot):
-        return
-
     all_dice_raw: dict = result.get("all_dice") or {}
-    # all_dice_raw puede ser {player_id: [d1, d2, ...]} o vacío para paso sin reveal
     all_dice: dict[str, list[int]] = {
         pid: list(dice) for pid, dice in all_dice_raw.items()
         if isinstance(dice, (list, tuple))
     }
 
-    for pid, player in game.players.items():
-        if player.is_bot and player.bot_difficulty == "very_hard":
-            vh.on_reveal(pid, result, game)
-            if all_dice:
-                vh.on_round_reveal(pid, game, all_dice)
+    for difficulty in ("expert", "expert"):
+        strategy = _REGISTRY.get(difficulty)
+        if not isinstance(strategy, ExpertBot):
+            continue
+        for pid, player in game.players.items():
+            if player.is_bot and player.bot_difficulty == difficulty:
+                strategy.on_reveal(pid, result, game)
+                if all_dice:
+                    strategy.on_round_reveal(pid, game, all_dice)
 
 
 def notify_paso(game: "Game", passer_id: str):
     """
     Llamado por el manager cuando un jugador hace un paso.
-    Permite al VeryHard registrar el paso en su memoria estadística.
+    Notifica a ExpertBots y ExpertBots activos en la partida.
     """
-    vh = _REGISTRY.get("very_hard")
-    if not isinstance(vh, VeryHardBot):
-        return
-    passer = game.players.get(passer_id)
+    passer      = game.players.get(passer_id)
     passer_dice = passer.dice_count if passer else 5
-    stable_passer = vh._stable_id(game, passer_id)
-    for pid, player in game.players.items():
-        if player.is_bot and player.bot_difficulty == "very_hard" and pid != passer_id:
-            vh.on_paso_made(pid, passer_id, passer_dice, stable_passer)
+
+    for difficulty in ("expert", "expert"):
+        strategy = _REGISTRY.get(difficulty)
+        if not isinstance(strategy, ExpertBot):
+            continue
+        stable_passer = strategy._stable_id(game, passer_id)
+        for pid, player in game.players.items():
+            if player.is_bot and player.bot_difficulty == difficulty and pid != passer_id:
+                strategy.on_paso_made(pid, passer_id, passer_dice, stable_passer)

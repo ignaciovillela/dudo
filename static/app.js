@@ -670,6 +670,13 @@ const ACHIEVEMENTS_CATALOG = [
   { id: 'last_die_win',    emoji: '💀', name: 'Al filo',            desc: 'Ganar una partida con un solo dado.' },
   { id: 'three_dudos',     emoji: '⚡', name: 'Certero',            desc: 'Acertar 3 dudos en una misma partida.' },
   { id: 'calzo_one_die',   emoji: '🧊', name: 'Imperturbable',      desc: 'Calzo exitoso teniendo solo 1 dado.' },
+  // Logros vs bots
+  { id: 'beat_bot_easy',      emoji: '🤖', name: 'Debut digital',       desc: 'Ganar una partida contra el bot fácil.' },
+  { id: 'beat_bot_medium',    emoji: '🎮', name: 'Jugador de verdad',    desc: 'Ganar una partida contra el bot medio.' },
+  { id: 'beat_bot_hard',      emoji: '💪', name: 'Domador de bots',      desc: 'Ganar una partida contra el bot difícil.' },
+  { id: 'beat_bot_expert', emoji: '🧠', name: 'Maestro del dudo',     desc: 'Ganar una partida contra el bot experto.' },
+  { id: 'beat_5_expert',   emoji: '👑', name: 'Rey de las máquinas',  desc: 'Ganar una partida contra 5 bots en nivel experto.' },
+  { id: 'gavilan_vs_expert',  emoji: '🦅', name: 'Gavilán experto',      desc: 'Gavilán exitoso contra un bot experto.' },
 ];
 
 function loadAchievements() {
@@ -694,11 +701,14 @@ function unlockAchievement(id) {
 
 function checkAchievements(context) {
   // context: { action, isGavilan, dudoSuccess, calzoSuccess, myDiceCount,
-  //            isGameOver, won, noDiceLost, dudoOkThisGame, stats }
+  //            isGameOver, won, noDiceLost, dudoOkThisGame, stats,
+  //            bidPlayerDifficulty, botOpponentDifficulties }
   if (context.dudoSuccess)                         unlockAchievement('first_dudo');
   if (context.calzoSuccess)                         unlockAchievement('first_calzo');
   if (context.calzoSuccess && context.myDiceCount === 1) unlockAchievement('calzo_one_die');
   if (context.isGavilan && context.dudoSuccess)     unlockAchievement('gavilan_win');
+  if (context.isGavilan && context.dudoSuccess && context.bidPlayerDifficulty === 'expert')
+                                                    unlockAchievement('gavilan_vs_expert');
   if (context.dudoOkThisGame >= 3)                  unlockAchievement('three_dudos');
   if ((S.streaks[S.playerId] || 0) >= 5)            unlockAchievement('streak5');
   if (context.isGameOver) {
@@ -708,6 +718,13 @@ function checkAchievements(context) {
       if (stats.gamesWon >= 5)                      unlockAchievement('champion');
       if (context.noDiceLost)                       unlockAchievement('survivor');
       if (context.myDiceCount === 1)                unlockAchievement('last_die_win');
+      const diffs = context.botOpponentDifficulties || [];
+      if (diffs.includes('easy'))                   unlockAchievement('beat_bot_easy');
+      if (diffs.includes('medium'))                 unlockAchievement('beat_bot_medium');
+      if (diffs.includes('hard'))                   unlockAchievement('beat_bot_hard');
+      if (diffs.includes('expert'))              unlockAchievement('beat_bot_expert');
+      if (diffs.length >= 5 && diffs.every(d => d === 'expert'))
+                                                    unlockAchievement('beat_5_expert');
     }
   }
 }
@@ -1801,6 +1818,7 @@ function onReveal(msg) {
       isGavilan: !!msg.is_gavilan && msg.action === 'dudo' && actionSuccess,
       myDiceCount: S.myDice.length || (S.players[S.playerId]?.dice_count ?? 5),
       dudoOkThisGame: S.pendingStats.dudoOk,
+      bidPlayerDifficulty: S.players[msg.bid?.player_id]?.bot_difficulty ?? null,
     });
   }
 
@@ -1944,6 +1962,9 @@ function onGameOver(msg) {
   // Check game-over achievements
   const myFinalDice = S.myDice.length || (S.players[S.playerId]?.dice_count ?? 0);
   const noDiceLost = myFinalDice >= 5;
+  const botOpponentDifficulties = Object.values(S.players)
+    .filter(p => p.is_bot && p.id !== S.playerId)
+    .map(p => p.bot_difficulty);
   checkAchievements({
     isGameOver: true,
     won,
@@ -1951,6 +1972,7 @@ function onGameOver(msg) {
     myDiceCount: myFinalDice,
     dudoOkThisGame: S.pendingStats.dudoOk,
     stats,
+    botOpponentDifficulties,
   });
 
   // Award XP: base + win bonus (action XP was already saved during reveals)
@@ -2839,7 +2861,7 @@ function renderLobbyPlayers() {
 
     const badge = document.createElement('div');
     if (p.is_bot) {
-      const diffLabel = { easy: 'Fácil', medium: 'Medio', hard: 'Difícil', very_hard: 'Muy difícil' }[p.bot_difficulty] || 'Bot';
+      const diffLabel = { easy: 'Fácil', medium: 'Medio', hard: 'Difícil', expert: 'Experto' }[p.bot_difficulty] || 'Bot';
       const diffClass = `bot-badge--${(p.bot_difficulty || 'medium').replace('_', '-')}`;
       badge.className = `ready-badge ready bot-badge ${diffClass}`;
       badge.innerHTML = `<i class="fa-solid fa-robot" aria-hidden="true"></i> Bot · ${diffLabel}`;
@@ -2986,7 +3008,7 @@ function renderOtherPlayers() {
       const botTag = document.createElement('span');
       const diffClass = `bot-tag--${(p.bot_difficulty || 'medium').replace('_', '-')}`;
       botTag.className = `player-bot-tag ${diffClass}`;
-      botTag.title = { easy: 'Bot fácil', medium: 'Bot medio', hard: 'Bot difícil', very_hard: 'Bot muy difícil' }[p.bot_difficulty] || 'Bot';
+      botTag.title = { easy: 'Bot fácil', medium: 'Bot medio', hard: 'Bot difícil', expert: 'Bot experto' }[p.bot_difficulty] || 'Bot';
       botTag.innerHTML = '<i class="fa-solid fa-robot" aria-hidden="true"></i>';
       headerEl.appendChild(botTag);
     }

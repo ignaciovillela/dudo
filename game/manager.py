@@ -453,14 +453,14 @@ class GameManager:
                                     {"type": "error", "message": f"Sala llena (máx. {MAX_PLAYERS})"})
 
         difficulty = msg.get("difficulty", "medium")
-        if difficulty not in {"easy", "medium", "hard", "very_hard"}:
+        if difficulty not in {"easy", "medium", "hard", "expert"}:
             difficulty = "medium"
 
         bot_names = {
             "easy":      ["Botín", "Novato", "Pipón", "Torpe"],
             "medium":    ["Calculín", "Medio", "Astuto", "Listo"],
             "hard":      ["Maestro", "Genio", "Experto", "HAL"],
-            "very_hard": ["Oráculo", "Némesis", "Profeta", "Centinela"],
+            "expert": ["Oráculo", "Némesis", "Profeta", "Centinela"],
         }
         existing_bot_names = {p.name for p in game.players.values() if p.is_bot}
         candidates = [n for n in bot_names[difficulty] if n not in existing_bot_names]
@@ -1140,36 +1140,45 @@ class GameManager:
             log.exception("[db] failed to persist game result: %s", exc)
             return
 
-        # Persist bid/paso stats for all human players from VeryHard memory
+        # Persist bid/paso stats for all human players from Expert memory
         asyncio.create_task(self._persist_bid_stats(room_id, game))
 
     async def _persist_bid_stats(self, room_id: str, game: Game) -> None:
         """
         Persiste las estadísticas de apuesta (bid_stats y paso_stats) acumuladas
-        por el VeryHardBot durante esta partida para cada jugador humano.
+        por el ExpertBot durante esta partida para cada jugador humano.
         Usa UPSERT incremental: suma sobre lo que ya había en DB.
         """
         import game.bot as bot_module
         from game.player_model import bluff_model
 
-        vh = bot_module._REGISTRY.get("very_hard")
-        if not isinstance(vh, bot_module.VeryHardBot):
-            return
+        # Buscar bot activo en la partida (expert tiene prioridad sobre expert)
+        vh      = None
+        bot_pid = None
+        for difficulty in ("expert", "expert"):
+            strategy = bot_module._REGISTRY.get(difficulty)
+            if not isinstance(strategy, bot_module.ExpertBot):
+                continue
+            candidate = next(
+                (pid for pid, p in game.players.items()
+                 if p.is_bot and p.bot_difficulty == difficulty),
+                None,
+            )
+            if candidate:
+                vh      = strategy
+                bot_pid = candidate
+                break
 
-        # Reunir stats nuevas de sesión: diferencia entre lo que hay en mem del bot
-        # y lo que estaba cargado desde DB (en __global__).
-        # Usamos el primer bot VeryHard de la partida como fuente.
-        bot_pid = next(
-            (pid for pid, p in game.players.items()
-             if p.is_bot and p.bot_difficulty == "very_hard"),
-            None,
-        )
         if bot_pid is None:
-            # No había VeryHard → no hay stats que guardar
             return
 
-        mem        = vh._memory.get(bot_pid)
+        mem = vh._memory.get(bot_pid)
+        # Para ExpertBot: si no tiene global_mem propio, usar el de ExpertBot
         global_mem = vh._memory.get("__global__")
+        if global_mem is None:
+            vh_fallback = bot_module._REGISTRY.get("expert")
+            if isinstance(vh_fallback, bot_module.ExpertBot) and vh_fallback is not vh:
+                global_mem = vh_fallback._memory.get("__global__")
         if mem is None:
             return
 

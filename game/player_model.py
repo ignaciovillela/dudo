@@ -306,20 +306,20 @@ class BluffModel:
             return None
 
     # ------------------------------------------------------------------
-    # Carga de stats de DB → _PlayerStats en memoria del VeryHard
+    # Carga de stats de DB → _PlayerStats en memoria del Expert
     # ------------------------------------------------------------------
 
     @staticmethod
     async def load_player_stats_into_bot(pool) -> None:
         """
         Carga player_bid_stats y player_paso_stats de la DB y las inyecta
-        en la memoria del VeryHardBot singleton.
+        en la memoria del ExpertBot singleton.
 
         Se llama una sola vez al inicio del servidor.
         """
         import game.bot as bot_module
-        vh = bot_module._REGISTRY.get("very_hard")
-        if not isinstance(vh, bot_module.VeryHardBot):
+        vh = bot_module._REGISTRY.get("expert")
+        if not isinstance(vh, bot_module.ExpertBot):
             return
 
         try:
@@ -336,7 +336,7 @@ class BluffModel:
             log.warning("[bluff_model] failed to load player stats: %s", exc)
             return
 
-        # Hay un único _BotMemory "global" para el VeryHard singleton.
+        # Hay un único _BotMemory "global" para el Expert singleton.
         # No está asociado a un bot_id concreto; usamos la clave especial "__global__"
         # para que los stats de jugadores humanos estén disponibles desde el primer turno.
         mem = vh._memory["__global__"]
