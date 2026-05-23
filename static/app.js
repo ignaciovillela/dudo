@@ -3099,6 +3099,8 @@ function updateBidDisplay() {
 
   document.getElementById('bv-wild').style.display =
     S.currentBid.face !== 1 ? 'inline' : 'none';
+
+  updateCurrentBidProb();
 }
 
 // ══════════════════════════════════  CONTROLS  ════════════════════════════════
@@ -3342,23 +3344,21 @@ function updateBidProb() {
   el.style.display = 'inline-block';
 }
 
-function binomCumGe(n, k, p) {
-  if (k <= 0) return 1;
-  if (k > n) return 0;
-  let prob = 0, coeff = 1;
-  for (let i = 0; i <= n; i++) {
-    if (i > 0) coeff = coeff * (n - i + 1) / i;
-    if (i >= k) prob += coeff * Math.pow(p, i) * Math.pow(1 - p, n - i);
+function updateCurrentBidProb() {
+  const el = document.getElementById('current-bid-prob');
+  if (!el) return;
+  if (!S.currentBid || !S.myDice || !S.myDice.length || !S.totalDice) {
+    el.textContent = '';
+    return;
   }
-  return Math.min(1, prob);
-}
-
-function calcBidProb(qty, face) {
-  if (!S.myDice.length || !S.totalDice) return null;
-  const p = face === 1 ? 1/6 : 1/3;
-  const known = S.myDice.filter(d => face === 1 ? d === 1 : (d === face || d === 1)).length;
-  const unknown = S.totalDice - S.myDice.length;
-  return binomCumGe(unknown, qty - known, p);
+  const { quantity: qty, face } = S.currentBid;
+  const prob = bidProbability(qty, face, S.totalDice, S.myDice);
+  if (prob === null) { el.textContent = ''; return; }
+  const pctRound = Math.round(prob * 100);
+  const pct = prob * 100;
+  const pctStr = pct < 1 ? pct.toFixed(2) : pct < 10 ? pct.toFixed(1) : String(pctRound);
+  el.textContent = `~${pctStr}%`;
+  el.className = 'current-bid-prob ' + (pctRound >= 60 ? 'bid-prob-high' : pctRound >= 30 ? 'bid-prob-mid' : 'bid-prob-low');
 }
 
 function refreshBidInputUI() {
@@ -3383,19 +3383,6 @@ function refreshBidInputUI() {
     if (firstCell) {
       const cellH = firstCell.getBoundingClientRect().height || 38;
       grid.scrollTop = row * (cellH + 4);
-    }
-  }
-
-  // Probabilidad
-  const probEl = document.getElementById('bid-prob');
-  if (probEl) {
-    const p = calcBidProb(S.bidQty, S.bidFace);
-    if (p === null) {
-      probEl.textContent = '';
-    } else {
-      const pct = Math.round(p * 100);
-      probEl.textContent = `Prob. al menos ${S.bidQty}×${['','As','Tonto','Tren','Cuadra','Quina','Cena'][S.bidFace]}: ${pct}%`;
-      probEl.className = 'bid-prob ' + (pct >= 60 ? 'prob-hi' : pct >= 30 ? 'prob-mid' : 'prob-lo');
     }
   }
 
