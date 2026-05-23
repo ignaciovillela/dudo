@@ -2248,6 +2248,21 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   opacity: 0.8;
 }
 
+.bid-prob {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  min-height: 1.4em;
+  transition: color 0.2s, background 0.2s;
+}
+.bid-prob:empty { display: none; }
+.prob-hi  { color: #4ade80; }
+.prob-mid { color: var(--gold); }
+.prob-lo  { color: #f87171; }
+
 /* Face picker */
 .face-picker {
   display: grid;
