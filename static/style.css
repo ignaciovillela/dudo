@@ -1455,14 +1455,16 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   50%       { box-shadow: 0 0 48px rgba(232,184,109,1),    0 0 0 3px rgba(255,220,100,0.7); }
 }
 
-.player-card.action-dudo {
+.player-card.action-dudo,
+.my-area.action-dudo {
   border-color: var(--danger);
   border-width: 2px;
   animation: actionCardPulseDudo 1.2s ease-in-out infinite;
   z-index: 6;
 }
 
-.player-card.action-calzo {
+.player-card.action-calzo,
+.my-area.action-calzo {
   border-color: var(--gold);
   border-width: 2px;
   animation: actionCardPulseCalzo 1.2s ease-in-out infinite;

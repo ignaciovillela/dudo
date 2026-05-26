@@ -1768,6 +1768,7 @@ function onReveal(msg) {
   // Mostrar dados revelados en la mesa
   renderMyDice();
   renderOtherPlayers();
+  renderMyActionBadge();
   showReveal(msg);
   // Animar dado saliendo del cacho (pérdida)
   if (msg.loser_id) setTimeout(() => animateDieCup(msg.loser_id, 'exit'), 400);
@@ -1912,17 +1913,43 @@ function onNewRound(msg) {
   log(`─── Ronda ${S.roundNum} ───`, 'round');
   playSfx('roll');
   renderOtherPlayers();
+  renderMyActionBadge();
 }
 
 function renderStreakBadges() {
-  // Actualiza badges de racha en cartas de oponentes ya renderizadas
   renderOtherPlayers();
-  // Badge en la propia carta
   const myStreak = S.streaks[S.playerId] || 0;
   const nameEl = document.getElementById('my-name-disp');
   if (nameEl) {
-    const base = S.playerAvatar ? `${S.playerAvatar} ${S.playerName}` : S.playerName;
-    nameEl.textContent = myStreak >= 2 ? `${base} 🔥${myStreak}` : base;
+    nameEl.textContent = S.playerAvatar ? `${S.playerAvatar} ${S.playerName}` : S.playerName;
+  }
+  const streakBadge = document.getElementById('my-streak-badge');
+  if (streakBadge) {
+    if (myStreak >= 2) {
+      streakBadge.textContent = `🔥${myStreak}`;
+      streakBadge.title = `${myStreak} rondas consecutivas sin perder dados`;
+      streakBadge.style.display = '';
+    } else {
+      streakBadge.style.display = 'none';
+    }
+  }
+}
+
+function renderMyActionBadge() {
+  const badge = document.getElementById('my-action-badge');
+  const selfCard = document.getElementById('self-card');
+  if (!badge) return;
+  if (S.lastActionPlayerId === S.playerId && S.lastActionType) {
+    badge.className = `player-action-badge action-${S.lastActionType}`;
+    badge.textContent = S.lastActionType === 'dudo' ? '🎲 ¡DUDO!' : '🔒 ¡CALZO!';
+    badge.style.display = '';
+    if (selfCard) {
+      selfCard.classList.remove('action-dudo', 'action-calzo');
+      selfCard.classList.add(`action-${S.lastActionType}`);
+    }
+  } else {
+    badge.style.display = 'none';
+    if (selfCard) selfCard.classList.remove('action-dudo', 'action-calzo');
   }
 }
 
