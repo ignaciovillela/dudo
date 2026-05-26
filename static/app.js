@@ -360,6 +360,14 @@ const DEFAULT_RULES = {
   bot_chat_enabled: true,
 };
 
+// Fuente de verdad: /static/face_names.json (compartido con el servidor)
+// Índice 0 = cara 1 (As), índice 5 = cara 6 (Cena)
+let FACE_NAMES = [];
+fetch('/static/face_names.json')
+  .then(r => r.json())
+  .then(data => { FACE_NAMES = data; })
+  .catch(() => {});
+
 // ══════════════════════════════════  LEVELS  ══════════════════════════════════
 // Fuente de verdad: /static/avatars.json (compartido con el servidor)
 let AVATAR_LEVEL_MAP = [];
@@ -1784,8 +1792,6 @@ function onReveal(msg) {
   }
 
   const bid = msg.bid || null;
-  const face = bid?.face;
-  const isCalzo = msg.action === 'calzo';
 
   if (msg.challenger_id === S.playerId) {
     let actionSuccess = false;
@@ -1822,45 +1828,20 @@ function onReveal(msg) {
     playSfxFor('gavilan', msg.challenger_id);
   }
 
-  let resultText, resultClass;
-  if (msg.action === 'paso') {
-    const gavilan = msg.is_gavilan;
-    if (msg.paso_valid) {
-      if (gavilan) {
-        resultText = `Gavilán fallido: ${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso válido → ${msg.challenger_name} pierde un dado.`;
-      } else {
-        resultText = `${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso válido → ${msg.challenger_name} pierde un dado.`;
-      }
-      resultClass = 'lose';
-    } else {
-      const gainText = msg.challenger_gained ? ' ¡Recupera un dado!' : '';
-      if (gavilan) {
-        resultText = `¡Gavilán! ${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso inválido → ${msg.passer_name} pierde un dado.${gainText}`;
-      } else {
-        resultText = `${msg.challenger_name} dudó el paso de ${msg.passer_name}. Paso inválido → ${msg.passer_name} pierde un dado.`;
-      }
-      resultClass = 'win';
-    }
-  } else if (isCalzo) {
-    if (msg.calzo_success) {
-      const gainText = msg.challenger_gained
-        ? `${msg.challenger_name} recupera un dado.`
-        : 'La ronda se reinicia.';
-      resultText = `${msg.challenger_name} calzó. ¡Exactamente ${msg.actual_count} ${faceName(face)}! ${gainText}`;
-      resultClass = 'win';
-    } else {
-      resultText = `${msg.challenger_name} calzó. Había ${msg.actual_count}, no ${bid.quantity} ${faceName(face)} → ${msg.challenger_name} pierde un dado.`;
-      resultClass = 'lose';
-    }
-  } else {
-    if (msg.bid_holds) {
-      resultText = `${msg.challenger_name} dudó. ¡La apuesta se sostiene! Hay ${msg.actual_count} ${faceName(face)} → ${msg.challenger_name} pierde un dado.`;
-      resultClass = 'lose';
-    } else {
-      resultText = `${msg.challenger_name} dudó. Solo hay ${msg.actual_count} ${faceName(face)} → ${S.players[bid.player_id]?.name || bid.player_name} pierde un dado.`;
-      resultClass = 'win';
-    }
-  }
+  const eventType = msg.action === 'paso' ? 'GAVILAN' : msg.action === 'calzo' ? 'CALZO' : 'DUDO';
+  const bidder_name = bid ? (S.players[bid.player_id]?.name || bid.player_name) : null;
+  const { result, effects, message: resultText } = resolveGameEvent({
+    type:             eventType,
+    challenger_name:  msg.challenger_name,
+    passer_name:      msg.passer_name,
+    bidder_name,
+    bid:              bid ? { quantity: bid.quantity, face: bid.face } : { quantity: 0, face: 0 },
+    actual_count:     msg.actual_count,
+    paso_valid:       !!msg.paso_valid,
+    challenger_gained: !!msg.challenger_gained,
+    is_gavilan:       !!msg.is_gavilan,
+  });
+  const resultClass = result.endsWith('_CORRECTO') ? 'win' : 'lose';
 
   document.getElementById('reveal-result').textContent = resultText;
   document.getElementById('reveal-result').className = `reveal-result ${resultClass}`;
@@ -2599,6 +2580,8 @@ function showReveal(msg) {
 
 function hideReveal() {
   document.getElementById('reveal-overlay').style.display = 'none';
+  const r = document.getElementById('reveal-result');
+  if (r) { r.textContent = ''; r.className = 'reveal-result'; }
 }
 
 function animateDieLoss(pid) {
@@ -2670,8 +2653,7 @@ function _timeoutActionHintText() {
   if (S.currentPid !== S.playerId) return null;
   if (S.currentBid && !S.hasPassed) return '⏱ Paso automático…';
   const face = S.currentBid ? S.currentBid.face : 2;
-  const faceName = ['', 'As', 'Dos', 'Tres', 'Cuatro', 'Cinco', 'Seis'][face] || face;
-  return `⏱ Apuesta automática (${faceName})…`;
+  return `⏱ Apuesta automática (${faceName(face)})…`;
 }
 
 function hideTimeoutActionHint() {
@@ -3776,9 +3758,99 @@ function log(text, type = 'bid') {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-function faceName(face) {
-  const names = { 1: 'uno (comodín)', 2: 'dos', 3: 'tres', 4: 'cuatro', 5: 'cinco', 6: 'seis' };
-  return names[face] || face;
+function faceName(face, plural = false) {
+  const entry = FACE_NAMES[face - 1];
+  if (!entry) return String(face);
+  return plural ? entry.plural : entry.singular;
+}
+
+/**
+ * Evalúa un evento de juego y retorna resultado, efectos y mensaje para UI.
+ *
+ * @param {{
+ *   type: 'DUDO'|'CALZO'|'GAVILAN',
+ *   challenger_name: string,
+ *   passer_name?: string,
+ *   bidder_name?: string,
+ *   bid: {quantity: number, face: number},
+ *   actual_count?: number,
+ *   paso_valid?: boolean,
+ *   challenger_gained?: boolean
+ * }} event
+ * @returns {{ result: string, effects: Record<string,number>, message: string }}
+ */
+function resolveGameEvent(event) {
+  const { type, challenger_name, passer_name, bidder_name, bid, actual_count,
+          paso_valid, challenger_gained, is_gavilan } = event;
+  let result, effects, lines;
+  const fl = bid ? faceName(bid.face, bid.quantity !== 1) : '';
+
+  if (type === 'DUDO') {
+    if (actual_count < bid.quantity) {
+      result = 'DUDO_CORRECTO';
+      effects = { [bidder_name]: -1 };
+      if (challenger_gained) effects[challenger_name] = +1;
+      const efectoLine = challenger_gained
+        ? `${bidder_name} -1 dado, ${challenger_name} +1 dado`
+        : `${bidder_name} -1 dado`;
+      lines = [
+        is_gavilan ? `¡Gavilán! ${challenger_name} dudó — correcto` : `${challenger_name} dudó — correcto`,
+        `Solo ${actual_count}/${bid.quantity} ${fl}`,
+        efectoLine,
+      ];
+    } else {
+      result = 'DUDO_INCORRECTO';
+      effects = { [challenger_name]: -1 };
+      lines = [
+        is_gavilan ? `Gavilán fallido — ${challenger_name} dudó — incorrecto` : `${challenger_name} dudó — incorrecto`,
+        `Había ${actual_count}/${bid.quantity} ${fl}`,
+        `${challenger_name} -1 dado`,
+      ];
+    }
+  } else if (type === 'CALZO') {
+    if (actual_count === bid.quantity) {
+      result = 'CALZO_CORRECTO';
+      effects = challenger_gained ? { [challenger_name]: +1 } : {};
+      lines = [
+        is_gavilan ? `¡Gavilán! ${challenger_name} calzó — exacto` : `${challenger_name} calzó — exacto`,
+        `${actual_count}/${bid.quantity} ${fl}`,
+        challenger_gained ? `${challenger_name} +1 dado` : 'Ronda reiniciada',
+      ];
+    } else {
+      result = 'CALZO_INCORRECTO';
+      effects = { [challenger_name]: -1 };
+      lines = [
+        is_gavilan ? `Gavilán fallido — ${challenger_name} calzó — fallido` : `${challenger_name} calzó — fallido`,
+        `${actual_count}/${bid.quantity} ${fl}`,
+        `${challenger_name} -1 dado`,
+      ];
+    }
+  } else { // GAVILAN (dudo de paso)
+    if (!paso_valid) { // paso inválido → challenge correcto
+      result = 'GAVILAN_CORRECTO';
+      effects = { [passer_name]: -1 };
+      if (challenger_gained) effects[challenger_name] = +1;
+      lines = [
+        is_gavilan
+          ? `¡Gavilán! ${challenger_name} dudó el paso de ${passer_name} — válido`
+          : `${challenger_name} dudó el paso de ${passer_name} — válido`,
+        challenger_gained
+          ? `${passer_name} -1 dado, ${challenger_name} +1 dado`
+          : `${passer_name} -1 dado`,
+      ];
+    } else { // paso válido → challenge incorrecto
+      result = 'GAVILAN_INCORRECTO';
+      effects = { [challenger_name]: -1 };
+      lines = [
+        is_gavilan
+          ? `Gavilán fallido — ${challenger_name} dudó el paso de ${passer_name} — inválido`
+          : `${challenger_name} dudó el paso de ${passer_name} — inválido`,
+        `${challenger_name} -1 dado`,
+      ];
+    }
+  }
+
+  return { result, effects, message: lines.join('\n') };
 }
 
 /**

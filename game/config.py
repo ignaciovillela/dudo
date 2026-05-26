@@ -1,11 +1,25 @@
+import json
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+_ROOT = Path(__file__).resolve().parents[1]
+
+load_dotenv(_ROOT / ".env")
 
 REVEAL_SECONDS = int(os.getenv("REVEAL_SECONDS", 7))
 MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", 6))
 RATE_LIMIT_MS = int(os.getenv("RATE_LIMIT_MS", 200))
 DISCONNECT_GRACE_SECONDS = int(os.getenv("DISCONNECT_GRACE_SECONDS", 35))
+
+# Fuente de verdad: /static/face_names.json (compartido con el front)
+_face_data = json.loads((_ROOT / "static" / "face_names.json").read_text(encoding="utf-8"))
+FACE_NAMES_SINGULAR: list[str] = [f["singular"] for f in _face_data]  # índice 0 = cara 1
+FACE_NAMES_PLURAL:   list[str] = [f["plural"]   for f in _face_data]
+
+
+def face_name(face: int, plural: bool = False) -> str:
+    """Retorna el nombre de una cara (1-6). plural=True para la forma plural."""
+    names = FACE_NAMES_PLURAL if plural else FACE_NAMES_SINGULAR
+    return names[face - 1] if 1 <= face <= 6 else str(face)

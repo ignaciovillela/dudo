@@ -1,0 +1,8 @@
+[
+  { "singular": "As",     "plural": "Ases"   },
+  { "singular": "Tonto",  "plural": "Tontos" },
+  { "singular": "Tren",   "plural": "Trenes" },
+  { "singular": "Cuadra", "plural": "Cuadras"},
+  { "singular": "Quina",  "plural": "Quinas" },
+  { "singular": "Cena",   "plural": "Cenas"  }
+]
