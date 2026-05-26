@@ -1472,6 +1472,8 @@ function onReconnected(msg) {
     if (startBtn) {
       startBtn.style.display = S.isHost ? 'inline-flex' : 'none';
     }
+    S.isReady = S.players[S.playerId]?.ready ?? false;
+    updateReadyButton(S.isReady);
     renderLobbyPlayers();
     renderLobbyRules();
     updateStartButton();
@@ -2062,7 +2064,7 @@ function closeGameOver() {
   S.phase = 'lobby';
   for (const p of Object.values(S.players)) {
     p.dice_count = 5;
-    p.ready = false;
+    if (!p.is_bot) p.ready = false;
   }
   S.isReady = false;
   showScreen('lobby');
@@ -3608,8 +3610,10 @@ function updateReadyButton(isReady) {
 function updateStartButton() {
   const btn = document.getElementById('btn-start');
   if (!btn) return;
-  const connected = Object.values(S.players).filter(p => p.connected);
-  const allReady = connected.length >= 2 && connected.every(p => p.ready);
+  const connectedHumans = Object.values(S.players).filter(p => p.connected && !p.is_bot);
+  const bots = Object.values(S.players).filter(p => p.is_bot);
+  const active = connectedHumans.length + bots.length;
+  const allReady = active >= 2 && connectedHumans.every(p => p.ready);
   btn.disabled = !allReady;
 }
 

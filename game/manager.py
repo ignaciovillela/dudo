@@ -371,9 +371,10 @@ class GameManager:
                                     {"type": "error", "message": "Cancela tu listo antes de cambiar reglas"})
 
         game.rules = RuleConfig.from_payload(msg.get("rules"), game.rules)
-        # Resetear estado "listo" de todos al cambiar reglas
+        # Resetear estado "listo" de humanos al cambiar reglas (bots siempre listos)
         for player in game.players.values():
-            player.ready = False
+            if not player.is_bot:
+                player.ready = False
         await self._broadcast(room_id, {
             "type": "rules_updated",
             "rules": game.rules.to_dict(),
@@ -1021,7 +1022,8 @@ class GameManager:
         )
 
         for player in game.players.values():
-            player.ready = False
+            if not player.is_bot:
+                player.ready = False
             player.dice = []
             player.dice_count = 5
         game.current_bid = None

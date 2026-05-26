@@ -216,8 +216,10 @@ class Game:
         return active[0] if len(active) == 1 else None
 
     def all_ready(self) -> bool:
-        connected = [p for p in self.players.values() if p.connected]
-        return len(connected) >= 2 and all(p.ready for p in connected)
+        human_connected = [p for p in self.players.values() if p.connected and not p.is_bot]
+        bots = [p for p in self.players.values() if p.is_bot]
+        active = human_connected + bots
+        return len(active) >= 2 and all(p.ready for p in human_connected)
 
     def all_dice_reveal(self) -> dict:
         return {
