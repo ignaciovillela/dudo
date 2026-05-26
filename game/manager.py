@@ -38,16 +38,14 @@ async def _retrain_model(pool) -> None:
     except Exception as exc:
         log.warning("[db] retrain failed: %s", exc)
 
-# Fuente de verdad compartida con el cliente: static/emojis.json
-_EMOJIS_PATH = pathlib.Path(__file__).parent.parent / "static" / "emojis.json"
+# Fuente de verdad compartida con el cliente: static/*.json
+_STATIC = pathlib.Path(__file__).parent.parent / "static"
 ALLOWED_EMOJIS: frozenset[str] = frozenset(
-    item["emoji"] for item in json.loads(_EMOJIS_PATH.read_text(encoding="utf-8"))
+    item["emoji"] for item in json.loads((_STATIC / "emojis.json").read_text(encoding="utf-8"))
 )
-
-ALLOWED_AVATARS = {
-    "🎲", "🦅", "🐺", "🦁", "🐯", "🦊", "💀", "👑", "🎭", "🃏",
-    "🏹", "⚔️", "🛡️", "🌙", "⚡", "🔥", "💎", "🎯", "🍀", "🎪",
-}
+ALLOWED_AVATARS: frozenset[str] = frozenset(
+    item["emoji"] for item in json.loads((_STATIC / "avatars.json").read_text(encoding="utf-8"))
+)
 
 
 class GameManager:
@@ -1519,10 +1517,52 @@ class GameManager:
 
     # Delay de pensamiento por dificultad (segundos)
     _BOT_THINK_DELAY = {"easy": 1.8, "medium": 1.2, "hard": 0.7, "very_hard": 0.5, "expert": 0.5}
+    # Delay extra cuando hay humanos en juego (para parecer más natural)
+    _BOT_HUMAN_DELAY_EXTRA = {"easy": 3.0, "medium": 2.0, "hard": 1.3, "very_hard": 1.0, "expert": 0.7}
+
+    # Frases por categoría para el chat de bots (usan las mismas frases que los humanos)
+    _BOT_PHRASES = {
+        "taunt":       ["😅", "🤔", "¡Suerte!", "Mala suerte", "Ups"],
+        "confusion":   ["🤔", "Ups", "😅", "Mala suerte"],
+        "truth_bid":   ["Vamos", "¡Bien jugado!"],
+        "truth_dudo":  ["¡Mentira!", "Eso era mentira"],
+        "calzo_msg":   ["¡Calzo!"],
+        "bluff":       ["😅", "🤔", "Buen bluff", "No te creo"],
+    }
+    # Por dificultad y acción: (probabilidad, [categorías de frases disponibles])
+    _BOT_CHAT_CONFIG: dict = {
+        "easy":      {"bid":  (0.55, ["taunt", "confusion"]),
+                      "dudo": (0.65, ["confusion"]),
+                      "calzo":(0.65, ["confusion"]),
+                      "paso": (0.50, ["confusion", "taunt"])},
+        "medium":    {"bid":  (0.40, ["taunt", "bluff", "confusion"]),
+                      "dudo": (0.50, ["taunt", "truth_dudo", "confusion"]),
+                      "calzo":(0.50, ["calzo_msg", "taunt", "confusion"]),
+                      "paso": (0.35, ["taunt", "confusion"])},
+        "hard":      {"bid":  (0.30, ["taunt", "bluff", "truth_bid"]),
+                      "dudo": (0.38, ["truth_dudo", "bluff"]),
+                      "calzo":(0.38, ["calzo_msg"]),
+                      "paso": (0.25, ["taunt", "bluff"])},
+        "very_hard": {"bid":  (0.22, ["taunt", "bluff", "truth_bid"]),
+                      "dudo": (0.30, ["truth_dudo", "bluff"]),
+                      "calzo":(0.30, ["calzo_msg"]),
+                      "paso": (0.18, ["taunt", "bluff"])},
+        "expert":    {"bid":  (0.15, ["taunt", "bluff", "truth_bid"]),
+                      "dudo": (0.22, ["truth_dudo", "bluff"]),
+                      "calzo":(0.22, ["calzo_msg"]),
+                      "paso": (0.12, ["taunt", "bluff"])},
+    }
 
     def _schedule_bot_action(self, room_id: str, game: Game, bot_id: str):
         difficulty = game.players[bot_id].bot_difficulty
-        delay = self._BOT_THINK_DELAY.get(difficulty, 1.2) + random.uniform(0, 0.8)
+        humans_active = any(
+            not p.is_bot and p.dice_count > 0
+            for pid, p in game.players.items() if pid != bot_id
+        )
+        base_delay = self._BOT_THINK_DELAY.get(difficulty, 1.2)
+        if humans_active:
+            base_delay += self._BOT_HUMAN_DELAY_EXTRA.get(difficulty, 1.0)
+        delay = base_delay + random.uniform(0, 1.5 if humans_active else 0.8)
 
         async def _runner():
             try:
@@ -1548,6 +1588,39 @@ class GameManager:
 
         asyncio.create_task(_runner())
 
+    async def _maybe_bot_chat(self, room_id: str, bot_id: str, action: str):
+        game = self.games.get(room_id)
+        if not game or not game.rules.bot_chat_enabled:
+            return
+        player = game.players.get(bot_id)
+        if not player:
+            return
+        difficulty = player.bot_difficulty
+        action_cfg = self._BOT_CHAT_CONFIG.get(difficulty, {}).get(action)
+        if not action_cfg:
+            return
+        prob, categories = action_cfg
+        if random.random() > prob:
+            return
+        phrases = self._BOT_PHRASES.get(random.choice(categories), [])
+        if not phrases:
+            return
+        phrase = random.choice(phrases)
+        await asyncio.sleep(random.uniform(0.5, 1.8))
+        game = self.games.get(room_id)
+        if not game or game.phase not in ("playing", "reveal"):
+            return
+        player = game.players.get(bot_id)
+        if not player:
+            return
+        await self._broadcast(room_id, {
+            "type": "quick_chat",
+            "from_id": bot_id,
+            "from_name": player.name,
+            "from_avatar": player.avatar,
+            "phrase": phrase,
+        })
+
     async def _run_bot_action(self, room_id: str, game: Game, bot_id: str):
         decision = bot_engine.decide(game, bot_id)
         action = decision.get("action")
@@ -1559,6 +1632,7 @@ class GameManager:
             else:
                 self._cancel_turn_timeout(room_id)
                 await self._h_dudo(room_id, bot_id, game, {})
+                await self._maybe_bot_chat(room_id, bot_id, "dudo")
                 return
 
         if action == "calzo":
@@ -1567,12 +1641,14 @@ class GameManager:
             else:
                 self._cancel_turn_timeout(room_id)
                 await self._h_calzo(room_id, bot_id, game, {})
+                await self._maybe_bot_chat(room_id, bot_id, "calzo")
                 return
 
         if action == "paso":
             if game.current_bid is not None and bot_id not in game.passed_players:
                 self._cancel_turn_timeout(room_id)
                 await self._h_paso(room_id, bot_id, game, {})
+                await self._maybe_bot_chat(room_id, bot_id, "paso")
                 return
             else:
                 action = "bid"  # fallback si no puede pasar
@@ -1582,6 +1658,7 @@ class GameManager:
             face = decision.get("face", 2)
             self._cancel_turn_timeout(room_id)
             await self._h_bid(room_id, bot_id, game, {"quantity": qty, "face": face})
+            await self._maybe_bot_chat(room_id, bot_id, "bid")
 
     # ------------------------------------------------------------------ transport
 

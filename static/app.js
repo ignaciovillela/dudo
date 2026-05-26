@@ -357,42 +357,24 @@ const DEFAULT_RULES = {
   calzo_recovers_on_turn: false,
   turn_timeout_seconds: 0,
   allow_throwable_emojis: true,
+  bot_chat_enabled: true,
 };
 
 // ══════════════════════════════════  LEVELS  ══════════════════════════════════
-// Emojis ordered from "boring" to "exciting", each unlocked at a given level.
-const AVATAR_LEVEL_MAP = [
-  { emoji: '🎲', level: 1 },
-  { emoji: '🃏', level: 1 },
-  { emoji: '😏', level: 1 },
+// Fuente de verdad: /static/avatars.json (compartido con el servidor)
+let AVATAR_LEVEL_MAP = [];
+let AVATAR_OPTIONS = [];
 
-  { emoji: '🎭', level: 2 },
-  { emoji: '🌚', level: 2 },
-
-  { emoji: '🦊', level: 3 },
-  { emoji: '🐍', level: 3 },
-
-  { emoji: '🐺', level: 4 },
-  { emoji: '🔥', level: 4 },
-
-  { emoji: '🦁', level: 5 },
-  { emoji: '⚔️', level: 5 },
-
-  { emoji: '🍀', level: 6 },
-  { emoji: '💎', level: 6 },
-
-  { emoji: '🦂', level: 7 },
-  { emoji: '👁️', level: 7 },
-
-  { emoji: '👑', level: 8 },
-  { emoji: '☠️', level: 8 },
-
-  { emoji: '💀', level: 9 },
-  { emoji: '👹', level: 9 },
-
-  { emoji: '🜏', level: 10 },
-];
-const AVATAR_OPTIONS = AVATAR_LEVEL_MAP.map(e => e.emoji);
+const _avatarsReady = fetch('/static/avatars.json')
+  .then(r => r.json())
+  .then(data => {
+    AVATAR_LEVEL_MAP = data;
+    AVATAR_OPTIONS = data.map(e => e.emoji);
+  })
+  .catch(() => {
+    AVATAR_LEVEL_MAP = [{ emoji: '🎲', level: 1 }];
+    AVATAR_OPTIONS = ['🎲'];
+  });
 
 // XP thresholds per level (index = level - 1). Level 1 starts at 0 XP.
 const LEVEL_XP_THRESHOLDS = [
@@ -553,8 +535,8 @@ function renderAvatarPicker() {
   if (!row || !toggle) return;
 
   row.innerHTML = '';
+  row.scrollLeft = 0;
   const ordered = orderedAvatars(S.playerAvatar);
-  const { level } = loadLevelData();
   ordered.forEach((avatar, idx) => {
     const unlocked = isAvatarUnlocked(avatar);
     const entry = AVATAR_LEVEL_MAP.find(e => e.emoji === avatar);
@@ -604,8 +586,8 @@ function renderRenameAvatarPicker() {
   const toggle = document.getElementById('rename-btn-avatar-toggle');
   if (!row || !toggle) return;
   row.innerHTML = '';
+  row.scrollLeft = 0;
   const ordered = orderedAvatars(renameSelectedAvatar);
-  const { level } = loadLevelData();
   ordered.forEach((avatar, idx) => {
     const unlocked = isAvatarUnlocked(avatar);
     const entry = AVATAR_LEVEL_MAP.find(e => e.emoji === avatar);
@@ -3633,6 +3615,7 @@ function normalizeRules(rules) {
     calzo_recovers_on_turn: !!(src.calzo_recovers_on_turn ?? DEFAULT_RULES.calzo_recovers_on_turn),
     turn_timeout_seconds: timeout,
     allow_throwable_emojis: !!(src.allow_throwable_emojis ?? DEFAULT_RULES.allow_throwable_emojis),
+    bot_chat_enabled: !!(src.bot_chat_enabled ?? DEFAULT_RULES.bot_chat_enabled),
   };
 }
 
@@ -3665,6 +3648,12 @@ function rulesSummaryItems() {
         ? 'Los jugadores pueden lanzar emojis a otros durante la partida.'
         : 'Los emojis lanzables estan desactivados en esta sala.',
     },
+    {
+      label: `Mensajes de bots: ${rules.bot_chat_enabled ? 'Si' : 'No'}`,
+      detail: rules.bot_chat_enabled
+        ? 'Los bots envian mensajes durante la partida (burlas, verdades o bluffs segun su dificultad).'
+        : 'Los bots no enviaran mensajes en el chat.',
+    },
   ];
 }
 
@@ -3678,15 +3667,17 @@ function renderLobbyRules() {
   const hostCanEdit = S.isHost && !S.isReady;
   hostControls.style.display = S.isHost ? 'grid' : 'none';
 
-  const modeEl = document.getElementById('rule-elimination-loser');
+  const modeEl = document.getElementById('rule-elimination-winner');
   const gavilanEl = document.getElementById('rule-allow-gavilan');
   const calzoEl = document.getElementById('rule-calzo-on-turn');
   const emojiEl = document.getElementById('rule-allow-throwable-emojis');
+  const botChatEl = document.getElementById('rule-bot-chat-enabled');
   const timeoutInputs = document.querySelectorAll('#rule-turn-timeout input[name="turn-timeout"]');
-  if (modeEl)    { modeEl.checked = rules.elimination_mode === 'loser'; modeEl.disabled = !hostCanEdit; }
+  if (modeEl)    { modeEl.checked = rules.elimination_mode === 'winner'; modeEl.disabled = !hostCanEdit; }
   if (gavilanEl) { gavilanEl.checked = rules.allow_gavilan;             gavilanEl.disabled = !hostCanEdit; }
   if (calzoEl)   { calzoEl.checked = rules.calzo_recovers_on_turn;     calzoEl.disabled = !hostCanEdit; }
   if (emojiEl)   { emojiEl.checked = rules.allow_throwable_emojis;     emojiEl.disabled = !hostCanEdit; }
+  if (botChatEl) { botChatEl.checked = rules.bot_chat_enabled;         botChatEl.disabled = !hostCanEdit; }
   timeoutInputs.forEach((input) => {
     input.checked = Number(input.value) === rules.turn_timeout_seconds;
     input.disabled = !hostCanEdit;
@@ -3716,11 +3707,12 @@ function onHostRulesChanged() {
   if (!S.isHost) return;
   const timeoutSelected = document.querySelector('#rule-turn-timeout input[name="turn-timeout"]:checked');
   const next = {
-    elimination_mode: document.getElementById('rule-elimination-loser')?.checked ? 'loser' : 'winner',
+    elimination_mode: document.getElementById('rule-elimination-winner')?.checked ? 'winner' : 'loser',
     allow_gavilan: !!document.getElementById('rule-allow-gavilan')?.checked,
     calzo_recovers_on_turn: !!document.getElementById('rule-calzo-on-turn')?.checked,
     turn_timeout_seconds: Number(timeoutSelected?.value || 0),
     allow_throwable_emojis: !!document.getElementById('rule-allow-throwable-emojis')?.checked,
+    bot_chat_enabled: !!document.getElementById('rule-bot-chat-enabled')?.checked,
   };
   S.rules = normalizeRules(next);
   saveRulesToStorage(S.rules);
@@ -3877,7 +3869,9 @@ window.toggleRenameAvatarPicker = toggleRenameAvatarPicker;
 window.submitRename = submitRename;
 
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
-(function () {
+(async function () {
+  await _avatarsReady;
+
   const session = loadSession();
   const roomFromUrl = new URLSearchParams(window.location.search).get('sala');
   const nameEl = document.getElementById('inp-name');

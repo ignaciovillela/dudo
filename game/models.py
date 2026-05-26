@@ -56,6 +56,7 @@ class RuleConfig:
     calzo_recovers_on_turn: bool = False
     turn_timeout_seconds: int = 0
     allow_throwable_emojis: bool = True
+    bot_chat_enabled: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -64,6 +65,7 @@ class RuleConfig:
             "calzo_recovers_on_turn": self.calzo_recovers_on_turn,
             "turn_timeout_seconds": self.turn_timeout_seconds,
             "allow_throwable_emojis": self.allow_throwable_emojis,
+            "bot_chat_enabled": self.bot_chat_enabled,
         }
 
     @classmethod
@@ -76,6 +78,7 @@ class RuleConfig:
                 calzo_recovers_on_turn=base.calzo_recovers_on_turn,
                 turn_timeout_seconds=base.turn_timeout_seconds,
                 allow_throwable_emojis=base.allow_throwable_emojis,
+                bot_chat_enabled=base.bot_chat_enabled,
             )
 
         elimination_mode = payload.get("elimination_mode", base.elimination_mode)
@@ -99,6 +102,9 @@ class RuleConfig:
             turn_timeout_seconds=timeout_seconds,
             allow_throwable_emojis=bool(
                 payload.get("allow_throwable_emojis", base.allow_throwable_emojis)
+            ),
+            bot_chat_enabled=bool(
+                payload.get("bot_chat_enabled", base.bot_chat_enabled)
             ),
         )
 

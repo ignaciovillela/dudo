@@ -159,9 +159,9 @@
           <div class="lp-rules-body">
             <div id="host-rules-controls" class="rules-controls" style="display:none">
               <label class="check-row">
-                <input id="rule-elimination-loser" type="checkbox" onchange="onHostRulesChanged()" />
-                <span class="rule-line">Modo perdedor
-                  <button type="button" class="rule-help" data-tooltip="Modo perdedor: termina cuando alguien pierde todos sus dados.&#10;Modo ganador: gana el ultimo jugador con dados." aria-label="Detalle de modo de partida"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                <input id="rule-elimination-winner" type="checkbox" onchange="onHostRulesChanged()" />
+                <span class="rule-line">Modo ganador
+                  <button type="button" class="rule-help" data-tooltip="Modo ganador: gana el ultimo jugador con dados.&#10;Modo perdedor: termina cuando alguien pierde todos sus dados." aria-label="Detalle de modo de partida"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
               <label class="check-row">
@@ -180,6 +180,12 @@
                 <input id="rule-allow-throwable-emojis" type="checkbox" onchange="onHostRulesChanged()" />
                 <span class="rule-line">Permitir lanzar emojis
                   <button type="button" class="rule-help" data-tooltip="Permite que los jugadores lancen emojis a otros durante la partida." aria-label="Detalle de emojis lanzables"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                </span>
+              </label>
+              <label class="check-row">
+                <input id="rule-bot-chat-enabled" type="checkbox" onchange="onHostRulesChanged()" />
+                <span class="rule-line">Bots envían mensajes
+                  <button type="button" class="rule-help" data-tooltip="Los bots envian mensajes durante la partida. Segun su dificultad pueden ser burlas, verdades o bluffs." aria-label="Detalle de mensajes de bots"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
               <label class="check-row timeout-row">

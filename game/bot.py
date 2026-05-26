@@ -656,8 +656,9 @@ class VeryHardBot(BotStrategy):
     DUDO_COPY_BONUS        = 0.04   # bonus si el jugador copió en esta ronda
 
     # Calzo
-    CALZO_PROB_MIN = 0.75
-    CALZO_DIFF_MAX = 0.35
+    CALZO_PROB_MIN     = 0.75
+    CALZO_DIFF_MAX     = 0.35
+    SAFE_BID_THRESHOLD = 0.82  # si existe apuesta con prob >= esto, preferir sobre calzo
 
     # Gavilán
     GAVILAN_PROB_MIN          = 0.85
@@ -752,10 +753,12 @@ class VeryHardBot(BotStrategy):
                 if self._try_gavilan(game, bot_id, own_dice, dice_count, prob):
                     return {"action": "dudo"}
 
-            # Calzo
+            # Calzo — solo cuando no hay apuesta suficientemente segura disponible
             if (prob >= self.CALZO_PROB_MIN
                     and bid.player_id != bot_id
-                    and self._calzo_makes_sense(game, own_dice)):
+                    and self._calzo_makes_sense(game, own_dice)
+                    and not self._has_safe_bid_alternative(
+                        game, bot_id, own_dice, self.SAFE_BID_THRESHOLD)):
                 return {"action": "calzo"}
 
             # Dudo — umbral enriquecido con modelado
@@ -1103,6 +1106,14 @@ class VeryHardBot(BotStrategy):
             expected_others = unknown * 2 / 6
         return abs(own_m + expected_others - bid.quantity) <= self.CALZO_DIFF_MAX
 
+    def _has_safe_bid_alternative(self, game: "Game", bot_id: str, own_dice: list, safe_prob: float) -> bool:
+        """True si existe una apuesta válida con probabilidad >= safe_prob."""
+        strong = self._strong_faces(own_dice)
+        for c in self.candidate_bids(game, bot_id, max_candidates=25, prefer_faces=strong):
+            if self.prob_bid_holds_bayesian(game, c, bot_id) >= safe_prob:
+                return True
+        return False
+
     def _choose_bid(self, game: "Game", bot_id: str,
                     own_dice: list, low_dice: bool) -> dict:
         strong     = self._strong_faces(own_dice)
@@ -1263,9 +1274,10 @@ class ExpertBot(VeryHardBot):
     comportamiento in-game, análisis multi-jugador y estabilización Nash-aware.
     """
 
-    EXPERT_CALZO_PROB_MIN = 0.72
-    EXPERT_BID_MIN_PROB   = 0.52
-    EXPERT_BLUFF_PROB     = 0.10
+    EXPERT_CALZO_PROB_MIN     = 0.72
+    EXPERT_SAFE_BID_THRESHOLD = 0.80  # si existe apuesta con prob >= esto, preferir sobre calzo
+    EXPERT_BID_MIN_PROB       = 0.52
+    EXPERT_BLUFF_PROB         = 0.10
 
     def __init__(self):
         super().__init__()
@@ -1475,11 +1487,13 @@ class ExpertBot(VeryHardBot):
                 if self._try_gavilan(game, bot_id, own_dice, dice_count, prob):
                     return {"action": "dudo"}
 
-            # Calzo — con lógica de evitar calzar a calzo-spammers
+            # Calzo — solo cuando no hay apuesta suficientemente segura disponible
             if (prob >= self.EXPERT_CALZO_PROB_MIN
                     and bid.player_id != bot_id
                     and self._calzo_makes_sense(game, own_dice)
-                    and not self._skip_calzo_vs_spammer(bot_id, bid.player_id, game)):
+                    and not self._skip_calzo_vs_spammer(bot_id, bid.player_id, game)
+                    and not self._has_safe_bid_alternative(
+                        game, bot_id, own_dice, self.EXPERT_SAFE_BID_THRESHOLD)):
                 return {"action": "calzo"}
 
             # Dudo — umbral enriquecido con las 4 capas
