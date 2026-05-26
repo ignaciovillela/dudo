@@ -217,7 +217,7 @@ const S = {
     calzoOk: 0,
     calzoFail: 0,
   },
-  // Streaks: rondas consecutivas sobrevividas (sin perder dados)
+  // Streaks: dudo/calzo correctos consecutivos
   streaks: {},        // pid → current streak count
   bestStreaks: {},     // pid → best streak this game
 
@@ -663,7 +663,7 @@ const ACHIEVEMENTS_CATALOG = [
   { id: 'first_dudo',      emoji: '🎯', name: 'Primer dudo',        desc: 'Acertar un dudo por primera vez.' },
   { id: 'first_calzo',     emoji: '🔒', name: 'Calzo perfecto',     desc: 'Acertar un calzo por primera vez.' },
   { id: 'survivor',        emoji: '🏃', name: 'Sobreviviente',      desc: 'Ganar una partida sin perder ningún dado.' },
-  { id: 'streak5',         emoji: '🔥', name: 'En llamas',          desc: 'Alcanzar una racha de 5 rondas sin perder dados.' },
+  { id: 'streak5',         emoji: '🔥', name: 'En llamas',          desc: 'Alcanzar una racha de 5 dudo/calzo correctos consecutivos.' },
   { id: 'veteran',         emoji: '🎲', name: 'Veterano',           desc: 'Jugar 10 partidas.' },
   { id: 'champion',        emoji: '🏆', name: 'Campeón',            desc: 'Ganar 5 partidas.' },
   { id: 'gavilan_win',     emoji: '🦅', name: 'Gavilán certero',    desc: 'Gavilán exitoso (dudo fuera de turno correcto).' },
@@ -1590,7 +1590,7 @@ function onGameStarted(msg) {
   if (S.gameOverTimer !== null) { clearTimeout(S.gameOverTimer); S.gameOverTimer = null; }
   document.getElementById('game-over-overlay').style.display = 'none';
   applyEliminatedMode(false);
-  S.isSpectator = false;
+  S.isSpectator = !msg.player_order.includes(S.playerId);
   S.phase       = 'playing';
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules || S.rules);
@@ -1746,16 +1746,26 @@ function onReveal(msg) {
   stopTurnCountdown();
   S.phase = 'reveal';
   S.lastLossPlayerId = msg.loser_id || null;
-  // Romper racha del jugador que pierde un dado
-  if (msg.loser_id) {
-    S.streaks[msg.loser_id] = 0;
-  }
   if (msg.action === 'dudo' || msg.action === 'calzo') {
     S.lastActionPlayerId = msg.challenger_id || null;
     S.lastActionType = msg.action;
   } else {
     S.lastActionPlayerId = null;
     S.lastActionType = null;
+  }
+  // Actualizar racha del retador según éxito/fracaso del dudo o calzo
+  if (msg.challenger_id && (msg.action === 'dudo' || msg.action === 'calzo' || msg.action === 'paso')) {
+    const challengerWon = msg.action === 'calzo' ? !!msg.calzo_success
+      : msg.action === 'dudo' ? !msg.bid_holds
+      : !msg.paso_valid; // paso: gavilán exitoso = correcto
+    if (challengerWon) {
+      const cid = msg.challenger_id;
+      S.streaks[cid] = (S.streaks[cid] || 0) + 1;
+      if (S.streaks[cid] > (S.bestStreaks[cid] || 0)) S.bestStreaks[cid] = S.streaks[cid];
+    } else {
+      S.streaks[msg.challenger_id] = 0;
+    }
+    renderStreakBadges();
   }
   // Guardar dados revelados para mostrarlos en la mesa
   S.revealDice    = msg.all_dice || {};
@@ -1883,17 +1893,6 @@ function onNewRound(msg) {
   // Award 1 XP for surviving the previous round (skip on round 1 start)
   if (S.roundNum > 0) {
     awardRoundXp();
-    // Increment streak for all players still alive (dice_count > 0) except the one who just lost a die
-    for (const pid of Object.keys(S.players)) {
-      const p = S.players[pid];
-      if (p && p.dice_count > 0 && pid !== S.lastLossPlayerId) {
-        S.streaks[pid] = (S.streaks[pid] || 0) + 1;
-        if ((S.streaks[pid] || 0) > (S.bestStreaks[pid] || 0)) {
-          S.bestStreaks[pid] = S.streaks[pid];
-        }
-      }
-    }
-    renderStreakBadges();
   }
   S.roundNum      = msg.round_number;
   S.currentBid       = null;
@@ -1927,7 +1926,7 @@ function renderStreakBadges() {
   if (streakBadge) {
     if (myStreak >= 2) {
       streakBadge.textContent = `🔥${myStreak}`;
-      streakBadge.title = `${myStreak} rondas consecutivas sin perder dados`;
+      streakBadge.title = `${myStreak} dudo/calzo correctos consecutivos`;
       streakBadge.style.display = '';
     } else {
       streakBadge.style.display = 'none';
@@ -3046,7 +3045,7 @@ function renderOtherPlayers() {
       const streakBadge = document.createElement('span');
       streakBadge.className = 'streak-badge';
       streakBadge.textContent = `🔥${streak}`;
-      streakBadge.title = `${streak} rondas consecutivas sin perder dados`;
+      streakBadge.title = `${streak} dudo/calzo correctos consecutivos`;
       headerEl.appendChild(streakBadge);
     }
 
@@ -3580,7 +3579,7 @@ function renderLobbySpectatorControls() {
     if (btnReady)     btnReady.style.display     = 'none';
     // El host-espectador conserva btn-start y controles de bots
     if (btnStart)    btnStart.style.display    = S.isHost ? 'inline-flex' : 'none';
-    if (botControls) botControls.style.display = S.isHost ? ''           : 'none';
+    if (botControls) botControls.style.display = S.isHost ? 'flex'       : 'none';
   } else {
     // Soy jugador en el lobby: mostrar "Ser espectador", ocultar "Unirme"
     if (btnSpectator) btnSpectator.style.display = 'inline-flex';
