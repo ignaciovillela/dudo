@@ -1576,6 +1576,7 @@ function onGameStarted(msg) {
   applyEliminatedMode(false);
   S.isSpectator = !msg.player_order.includes(S.playerId);
   S.phase       = 'playing';
+  S.isReady     = false;
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules || S.rules);
   S.currentBid      = null;
@@ -2056,6 +2057,9 @@ function closeGameOver() {
   renderAvatarPicker(); // refresh locked/unlocked state after XP gain
   renderLevelBadge();
   applySpectatorMode();
+  renderLobbySpectatorControls();
+  renderLobbyRules();
+  updateStartButton();
   updateReadyButton(false);
   document.getElementById('btn-ready').classList.remove('btn-start');
 }
