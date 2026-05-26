@@ -1,5 +1,9 @@
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 REVEAL_SECONDS = int(os.getenv("REVEAL_SECONDS", 7))
 MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", 6))

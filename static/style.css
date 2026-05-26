@@ -368,7 +368,6 @@ body {
 .lobby-panel {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   padding: 32px 40px;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -384,6 +383,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  margin: auto 0;
   animation: lb-in 0.5s cubic-bezier(0.22,1,0.36,1) both;
 }
 
