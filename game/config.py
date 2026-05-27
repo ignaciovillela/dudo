@@ -11,7 +11,7 @@ load_dotenv(_ROOT / ".env")
 REVEAL_SECONDS = int(os.getenv("REVEAL_SECONDS", 7))
 MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", 6))
 RATE_LIMIT_MS = int(os.getenv("RATE_LIMIT_MS", 200))
-DISCONNECT_GRACE_SECONDS = int(os.getenv("DISCONNECT_GRACE_SECONDS", 35))
+DISCONNECT_GRACE_SECONDS = int(os.getenv("DISCONNECT_GRACE_SECONDS", 300))
 
 # Fuente de verdad: /static/face_names.json (compartido con el front)
 _face_data = json.loads((_ROOT / "static" / "face_names.json").read_text(encoding="utf-8"))

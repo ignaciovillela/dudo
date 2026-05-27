@@ -103,7 +103,7 @@ class DudoAction:
         if game.last_paso is not None and game.last_paso["player_id"] == pid:
             return "No puedes dudar tu propio paso"
 
-        if game.current_bid is not None and game.current_bid.player_id == pid:
+        if game.last_paso is None and game.current_bid is not None and game.current_bid.player_id == pid:
             return "No puedes dudar tu propia apuesta"
 
         # Gavilán: verificar permiso solo si es fuera de turno

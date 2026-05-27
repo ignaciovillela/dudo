@@ -105,10 +105,12 @@ function animateDieCup(pid, type) {
     // Para mí: usar my-dice-row como referencia
     refEl = document.querySelector('#my-dice-row');
   } else {
-    // Para otros: usar la zona de dados perdidos (entre jugador y centro)
+    // Para otros: usar la zona de dados perdidos si está visible, si no la carta
     const card = document.querySelector(`.player-card[data-pid="${pid}"]`);
-    refEl = document.querySelector(`.player-lost-dice[data-for="${pid}"]`) ||
-      card?.querySelector('.player-card-dice') || card;
+    const lostEl = document.querySelector(`.player-lost-dice[data-for="${pid}"]`);
+    refEl = (lostEl && lostEl.offsetParent)
+      ? lostEl
+      : card?.querySelector('.player-card-dice') || card;
   }
   if (!refEl) return;
 
@@ -743,9 +745,10 @@ function closeAchievementsModal() {
   const modal = document.getElementById('achievements-modal');
   if (modal) modal.style.display = 'none';
 }
-const AUDIO_STORAGE_KEY = 'dudoMuted';
-const RULES_STORAGE_KEY = 'dudoRules';
-const STATS_STORAGE_KEY = 'dudoStats';
+const AUDIO_STORAGE_KEY    = 'dudoMuted';
+const RULES_STORAGE_KEY    = 'dudoRules';
+const STATS_STORAGE_KEY    = 'dudoStats';
+const GAME_LOG_STORAGE_KEY = 'dudoGameLog_v1';
 const ANON_ID_KEY       = 'dudoAnonId';
 // LEVEL_STORAGE_KEY is defined above in the LEVELS section
 
@@ -1451,6 +1454,8 @@ function onReconnected(msg) {
   S.spectatorCount = msg.spectator_count ?? S.spectatorCount;
   updateSpectatorCount();
   S.playerAvatar = S.players[S.playerId]?.avatar || S.playerAvatar;
+  if (msg.streaks)      S.streaks      = msg.streaks;
+  if (msg.best_streaks) S.bestStreaks   = msg.best_streaks;
   saveSession();
 
   if (S.phase === 'lobby') {
@@ -1476,10 +1481,26 @@ function onReconnected(msg) {
   showScreen('game');
   applySpectatorMode();
   renderOtherPlayers();
+  renderStreakBadges();
   maybeInitEmojiHover();
   updateBidDisplay();
   playSfx('reconnect');
-  log('Reconectado a la partida en curso', 'system');
+  // Restaurar historial del log
+  const savedLog = _loadLogEntries();
+  if (savedLog.length > 0) {
+    const logEl = document.getElementById('game-log');
+    if (logEl) {
+      logEl.innerHTML = '';
+      savedLog.forEach(({ text, type }) => {
+        const entry = document.createElement('div');
+        entry.className = `log-entry log-${type}`;
+        entry.textContent = text;
+        logEl.appendChild(entry);
+      });
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+  }
+  log('— Reconectado —', 'system');
 }
 
 function onPlayerReconnected(msg) {
@@ -1607,6 +1628,7 @@ function onGameStarted(msg) {
   maybeInitEmojiHover();
   updateBidDisplay();
   // Limpiar log de partidas anteriores
+  _clearLogEntries();
   const logEl = document.getElementById('game-log');
   if (logEl) logEl.innerHTML = '';
   // Mostrar reglas activas al inicio del registro
@@ -1691,6 +1713,7 @@ function onTurn(msg) {
 
   if (isMe && !S.isSpectator) {
     playSfx('yourTurn');
+    if ('vibrate' in navigator) navigator.vibrate([150, 80, 150]);
     resetBidInputs();
     notifyTurnIfHidden();
   } else {
@@ -1747,16 +1770,31 @@ function onReveal(msg) {
     S.lastActionType = null;
   }
   // Actualizar racha del retador según éxito/fracaso del dudo o calzo
+  // Las animaciones se difieren hasta después de todos los renderOtherPlayers()
+  let _streakGainCid = null, _streakLoseRect = null, _streakLoseLoserRect = null;
   if (msg.challenger_id && (msg.action === 'dudo' || msg.action === 'calzo' || msg.action === 'paso')) {
     const challengerWon = msg.action === 'calzo' ? !!msg.calzo_success
       : msg.action === 'dudo' ? !msg.bid_holds
       : !msg.paso_valid; // paso: gavilán exitoso = correcto
+    const cid = msg.challenger_id;
+    const prevStreak = S.streaks[cid] || 0;
+    // Capturar rect del badge ANTES de re-renderizar (para animación de pérdida)
+    if (!challengerWon && prevStreak >= 2)
+      _streakLoseRect = _getStreakBadgeEl(cid)?.getBoundingClientRect() ?? null;
     if (challengerWon) {
-      const cid = msg.challenger_id;
-      S.streaks[cid] = (S.streaks[cid] || 0) + 1;
+      S.streaks[cid] = prevStreak + 1;
       if (S.streaks[cid] > (S.bestStreaks[cid] || 0)) S.bestStreaks[cid] = S.streaks[cid];
+      if (S.streaks[cid] >= 2) _streakGainCid = cid;
+      // Also reset the loser's streak (bidder/passer correctly duded)
+      const lid = msg.loser_id;
+      if (lid && lid !== cid) {
+        const loserPrev = S.streaks[lid] || 0;
+        if (loserPrev >= 2)
+          _streakLoseLoserRect = _getStreakBadgeEl(lid)?.getBoundingClientRect() ?? null;
+        S.streaks[lid] = 0;
+      }
     } else {
-      S.streaks[msg.challenger_id] = 0;
+      S.streaks[cid] = 0;
     }
     renderStreakBadges();
   }
@@ -1790,6 +1828,11 @@ function onReveal(msg) {
     }
     setTimeout(() => animateDieCup(msg.challenger_id, 'enter'), 750);
   }
+
+  // Animaciones de racha: ahora que todos los renders terminaron, el badge está en su estado final
+  if (_streakGainCid) animateStreakGain(_streakGainCid);
+  if (_streakLoseRect) animateStreakLose(_streakLoseRect);
+  if (_streakLoseLoserRect) animateStreakLose(_streakLoseLoserRect);
 
   const bid = msg.bid || null;
 
@@ -1898,6 +1941,82 @@ function renderStreakBadges() {
       streakBadge.style.display = 'none';
     }
   }
+}
+
+function _getStreakBadgeEl(pid) {
+  if (pid === S.playerId) return document.getElementById('my-streak-badge');
+  const card = document.querySelector(`[data-pid="${pid}"]`);
+  return card ? card.querySelector('.streak-badge') : null;
+}
+
+function animateStreakGain(pid) {
+  // Preferir el badge; si no está disponible (rival = elemento dinámico), usar la carta como destino
+  const badgeEl = _getStreakBadgeEl(pid);
+  const isBadgeVisible = badgeEl && badgeEl.isConnected && badgeEl.style.display !== 'none';
+  let targetEl;
+  if (isBadgeVisible) {
+    targetEl = badgeEl;
+  } else if (pid !== S.playerId) {
+    targetEl = document.querySelector(`[data-pid="${pid}"]`);
+  } else {
+    return; // propio badge ocultado explícitamente (racha < 2)
+  }
+  if (!targetEl) return;
+
+  const rect = targetEl.getBoundingClientRect();
+  if (!rect.width && !rect.height) return;
+
+  const targetX = rect.left + rect.width / 2;
+  const targetY = rect.top + rect.height / 2;
+  const startX  = window.innerWidth * 0.5;
+  const startY  = window.innerHeight * 0.45;
+
+  const flame = document.createElement('span');
+  flame.textContent = '🔥';
+  flame.className = 'streak-gain-flame';
+  flame.style.left = '50vw';
+  flame.style.top  = '45vh';
+  flame.style.transform = 'translate(-50%, -50%) scale(0.4)';
+  flame.style.opacity   = '0';
+  document.body.appendChild(flame);
+
+  const dx = targetX - startX;
+  const dy = targetY - startY;
+
+  // Double-rAF: el primero confirma estado inicial al compositor, el segundo dispara la transición
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    flame.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease-out';
+    flame.style.transform  = 'translate(-50%, -50%) scale(1.15)';
+    flame.style.opacity    = '0.92';
+  }));
+
+  setTimeout(() => {
+    flame.style.transition = 'transform 0.65s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease-in 0.25s';
+    flame.style.transform  = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.22)`;
+    flame.style.opacity    = '0';
+  }, 450);
+
+  // Re-consultar el badge al momento del pulse (el DOM puede haber sido reconstruido)
+  setTimeout(() => {
+    const badge = _getStreakBadgeEl(pid);
+    if (badge && badge.isConnected) {
+      badge.classList.add('streak-badge--pulse');
+      setTimeout(() => badge.classList.remove('streak-badge--pulse'), 550);
+    }
+  }, 980);
+
+  setTimeout(() => flame.remove(), 1250);
+}
+
+function animateStreakLose(rect) {
+  if (!rect) return;
+  const ghost = document.createElement('span');
+  ghost.className = 'streak-badge streak-lose-anim';
+  ghost.textContent = '🔥';
+  ghost.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;` +
+    `width:${rect.width}px;height:${rect.height}px;pointer-events:none;z-index:9999;box-sizing:border-box;`;
+  document.body.appendChild(ghost);
+  setTimeout(() => ghost.remove(), 600);
 }
 
 function renderMyActionBadge() {
@@ -2933,10 +3052,9 @@ function renderOtherPlayers() {
   // Orden visual fijo (horario): siempre desde el siguiente en S.playerOrder, sin aplicar direction
   const myIdx = S.playerOrder.indexOf(S.playerId);
   const n = S.playerOrder.length;
-  const visualOrder = [];
-  for (let i = 1; i < n; i++) {
-    visualOrder.push(S.playerOrder[(myIdx + i) % n]);
-  }
+  const visualOrder = myIdx === -1
+    ? [...S.playerOrder]  // espectador: mostrar todos
+    : Array.from({ length: n - 1 }, (_, i) => S.playerOrder[(myIdx + 1 + i) % n]);
   for (const pid of visualOrder) {
     const p = S.players[pid];
     if (!p) continue;
@@ -3101,7 +3219,6 @@ function updateBidDisplay() {
 
 // ══════════════════════════════════  CONTROLS  ════════════════════════════════
 function updateDirectionIndicator() {
-  // Botones del toggle en el panel de apuesta
   const btnCW  = document.getElementById('btn-dir-cw');
   const btnCCW = document.getElementById('btn-dir-ccw');
   if (!btnCW || !btnCCW) return;
@@ -3109,10 +3226,18 @@ function updateDirectionIndicator() {
   btnCW.classList.toggle('dir-active',  S.direction === 1);
   btnCCW.classList.toggle('dir-active', S.direction === -1);
 
-  // Solo el primer jugador puede cambiar sentido antes de su primera acción
   const canChange = S.playerId === S.roundFirstPlayer && !S.hasFirstAction && S.phase === 'playing';
   btnCW.disabled  = !canChange;
   btnCCW.disabled = !canChange;
+
+  // Botón único de móvil: icono refleja la dirección actual, click la alterna
+  const btnMob = document.getElementById('btn-dir-mobile');
+  if (btnMob) {
+    const icon = btnMob.querySelector('i');
+    if (icon) icon.className = S.direction === 1 ? 'fa-solid fa-rotate-right' : 'fa-solid fa-rotate-left';
+    btnMob.disabled = !canChange;
+    btnMob.classList.toggle('dir-active', canChange);
+  }
 
   // Indicador en la mesa (junto al banner)
   const ind = document.getElementById('direction-indicator');
@@ -3373,13 +3498,17 @@ function refreshBidInputUI() {
       cell.onclick = () => selectQty(n);
       grid.appendChild(cell);
     }
-    // Scroll grid to show selected row (direct scrollTop, no sidebar interference)
-    const row = S.bidQty !== null ? Math.floor((S.bidQty - 1) / 6) : 0;
-    const firstCell = grid.querySelector('.qty-cell');
-    if (firstCell) {
-      const cellH = firstCell.getBoundingClientRect().height || 38;
-      grid.scrollTop = row * (cellH + 4);
-    }
+    // Scroll para mostrar la celda seleccionada (diferido para que el layout esté listo)
+    requestAnimationFrame(() => {
+      const sel = grid.querySelector('.qty-cell.selected');
+      if (!sel) return;
+      // Horizontal (móvil): centrar la celda seleccionada en el contenedor
+      const left = sel.offsetLeft - (grid.offsetWidth / 2) + (sel.offsetWidth / 2);
+      grid.scrollLeft = Math.max(0, left);
+      // Vertical (escritorio): mostrar la fila seleccionada
+      const top = sel.offsetTop - (grid.offsetHeight / 2) + (sel.offsetHeight / 2);
+      grid.scrollTop = Math.max(0, top);
+    });
   }
 
   // Face picker: render si no está inicializado aún
@@ -3441,6 +3570,10 @@ function sendBid() {
   }
   playSfx('click');
   send({ type: 'bid', quantity: S.bidQty, face: S.bidFace });
+}
+
+function toggleDirection() {
+  sendDirection(S.direction === 1 ? 'ccw' : 'cw');
 }
 
 function sendDirection(value) {
@@ -3746,6 +3879,29 @@ function showToast(msg, isError = false) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+function _logStorageKey() {
+  return S.roomId ? `${GAME_LOG_STORAGE_KEY}_${S.roomId}` : null;
+}
+function _saveLogEntry(text, type) {
+  const key = _logStorageKey();
+  if (!key) return;
+  try {
+    const entries = JSON.parse(localStorage.getItem(key) || '[]');
+    entries.push({ text, type });
+    while (entries.length > 60) entries.shift();
+    localStorage.setItem(key, JSON.stringify(entries));
+  } catch (_) {}
+}
+function _loadLogEntries() {
+  const key = _logStorageKey();
+  if (!key) return [];
+  try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) { return []; }
+}
+function _clearLogEntries() {
+  const key = _logStorageKey();
+  if (key) try { localStorage.removeItem(key); } catch (_) {}
+}
+
 function log(text, type = 'bid') {
   const logEl = document.getElementById('game-log');
   if (!logEl) return;
@@ -3756,6 +3912,7 @@ function log(text, type = 'bid') {
   // Keep last 60 entries
   while (logEl.children.length > 60) logEl.removeChild(logEl.firstChild);
   logEl.scrollTop = logEl.scrollHeight;
+  _saveLogEntry(text, type);
 }
 
 function faceName(face, plural = false) {
@@ -3794,7 +3951,7 @@ function resolveGameEvent(event) {
         ? `${bidder_name} -1 dado, ${challenger_name} +1 dado`
         : `${bidder_name} -1 dado`;
       lines = [
-        is_gavilan ? `¡Gavilán! ${challenger_name} dudó — correcto` : `${challenger_name} dudó — correcto`,
+        is_gavilan ? `¡Gavilán! ${challenger_name} dudó a ${bidder_name} — correcto` : `${challenger_name} dudó a ${bidder_name} — correcto`,
         `Solo ${actual_count}/${bid.quantity} ${fl}`,
         efectoLine,
       ];
@@ -3802,7 +3959,7 @@ function resolveGameEvent(event) {
       result = 'DUDO_INCORRECTO';
       effects = { [challenger_name]: -1 };
       lines = [
-        is_gavilan ? `Gavilán fallido — ${challenger_name} dudó — incorrecto` : `${challenger_name} dudó — incorrecto`,
+        is_gavilan ? `Gavilán fallido — ${challenger_name} dudó a ${bidder_name} — incorrecto` : `${challenger_name} dudó a ${bidder_name} — incorrecto`,
         `Había ${actual_count}/${bid.quantity} ${fl}`,
         `${challenger_name} -1 dado`,
       ];
@@ -3812,7 +3969,7 @@ function resolveGameEvent(event) {
       result = 'CALZO_CORRECTO';
       effects = challenger_gained ? { [challenger_name]: +1 } : {};
       lines = [
-        is_gavilan ? `¡Gavilán! ${challenger_name} calzó — exacto` : `${challenger_name} calzó — exacto`,
+        is_gavilan ? `¡Gavilán! ${challenger_name} calzó a ${bidder_name} — exacto` : `${challenger_name} calzó a ${bidder_name} — exacto`,
         `${actual_count}/${bid.quantity} ${fl}`,
         challenger_gained ? `${challenger_name} +1 dado` : 'Ronda reiniciada',
       ];
@@ -3820,7 +3977,7 @@ function resolveGameEvent(event) {
       result = 'CALZO_INCORRECTO';
       effects = { [challenger_name]: -1 };
       lines = [
-        is_gavilan ? `Gavilán fallido — ${challenger_name} calzó — fallido` : `${challenger_name} calzó — fallido`,
+        is_gavilan ? `Gavilán fallido — ${challenger_name} calzó a ${bidder_name} — fallido` : `${challenger_name} calzó a ${bidder_name} — fallido`,
         `${actual_count}/${bid.quantity} ${fl}`,
         `${challenger_name} -1 dado`,
       ];
@@ -3864,11 +4021,14 @@ function positionPlayers() {
   const H = table.clientHeight;
   if (!W || !H) return;
 
+  // On narrow portrait screens the full rx would push cards off the edge
+  const isPortraitMobile = W < 769 && W < H;
+
   // Centro y radios de la elipse (coincide con el ::after del CSS)
   const cx = W * 0.50;
   const cy = H * 0.47;
-  const rx = W * 0.42;
-  const ry = H * 0.32;
+  const rx = W * (isPortraitMobile ? 0.38 : 0.42);
+  const ry = H * (isPortraitMobile ? 0.30 : 0.32);
 
   const cards = Array.from(table.querySelectorAll('.player-card[data-pid]'));
   const N = cards.length;
@@ -3879,12 +4039,17 @@ function positionPlayers() {
   const arcDeg = N === 1 ? 0 : Math.min(280, 100 + (N - 1) * 40);
   const startDeg = 270 - arcDeg / 2;
 
+  // Margin keeps cards from being clipped by overflow:hidden on the table
+  const margin = isPortraitMobile ? 30 : 56;
+
   cards.forEach((card, i) => {
     const deg = N === 1 ? 270 : startDeg + i * (arcDeg / (N - 1));
     const rad = deg * Math.PI / 180;
     // En coords de pantalla (y hacia abajo): sin(270°)=-1 → arriba ✓
-    const x = cx + rx * Math.cos(rad);
-    const y = cy + ry * Math.sin(rad);
+    const rawX = cx + rx * Math.cos(rad);
+    const rawY = cy + ry * Math.sin(rad);
+    const x = Math.max(margin, Math.min(W - margin, rawX));
+    const y = Math.max(margin, Math.min(H - margin, rawY));
     card.style.left = `${x}px`;
     card.style.top  = `${y}px`;
 
@@ -3893,8 +4058,8 @@ function positionPlayers() {
     if (!lost) return;
     // Interpolar hacia el centro para que quede entre la carta y la mesa
     const t = 0.34;
-    const lx = x + (cx - x) * t;
-    const ly = y + (cy - y) * t;
+    const lx = rawX + (cx - rawX) * t;
+    const ly = rawY + (cy - rawY) * t;
     lost.style.left = `${lx}px`;
     lost.style.top = `${ly}px`;
   });

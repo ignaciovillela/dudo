@@ -56,12 +56,14 @@ class GameManager:
         self.last_message_at: dict[str, float] = {}
         self.turn_timeout_tasks: dict[str, asyncio.Task] = {}
         self.disconnect_resolution_tasks: dict[tuple[str, str], asyncio.Task] = {}
+        self.room_cleanup_tasks: dict[str, asyncio.Task] = {}
         self.turn_started_at: dict[str, float] = {}   # room_id → monotonic timestamp
 
     # ------------------------------------------------------------------ connect
 
     async def connect(self, websocket: WebSocket, room_id: str, player_id: str):
         await websocket.accept()
+        self._cancel_room_cleanup(room_id)
         self.games.setdefault(room_id, Game(room_id=room_id))
         self.connections.setdefault(room_id, {})[player_id] = websocket
         await self._send(room_id, player_id, {
@@ -81,13 +83,9 @@ class GameManager:
         self.last_message_at.pop(player_id, None)
         game = self.games.get(room_id)
 
-        # Liberar sala si no quedan conexiones activas
+        # Si no quedan conexiones, programar limpieza diferida para permitir reconexión
         if not self.connections.get(room_id):
-            self._cancel_turn_timeout(room_id)
-            self._cancel_disconnect_resolution_for_room(room_id)
-            self.games.pop(room_id, None)
-            self.connections.pop(room_id, None)
-            self.hosts.pop(room_id, None)
+            self._schedule_room_cleanup(room_id)
             return
 
         if not game:
@@ -241,6 +239,8 @@ class GameManager:
                 "phase": game.phase,
                 "rules": game.rules.to_dict(),
                 "spectator_count": len(game.spectators),
+                "streaks": game.streaks,
+                "best_streaks": game.best_streaks,
             })
             await self._broadcast_except(room_id, reconnect_id, {
                 "type": "player_reconnected",
@@ -792,6 +792,15 @@ class GameManager:
         result = action.resolve()
         action.apply(result)
 
+        # Actualizar racha del retador
+        if isinstance(result, DudoPasoResult):
+            challenger_won = not result.paso_valid
+        else:
+            challenger_won = not result.bid_holds
+        self._update_streak(game, result.challenger_id, challenger_won)
+        if challenger_won and result.loser_id != result.challenger_id:
+            game.streaks[result.loser_id] = 0
+
         if isinstance(result, DudoPasoResult):
             reveal_payload = {
                 "type": "reveal",
@@ -840,6 +849,9 @@ class GameManager:
 
         result = action.resolve()
         action.apply(result)
+
+        # Actualizar racha del retador
+        self._update_streak(game, result.challenger_id, result.exact)
 
         calzo_payload = {
             "type": "reveal",
@@ -921,6 +933,8 @@ class GameManager:
         game.bid_history = []
         game.direction = 1
         game.elimination_order = []
+        game.streaks = {}
+        game.best_streaks = {}
         active = game.active_players()
         game.current_player_idx = random.randint(0, len(active) - 1) if active else 0
         game.round_first_player = game.current_player_id()
@@ -1296,6 +1310,17 @@ class GameManager:
         except Exception as exc:
             log.warning("[db] failed to persist bid_stats: %s", exc)
 
+    @staticmethod
+    def _update_streak(game: Game, player_id: str, won: bool) -> None:
+        if won:
+            game.streaks[player_id] = game.streaks.get(player_id, 0) + 1
+            game.best_streaks[player_id] = max(
+                game.streaks[player_id],
+                game.best_streaks.get(player_id, 0),
+            )
+        else:
+            game.streaks[player_id] = 0
+
     def _rules_engine(self, game: Game) -> RuleEngine:
         return RuleEngine.from_config(game.rules)
 
@@ -1389,6 +1414,30 @@ class GameManager:
     def _cancel_disconnect_resolution(self, room_id: str, player_id: str):
         key = (room_id, player_id)
         task = self.disconnect_resolution_tasks.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+
+    def _schedule_room_cleanup(self, room_id: str):
+        self._cancel_room_cleanup(room_id)
+
+        async def _runner():
+            try:
+                await asyncio.sleep(DISCONNECT_GRACE_SECONDS)
+                self._cancel_turn_timeout(room_id)
+                self._cancel_disconnect_resolution_for_room(room_id)
+                self.games.pop(room_id, None)
+                self.connections.pop(room_id, None)
+                self.hosts.pop(room_id, None)
+                log.info("[room] %s limpiada tras gracia de desconexión", room_id)
+            except asyncio.CancelledError:
+                return
+            finally:
+                self.room_cleanup_tasks.pop(room_id, None)
+
+        self.room_cleanup_tasks[room_id] = asyncio.create_task(_runner())
+
+    def _cancel_room_cleanup(self, room_id: str):
+        task = self.room_cleanup_tasks.pop(room_id, None)
         if task and not task.done():
             task.cancel()
 

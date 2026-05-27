@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=1280" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dudo — El Juego de los Cachos</title>
   <meta name="description" content="Juega Dudo online con amigos: apuesta, duda, calza y sobrevive hasta el final." />
   <meta name="theme-color" content="#0d2b18" />
@@ -268,14 +268,6 @@
           <div id="current-bid-prob" class="current-bid-prob"></div>
         </div>
 
-        <!-- Reveal overlay (solo info complementaria; dados en la mesa) -->
-        <div id="reveal-overlay" class="reveal-overlay" style="display:none">
-          <div class="reveal-box">
-            <div id="reveal-result" class="reveal-result"></div>
-            <div id="reveal-countdown" class="reveal-countdown"></div>
-          </div>
-        </div>
-
         <!-- Spectator quick-chat display (below bid-area, centered) -->
         <div id="spectator-qc-display" class="spectator-qc-display" style="display:none"></div>
       </div>
@@ -301,25 +293,29 @@
 
       <!-- Bid panel -->
       <div class="panel" id="bid-panel">
-        <div class="panel-title-row">
-          <h3 class="panel-title"><i class="fa-solid fa-hand-fist" aria-hidden="true"></i> Tu apuesta</h3>
-          <div class="dir-toggle">
-            <button id="btn-dir-ccw" class="dir-tog" onclick="sendDirection('ccw')" title="Anti-horario"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>
-            <button id="btn-dir-cw"  class="dir-tog" onclick="sendDirection('cw')"  title="Horario"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
-          </div>
-        </div>
         <div class="bid-builder">
           <label class="bb-label">Pinta</label>
-          <div id="face-picker" class="face-picker"></div>
+          <div class="face-row">
+            <div id="face-picker" class="face-picker"></div>
+            <div class="dir-toggle">
+              <button id="btn-dir-ccw" class="dir-tog" onclick="sendDirection('ccw')" title="Anti-horario"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>
+              <button id="btn-dir-cw"  class="dir-tog" onclick="sendDirection('cw')"  title="Horario"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
+              <button id="btn-dir-mobile" class="dir-tog" onclick="toggleDirection()" title="Cambiar sentido"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
+            </div>
+          </div>
           <label class="bb-label">Cantidad</label>
           <div id="qty-grid" class="qty-grid"></div>
-          <span id="bid-prob" class="bid-prob" style="display:none"></span>
         </div>
         <div class="action-btns">
-          <button id="btn-bid"   class="btn btn-primary"  onclick="sendBid()"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i>Apostar</button>
-          <button id="btn-paso"  class="btn btn-secondary" onclick="sendPaso()"><i class="fa-solid fa-forward" aria-hidden="true"></i>Pasar</button>
-          <button id="btn-dudo"  class="btn btn-danger"   onclick="sendDudo()"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>¡Dudo!</button>
-          <button id="btn-calzo" class="btn btn-warning"  onclick="sendCalzo()"><i class="fa-solid fa-bullseye" aria-hidden="true"></i>¡Calzo!</button>
+          <div class="action-row1">
+            <button id="btn-bid"   class="btn btn-primary"  onclick="sendBid()"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i>Apostar</button>
+            <button id="btn-paso"  class="btn btn-secondary" onclick="sendPaso()"><i class="fa-solid fa-forward" aria-hidden="true"></i>Pasar</button>
+            <span id="bid-prob" class="bid-prob" style="display:none"></span>
+          </div>
+          <div class="action-row2">
+            <button id="btn-dudo"  class="btn btn-danger"   onclick="sendDudo()"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>¡Dudo!</button>
+            <button id="btn-calzo" class="btn btn-warning"  onclick="sendCalzo()"><i class="fa-solid fa-bullseye" aria-hidden="true"></i>¡Calzo!</button>
+          </div>
         </div>
         <div class="bid-shortcuts">
           <span class="bid-shortcut-item"><kbd>←</kbd><kbd>→</kbd> pinta</span>
@@ -452,6 +448,14 @@
 <!-- Toast -->
 <div id="toast" class="toast"></div>
 <div id="reconnect-banner" class="reconnect-banner" style="display:none"></div>
+
+<!-- Reveal overlay: fuera del game-table para evitar problemas de stacking -->
+<div id="reveal-overlay" class="reveal-overlay" style="display:none">
+  <div class="reveal-box">
+    <div id="reveal-result" class="reveal-result"></div>
+    <div id="reveal-countdown" class="reveal-countdown"></div>
+  </div>
+</div>
 
 <script src="/static/app.js"></script>
 </body>

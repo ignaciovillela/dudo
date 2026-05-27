@@ -126,6 +126,8 @@ class Game:
     round_first_player: str = ""    # jugador que inicia la ronda (puede cambiar sentido)
     rules: RuleConfig = field(default_factory=RuleConfig)
     elimination_order: list = field(default_factory=list)  # [{"id", "name", "avatar", "round"}] orden de eliminación
+    streaks: dict = field(default_factory=dict)       # pid → racha actual (dudo/calzo correctos consecutivos)
+    best_streaks: dict = field(default_factory=dict)  # pid → mejor racha de esta partida
 
     def active_players(self) -> list[str]:
         return [

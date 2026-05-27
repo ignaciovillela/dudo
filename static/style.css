@@ -1798,13 +1798,16 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 
 /* ── Reveal overlay ── */
 .reveal-overlay {
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 300px; /* excluye el sidebar de escritorio */
+  bottom: 0;
   background: rgba(0,0,0,0.9);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
+  z-index: 500;
   backdrop-filter: blur(10px);
 }
 
@@ -2042,6 +2045,7 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 
 /* face-down die — dado oculto refinado */
 .die-down {
+  position: relative;
   background: linear-gradient(145deg, #1a2636 0%, #0d1520 55%, #162030 100%);
   border: 1px solid rgba(232,184,109,0.22);
   box-shadow:
@@ -2055,12 +2059,14 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .die-down .pip { display: none; }
 .die-down::after {
   content: '◆';
-  grid-area: 2 / 2 / 3 / 3;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   color: rgba(232,184,109,0.28);
-  font-size: 0.75em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 0.55em;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* Dado perdido (rival o propio) — mismo base pero más apagado */
@@ -2379,15 +2385,26 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   cursor: default;
 }
 
-.action-btns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+/* Face-picker row: dado de pinta + botón de dirección en la misma línea */
+.face-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
+.face-row .face-picker { width: 100%; }
+.face-row .dir-toggle  { display: flex; justify-content: flex-end; gap: 4px; }
+
+/* Botón de dirección único para móvil — oculto en desktop */
+#btn-dir-mobile { display: none; }
+
+/* Contenedor de botones de acción */
+.action-btns  { display: flex; flex-direction: column; gap: 8px; }
+.action-row1  { display: flex; flex-direction: column; gap: 8px; }
+.action-row2  { display: flex; gap: 8px; }
+.action-row2 .btn { flex: 1; }
 
 /* Apostar — full width, blue/primary, prominent */
 .action-btns .btn-primary {
-  grid-column: 1 / -1;
   padding: 12px;
   font-size: 0.95rem;
   font-weight: 700;
@@ -2405,7 +2422,6 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 
 /* Pasar — full width, neutral */
 .action-btns .btn-secondary {
-  grid-column: 1 / -1;
   padding: 9px;
   background: rgba(255,255,255,0.08);
   color: var(--text-dim);
@@ -2707,6 +2723,37 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   white-space: nowrap;
 }
 
+/* Streak gain: floating flame that flies to badge */
+.streak-gain-flame {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  font-size: 3.5rem;
+  will-change: transform, opacity;
+}
+
+/* Streak badge bouncy pulse when gained */
+@keyframes streak-badge-pulse {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.7); }
+  60%  { transform: scale(0.88); }
+  80%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.streak-badge--pulse {
+  animation: streak-badge-pulse 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Streak lose: ghost badge falls down */
+@keyframes streak-lose-fall {
+  0%   { transform: translateY(0) rotate(0deg);    opacity: 1;   }
+  20%  { transform: translateY(-6px) rotate(-6deg); opacity: 0.9; }
+  100% { transform: translateY(38px) rotate(18deg); opacity: 0;   }
+}
+.streak-lose-anim {
+  animation: streak-lose-fall 0.5s ease-in forwards;
+}
+
 /* Level badge in lobby */
 .level-badge {
   display: flex;
@@ -2888,4 +2935,321 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+/* ═══════════════════════════  RESPONSIVE — MOBILE  ═══════════════════════════ */
+
+/* ─── Portrait phones (≤768 px de ancho, orientación vertical) ──────────────── */
+@media screen and (max-width: 768px) and (orientation: portrait) {
+
+  /* Usar dvh para manejar la barra del navegador en móvil */
+  body    { height: 100dvh; }
+  .screen { height: 100dvh; }
+
+  /* ── Game: mesa arriba ~62%, sidebar (apuesta + log) abajo ~38% ── */
+  .game-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 62dvh 1fr;
+    height: 100dvh;
+  }
+
+  .game-table {
+    height: 62dvh;
+    border-right: none;
+    border-bottom: 2px solid rgba(0, 0, 0, 0.6);
+  }
+
+  /* Sidebar: tira deslizable en la mitad inferior */
+  .sidebar {
+    height: 38dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-left: none;
+    border-top: 1px solid rgba(232, 184, 109, 0.14);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Log: tamaño fijo para no empujar los botones */
+  .panel-log { flex: none; min-height: 80px; }
+  .game-log  { max-height: 120px; overflow-y: auto; }
+
+  /* ── Apuesta actual en la mesa: compacta ── */
+  .bid-area   { padding: 6px 16px; min-width: 120px; min-height: 50px; border-radius: 14px; gap: 4px; }
+  .bv-qty     { font-size: 1.5rem; }
+  .bv-x       { font-size: 0.85rem; }
+  .die.die-lg { width: 38px; height: 38px; padding: 5px; border-radius: 8px; }
+
+  /* ── Mi área (dados propios, abajo de la mesa) ── */
+  .my-area {
+    bottom: 4px;
+    padding: 3px 10px 5px;
+    gap: 3px;
+    border-radius: 12px;
+  }
+  .my-lost-dice       { display: none; }
+  .player-lost-dice   { display: none; }
+
+  /* ── Cartas de jugadores: compactas ── */
+  .player-card {
+    min-width: 52px;
+    padding: 3px 5px 4px;
+    gap: 2px;
+    border-radius: 8px;
+  }
+  .player-card-name   { font-size: 0.6rem; }
+  .player-card-avatar { font-size: 0.9rem; }
+
+  /* ── Dados de jugadores: más pequeños ── */
+  .die        { width: 32px; height: 32px; }
+  .die.die-sm { width: 20px; height: 20px; border-radius: 4px; }
+
+  /* ── Turn banner y sentido: ocultos en móvil ── */
+  .turn-banner-row    { display: none; }
+
+  /* ── Turno activo en móvil: bid-panel toma el rol del turn-banner ── */
+  #bid-panel.my-turn {
+    border-top: 2px solid rgba(232,184,109,0.85);
+    box-shadow: 0 -6px 32px rgba(232,184,109,0.55);
+    animation: mobilePanelPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes mobilePanelPulse {
+    0%, 100% { box-shadow: 0 -6px 18px rgba(232,184,109,0.35); }
+    50%       { box-shadow: 0 -6px 52px rgba(232,184,109,0.85); }
+  }
+  #bid-panel.my-turn::before {
+    content: '¡TU TURNO!';
+    display: block;
+    text-align: center;
+    font-family: 'Cinzel', serif;
+    font-size: 0.82rem;
+    color: #fff;
+    letter-spacing: 0.14em;
+    padding: 4px 0 7px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid rgba(232,184,109,0.28);
+    text-shadow: 0 0 14px rgba(255,220,140,0.9);
+    animation: turnBannerPulse 1.4s ease-in-out infinite;
+  }
+
+  /* my-area: flash de entrada más dramático en móvil */
+  .my-area.my-turn {
+    border-color: rgba(232,184,109,0.9);
+    animation: myAreaFlashEntry 0.55s ease-out, myAreaPulse 1.6s ease-in-out 0.55s infinite;
+  }
+  @keyframes myAreaFlashEntry {
+    0%   { box-shadow: 0 0 0 0 rgba(232,184,109,1); }
+    45%  { box-shadow: 0 0 0 14px rgba(232,184,109,0.5), 0 0 60px rgba(232,184,109,0.7); }
+    100% { box-shadow: 0 0 24px rgba(232,184,109,0.25); }
+  }
+
+  /* ── Ocultar atajos de teclado (inútiles en táctil) ── */
+  .bid-shortcuts { display: none; }
+
+  /* ── Botones de sonido/notif: arriba para no tapar sidebar ── */
+  .sound-toggle { bottom: auto; top: 8px; left: 8px; width: 34px; height: 34px; font-size: 0.9rem; }
+  .notif-toggle { bottom: auto; top: 12px; left: 48px; }
+
+  /* ── Elementos no esenciales: ocultar para ganar espacio ── */
+  #bv-wild          { display: none !important; }  /* JS puede sobreescribir, de ahí !important */
+  #current-bid-prob { display: block; font-size: 0.65rem; }
+  #spectator-count  { display: none; }
+  .player-bot-tag   { display: none; }
+
+  /* ── Reveal de fin de ronda: cubre el área de apuesta (sidebar inferior) ── */
+  .reveal-overlay {
+    top: 62dvh;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  .reveal-box {
+    max-width: 92%;
+    padding: 14px 18px;
+  }
+
+  /* ══ BID PANEL: compactación agresiva ══ */
+
+  #bid-panel { padding: 8px 10px; }
+
+  /* Ocultar etiquetas "Pinta" / "Cantidad" */
+  #bid-panel .bb-label { display: none; }
+
+  /* Bid-builder: menos espacio */
+  .bid-builder { gap: 5px; margin-bottom: 8px; }
+
+  /* Face-row en móvil: pintas a la izquierda, botón de dirección a la derecha */
+  .face-row { flex-direction: row; align-items: center; gap: 6px; }
+  .face-row .face-picker { flex: 1; min-width: 0; }
+  .face-row .dir-toggle  { flex-shrink: 0; justify-content: flex-end; }
+
+  /* Ocultar botones CW/CCW de escritorio, mostrar toggle único */
+  #btn-dir-cw, #btn-dir-ccw { display: none; }
+  #btn-dir-mobile            { display: flex; }
+
+  /* Face-picker: limitar tamaño de dado a ~40 px */
+  .face-picker { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .face-btn { padding: 3px 1px; border-radius: 7px; border-width: 1.5px; }
+  .face-btn-name { font-size: 0.4rem; }
+
+  /* Qty-grid: fila única con scroll horizontal */
+  .qty-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: 36px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .qty-grid::-webkit-scrollbar { display: none; }
+  .qty-cell {
+    flex: 0 0 34px;
+    height: 34px;
+    width: 34px;
+    aspect-ratio: unset;
+    font-size: 1.15rem;
+    border-radius: 6px;
+  }
+
+  /* Action-btns: gaps con aire */
+  .action-btns { gap: 7px; }
+  .action-row1 {
+    flex-direction: row;
+    align-items: stretch;   /* igual altura entre Apostar y Pasar */
+    gap: 6px;
+  }
+  .action-row2 { gap: 6px; }
+
+  /* Apostar */
+  #btn-bid  { flex: 2 1 0; min-width: 0; padding: 11px 8px; font-size: 0.88rem; border-radius: 8px; }
+  /* Pasar */
+  #btn-paso { flex: 1 1 0; min-width: 0; padding: 11px 4px; font-size: 0.78rem; border-radius: 7px; }
+  /* Probabilidad: badge pequeño alineado al centro */
+  #bid-prob { flex: 0 0 auto; align-self: center; font-size: 0.65rem; padding: 3px 6px; margin: 0; }
+
+  /* Dudo / Calzo */
+  .action-btns .btn-danger,
+  .action-btns .btn-warning { padding: 11px 6px; font-size: 0.84rem; border-radius: 8px; }
+
+  /* Mensaje de espera */
+  .wait-msg { font-size: 0.8rem; margin-top: 4px; padding: 0; }
+
+  /* Stats: más compacto */
+  .panel-stats { padding: 8px 12px; }
+  .stat-val    { font-size: 1.2rem; }
+
+  /* ── Lobby: columna única, ocultar branding lateral ── */
+  #lobby-screen {
+    height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: block;
+  }
+  .lobby-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .lobby-brand { display: none; }
+  .lobby-panel {
+    padding: 24px 16px 40px;
+    height: auto;
+    background: rgba(4, 12, 7, 0.75);
+  }
+}
+
+/* ─── Landscape phones (pantalla corta en horizontal, ≤500 px de alto) ──────── */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+
+  /* Mantener layout lado a lado pero con sidebar más angosta */
+  .game-layout { grid-template-columns: 1fr 220px; }
+
+  /* Sidebar scrollable y compacta */
+  .sidebar { overflow-y: auto; }
+  .panel   { padding: 8px 10px; }
+  .panel-title     { font-size: 0.7rem; margin-bottom: 6px; }
+  .panel-title-row { margin-bottom: 6px; }
+
+  /* Bid panel: compactar igual que portrait */
+  #bid-panel .bb-label { display: none; }
+  .bid-builder { gap: 4px; margin-bottom: 6px; }
+  .face-picker {
+    grid-template-columns: repeat(6, minmax(0, 32px));
+    justify-content: center;
+    gap: 3px;
+  }
+  .face-btn      { padding: 2px 1px; border-radius: 6px; border-width: 1.5px; }
+  .face-btn-name { display: none; }
+
+  /* face-row en landscape: igual que portrait */
+  .face-row { flex-direction: row; align-items: center; gap: 4px; }
+  .face-row .face-picker { flex: 1; min-width: 0; }
+  #btn-dir-cw, #btn-dir-ccw { display: none; }
+  #btn-dir-mobile            { display: flex; }
+
+  /* action-row1: misma fila */
+  .action-row1 { flex-direction: row; align-items: center; gap: 4px; }
+  #btn-bid  { flex: 2 1 0; }
+  #btn-paso { flex: 1 1 0; }
+  #bid-prob { flex: 0 0 auto; font-size: 0.6rem; padding: 2px 5px; margin: 0; }
+  .action-row2 { gap: 4px; }
+
+  .qty-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: 30px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .qty-grid::-webkit-scrollbar { display: none; }
+  .qty-cell {
+    flex: 0 0 28px;
+    height: 28px;
+    width: 28px;
+    aspect-ratio: unset;
+    font-size: 0.95rem;
+    border-radius: 5px;
+  }
+
+  .action-btns { gap: 4px; }
+  .action-btns .btn-danger,
+  .action-btns .btn-warning { padding: 6px 3px; font-size: 0.76rem; }
+
+  .bid-shortcuts { display: none; }
+  .wait-msg      { font-size: 0.72rem; margin-top: 2px; }
+
+  /* Elementos no esenciales */
+  #bv-wild          { display: none !important; }
+  #current-bid-prob { display: block; font-size: 0.65rem; }
+  #spectator-count  { display: none; }
+  .player-bot-tag   { display: none; }
+
+  /* Reveal de fin de ronda: cubre el sidebar lateral */
+  .reveal-overlay { top: 0; left: auto; right: 0; bottom: 0; width: 220px; }
+  .reveal-box { max-width: 95%; padding: 10px 14px; }
+
+  /* Dados levemente más pequeños */
+  .die        { width: 42px; height: 42px; }
+  .die.die-sm { width: 26px; height: 26px; border-radius: 5px; }
+  .die.die-lg { width: 46px; height: 46px; padding: 6px; }
+
+  /* Apuesta actual en mesa: compactar */
+  .bid-area { padding: 10px 22px; min-width: 150px; min-height: 60px; }
+  .bv-qty   { font-size: 1.8rem; }
+
+  /* Mi área más compacta */
+  .my-area      { bottom: 5px; padding: 5px 10px 7px; gap: 4px; }
+  .my-lost-dice       { display: none; }
+  .player-lost-dice   { display: none; }
+
+  /* Turn banner compacto */
+  .turn-banner         { font-size: 0.72rem; padding: 4px 12px; }
+  .turn-banner.my-turn { font-size: 0.95rem; }
+
+  /* Stats compact */
+  .panel-stats { padding: 6px 10px; }
+  .stat-val    { font-size: 1rem; }
 }
