@@ -1803,12 +1803,10 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   left: 0;
   right: 300px; /* excluye el sidebar de escritorio */
   bottom: 0;
-  background: rgba(0,0,0,0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 500;
-  backdrop-filter: blur(10px);
 }
 
 .reveal-box {
@@ -3061,6 +3059,8 @@ select:focus { border-color: rgba(232,184,109,0.5); }
     left: 0;
     right: 0;
     bottom: 0;
+    background: rgba(0,0,0,0.9);
+    backdrop-filter: blur(10px);
   }
   .reveal-box {
     max-width: 92%;
@@ -3228,7 +3228,7 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   .player-bot-tag   { display: none; }
 
   /* Reveal de fin de ronda: cubre el sidebar lateral */
-  .reveal-overlay { top: 0; left: auto; right: 0; bottom: 0; width: 220px; }
+  .reveal-overlay { top: 0; left: auto; right: 0; bottom: 0; width: 220px; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); }
   .reveal-box { max-width: 95%; padding: 10px 14px; }
 
   /* Dados levemente más pequeños */
