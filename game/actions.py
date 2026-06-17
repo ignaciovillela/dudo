@@ -38,6 +38,7 @@ class DudoBidResult:
     loser_id: str
     is_gavilan: bool       # el challenger actuó fuera de turno
     challenger_gained: bool  # el gavilán ganó un dado por dudar bien fuera de turno
+    is_ghost: bool = False   # el challenger estaba eliminado (gavilán fantasma)
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class DudoPasoResult:
     loser_id: str
     is_gavilan: bool
     challenger_gained: bool  # el gavilán ganó un dado por dudar bien fuera de turno
+    is_ghost: bool = False
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,7 @@ class CalzoResult:
     loser_id: str | None   # None si el calzo fue correcto
     challenger_gained: bool
     is_gavilan: bool
+    is_ghost: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +97,9 @@ class DudoAction:
         pid = self._challenger_id
 
         player = game.players.get(pid)
-        if not player or player.dice_count <= 0:
+        if not player:
+            return "No estás en la partida"
+        if player.dice_count <= 0 and not game.can_ghost_gavilan(pid):
             return "Estás eliminado"
 
         if game.current_bid is None and game.last_paso is None:
@@ -122,12 +127,13 @@ class DudoAction:
         game = self._game
         pid = self._challenger_id
         is_gavilan = game.current_player_id() != pid
+        is_ghost = game.players[pid].dice_count <= 0
 
         if game.last_paso is not None:
-            return self._resolve_paso(is_gavilan)
-        return self._resolve_bid(is_gavilan)
+            return self._resolve_paso(is_gavilan, is_ghost)
+        return self._resolve_bid(is_gavilan, is_ghost)
 
-    def _resolve_bid(self, is_gavilan: bool) -> DudoBidResult:
+    def _resolve_bid(self, is_gavilan: bool, is_ghost: bool = False) -> DudoBidResult:
         game = self._game
         pid = self._challenger_id
         bid = game.current_bid
@@ -152,9 +158,10 @@ class DudoAction:
             loser_id=loser_id,
             is_gavilan=is_gavilan,
             challenger_gained=challenger_gained,
+            is_ghost=is_ghost,
         )
 
-    def _resolve_paso(self, is_gavilan: bool) -> DudoPasoResult:
+    def _resolve_paso(self, is_gavilan: bool, is_ghost: bool = False) -> DudoPasoResult:
         game = self._game
         pid = self._challenger_id
         paso = game.last_paso
@@ -178,6 +185,7 @@ class DudoAction:
             loser_id=loser_id,
             is_gavilan=is_gavilan,
             challenger_gained=challenger_gained,
+            is_ghost=is_ghost,
         )
 
     # -- Aplicación de efectos secundarios -----------------------------------
@@ -226,7 +234,9 @@ class CalzoAction:
         pid = self._challenger_id
 
         player = game.players.get(pid)
-        if not player or player.dice_count <= 0:
+        if not player:
+            return "No estás en la partida"
+        if player.dice_count <= 0 and not game.can_ghost_gavilan(pid):
             return "Estás eliminado"
 
         if game.last_paso is not None:
@@ -254,6 +264,7 @@ class CalzoAction:
         pid = self._challenger_id
         bid = game.current_bid
         is_gavilan = game.current_player_id() != pid
+        is_ghost = game.players[pid].dice_count <= 0
 
         actual = game.count_dice(bid.face)
         exact = actual == bid.quantity
@@ -276,6 +287,7 @@ class CalzoAction:
             loser_id=loser_id,
             challenger_gained=challenger_gained,
             is_gavilan=is_gavilan,
+            is_ghost=is_ghost,
         )
 
     # -- Aplicación de efectos secundarios -----------------------------------

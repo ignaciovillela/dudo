@@ -1679,6 +1679,53 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   margin: 0;
 }
 
+.ghost-cooldown {
+  font-size: 0.75rem;
+  color: #a78bfa;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(167,139,250,0.1);
+  border: 1px solid rgba(167,139,250,0.25);
+  white-space: nowrap;
+}
+
+.ghost-action-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 200px;
+}
+
+.btn-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-family: 'Cinzel', serif;
+  letter-spacing: 0.04em;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(139,92,246,0.1));
+  border: 1px solid rgba(167,139,250,0.3);
+  color: #c4b5fd;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(167,139,250,0.3), rgba(139,92,246,0.2));
+  border-color: #a78bfa;
+  color: #e0d6ff;
+  box-shadow: 0 0 12px rgba(167,139,250,0.3);
+}
+.btn-ghost:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
 /* Flecha de turno activo sobre la carta del jugador */
 .active-turn-arrow {
   position: absolute;

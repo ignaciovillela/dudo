@@ -790,6 +790,24 @@ class GameManager:
             return await self._send(room_id, player_id, {"type": "error", "message": error})
 
         result = action.resolve()
+
+        # Gavilán fantasma fallido: nadie se entera
+        if result.is_ghost:
+            if isinstance(result, DudoPasoResult):
+                challenger_won = not result.paso_valid
+            else:
+                challenger_won = not result.bid_holds
+            if not challenger_won:
+                game.record_ghost_failure(player_id)
+                await self._send(room_id, player_id, {
+                    "type": "ghost_failed",
+                    "ghost_cooldown": game.ghost_cooldown_for(player_id),
+                    "ghost_failures": game.ghost_failures.get(player_id, 0),
+                })
+                return
+            # Fantasma exitoso: contar intento para próximo cooldown progresivo
+            game.ghost_failures[player_id] = game.ghost_failures.get(player_id, 0) + 1
+
         action.apply(result)
 
         # Actualizar racha del retador
@@ -815,6 +833,7 @@ class GameManager:
                 "challenger_gained": result.challenger_gained,
                 "all_dice": game.all_dice_reveal(),
                 "reveal_seconds": REVEAL_SECONDS,
+                "ghost_revival": result.is_ghost,
             }
             await self._broadcast(room_id, reveal_payload)
         else:
@@ -831,6 +850,7 @@ class GameManager:
                 "challenger_gained": result.challenger_gained,
                 "all_dice": game.all_dice_reveal(),
                 "reveal_seconds": REVEAL_SECONDS,
+                "ghost_revival": result.is_ghost,
             }
             await self._broadcast(room_id, reveal_payload)
 
@@ -848,6 +868,21 @@ class GameManager:
             return await self._send(room_id, player_id, {"type": "error", "message": error})
 
         result = action.resolve()
+
+        # Gavilán fantasma fallido: nadie se entera
+        if result.is_ghost and not result.exact:
+            game.record_ghost_failure(player_id)
+            await self._send(room_id, player_id, {
+                "type": "ghost_failed",
+                "ghost_cooldown": game.ghost_cooldown_for(player_id),
+                "ghost_failures": game.ghost_failures.get(player_id, 0),
+            })
+            return
+
+        # Fantasma exitoso: contar intento para próximo cooldown progresivo
+        if result.is_ghost:
+            game.ghost_failures[player_id] = game.ghost_failures.get(player_id, 0) + 1
+
         action.apply(result)
 
         # Actualizar racha del retador
@@ -867,6 +902,7 @@ class GameManager:
             "is_gavilan": result.is_gavilan,
             "all_dice": game.all_dice_reveal(),
             "reveal_seconds": REVEAL_SECONDS,
+            "ghost_revival": result.is_ghost,
         }
         await self._broadcast(room_id, calzo_payload)
         bot_engine.notify_reveal(game, calzo_payload)
@@ -926,6 +962,7 @@ class GameManager:
         for player in game.players.values():
             player.dice_count = 5
             player.ready = False
+        game.initial_total_dice = game.total_dice()
         game.roll_all_dice()
         game.current_bid = None
         game.last_paso = None
@@ -935,6 +972,8 @@ class GameManager:
         game.elimination_order = []
         game.streaks = {}
         game.best_streaks = {}
+        game.ghost_failures = {}
+        game.ghost_cooldown = {}
         active = game.active_players()
         game.current_player_idx = random.randint(0, len(active) - 1) if active else 0
         game.round_first_player = game.current_player_id()
@@ -959,6 +998,8 @@ class GameManager:
                 "avatar": p.avatar,
                 "round": game.round_number,
             })
+            if game.rules.allow_ghost_gavilan:
+                game.init_ghost_cooldown(loser_id)
             await self._broadcast(room_id, {
                 "type": "player_eliminated",
                 "player_id": loser_id,
@@ -986,6 +1027,7 @@ class GameManager:
         game.bid_history = []
         for p in game.players.values():
             p.selected_bid = None
+        game.tick_ghost_cooldowns()
         game.roll_all_dice()
         game.set_current_player(first_player_id)
         game.round_first_player = first_player_id
@@ -1384,13 +1426,18 @@ class GameManager:
     async def _send_dice(self, room_id: str, game: Game):
         for pid, player in game.players.items():
             if player.connected:
-                await self._send(room_id, pid, {
+                payload = {
                     "type": "your_dice",
                     "dice": player.dice,
                     "round_number": game.round_number,
                     "total_dice": game.total_dice(),
+                    "initial_total_dice": game.initial_total_dice,
                     "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
-                })
+                }
+                if player.dice_count <= 0 and game.rules.allow_ghost_gavilan:
+                    payload["ghost_cooldown"] = game.ghost_cooldown_for(pid)
+                    payload["ghost_failures"] = game.ghost_failures.get(pid, 0)
+                await self._send(room_id, pid, payload)
         for spectator_id in list(game.spectators.keys()):
             await self._send(room_id, spectator_id, {
                 "type": "spectator_state",

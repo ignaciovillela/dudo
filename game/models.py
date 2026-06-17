@@ -57,6 +57,7 @@ class RuleConfig:
     turn_timeout_seconds: int = 0
     allow_throwable_emojis: bool = True
     bot_chat_enabled: bool = True
+    allow_ghost_gavilan: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -66,6 +67,7 @@ class RuleConfig:
             "turn_timeout_seconds": self.turn_timeout_seconds,
             "allow_throwable_emojis": self.allow_throwable_emojis,
             "bot_chat_enabled": self.bot_chat_enabled,
+            "allow_ghost_gavilan": self.allow_ghost_gavilan,
         }
 
     @classmethod
@@ -79,6 +81,7 @@ class RuleConfig:
                 turn_timeout_seconds=base.turn_timeout_seconds,
                 allow_throwable_emojis=base.allow_throwable_emojis,
                 bot_chat_enabled=base.bot_chat_enabled,
+                allow_ghost_gavilan=base.allow_ghost_gavilan,
             )
 
         elimination_mode = payload.get("elimination_mode", base.elimination_mode)
@@ -106,6 +109,9 @@ class RuleConfig:
             bot_chat_enabled=bool(
                 payload.get("bot_chat_enabled", base.bot_chat_enabled)
             ),
+            allow_ghost_gavilan=bool(
+                payload.get("allow_ghost_gavilan", base.allow_ghost_gavilan)
+            ),
         )
 
 
@@ -128,6 +134,41 @@ class Game:
     elimination_order: list = field(default_factory=list)  # [{"id", "name", "avatar", "round"}] orden de eliminación
     streaks: dict = field(default_factory=dict)       # pid → racha actual (dudo/calzo correctos consecutivos)
     best_streaks: dict = field(default_factory=dict)  # pid → mejor racha de esta partida
+    ghost_failures: dict = field(default_factory=dict)  # pid → fallos fantasma acumulados
+    ghost_cooldown: dict = field(default_factory=dict)   # pid → rondas restantes de espera fantasma
+    initial_total_dice: int = 0  # suma de dados al empezar la partida (para ratio fantasma)
+
+    def ghost_cooldown_for(self, pid: str) -> int:
+        return self.ghost_cooldown.get(pid, 0)
+
+    def init_ghost_cooldown(self, pid: str):
+        """Al ser eliminado, setea cooldown inicial."""
+        self.ghost_cooldown[pid] = 2 + self.ghost_failures.get(pid, 0)
+
+    def tick_ghost_cooldowns(self):
+        """Cada nueva ronda, decrementa cooldowns de todos los fantasmas."""
+        for pid in list(self.ghost_cooldown):
+            if self.ghost_cooldown[pid] > 0:
+                self.ghost_cooldown[pid] -= 1
+
+    def record_ghost_failure(self, pid: str):
+        self.ghost_failures[pid] = self.ghost_failures.get(pid, 0) + 1
+        self.ghost_cooldown[pid] = 2 + self.ghost_failures[pid]
+
+    def can_ghost_gavilan(self, pid: str) -> bool:
+        player = self.players.get(pid)
+        if not player or player.dice_count > 0:
+            return False
+        if not self.rules.allow_ghost_gavilan:
+            return False
+        if not self.rules.allow_gavilan:
+            return False
+        if self.ghost_cooldown_for(pid) != 0:
+            return False
+        # Umbral: no fantasy si quedan ≤20% de los dados iniciales
+        if self.total_dice() <= int(self.initial_total_dice * 0.2):
+            return False
+        return True
 
     def active_players(self) -> list[str]:
         return [

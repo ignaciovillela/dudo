@@ -188,6 +188,12 @@
                   <button type="button" class="rule-help" data-tooltip="Los bots envian mensajes durante la partida. Segun su dificultad pueden ser burlas, verdades o bluffs." aria-label="Detalle de mensajes de bots"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
+              <label class="check-row">
+                <input id="rule-allow-ghost-gavilan" type="checkbox" onchange="onHostRulesChanged()" />
+                <span class="rule-line">Gavilán fantasma
+                  <button type="button" class="rule-help" data-tooltip="Permite que jugadores eliminados intenten dudo/calzo fantasma para revivir. Si fallan, nadie se entera y el cooldown aumenta." aria-label="Detalle de gavilan fantasma"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                </span>
+              </label>
               <label class="check-row timeout-row">
                 <span class="rule-line">Tiempo por turno</span>
                 <div id="rule-turn-timeout" class="timeout-options" role="radiogroup" aria-label="Tiempo por turno">
@@ -339,6 +345,11 @@
         <div class="elim-icon">💀</div>
         <p class="elim-title">Eliminado</p>
         <p class="elim-sub">Puedes seguir viendo la partida.</p>
+        <div id="ghost-cooldown" class="ghost-cooldown" style="display:none"></div>
+        <div id="ghost-action-btns" class="ghost-action-btns" style="display:none">
+          <button id="ghost-btn-dudo" class="btn btn-ghost" onclick="sendGhostDudo()"><i class="fa-solid fa-triangle-exclamation"></i> Dudo Fantasma</button>
+          <button id="ghost-btn-calzo" class="btn btn-ghost" onclick="sendGhostCalzo()"><i class="fa-solid fa-bullseye"></i> Calzo Fantasma</button>
+        </div>
       </div>
 
       <!-- Stats -->

@@ -203,6 +203,9 @@ const S = {
   currentBid:     null,
   activePaso:     null,  // {player_id, player_name} si la acción activa es un paso
   hasPassed:      false, // si yo ya pasé en esta ronda
+  ghostCooldown:  0,     // rondas restantes para gavilán fantasma
+  ghostFailures:  0,     // fallos fantasma acumulados
+  initialTotalDice: 0,   // dados totales al inicio (para ratio fantasma)
   roundNum:       0,
   totalDice:      0,
   revealDice:       {},    // pid → dice[] durante la fase de reveal
@@ -360,6 +363,7 @@ const DEFAULT_RULES = {
   turn_timeout_seconds: 0,
   allow_throwable_emojis: true,
   bot_chat_enabled: true,
+  allow_ghost_gavilan: false,
 };
 
 // Fuente de verdad: /static/face_names.json (compartido con el servidor)
@@ -1249,9 +1253,17 @@ function handleMsg(msg) {
     error:              onError,
     emoji_thrown:       onEmojiThrown,
     quick_chat:         onQuickChat,
+    ghost_failed:       onGhostFailed,
   };
   const fn = H[msg.type];
   if (fn) fn(msg);
+}
+
+function onGhostFailed(msg) {
+  S.ghostCooldown = msg.ghost_cooldown;
+  S.ghostFailures = msg.ghost_failures;
+  updateEliminatedGhostUI();
+  showToast('💀 Gavilán fantasma falló — nadie se dio cuenta', true);
 }
 
 function onConnected(msg) {
@@ -1649,10 +1661,16 @@ function onYourDice(msg) {
   S.myDice    = msg.dice;
   S.roundNum  = msg.round_number;
   S.totalDice = msg.total_dice;
+  S.initialTotalDice = msg.initial_total_dice ?? 0;
   if (msg.has_passed !== undefined) S.hasPassed = msg.has_passed;
+  if (msg.ghost_cooldown !== undefined) S.ghostCooldown = msg.ghost_cooldown;
+  if (msg.ghost_failures !== undefined) S.ghostFailures = msg.ghost_failures;
 
   // Merge updated player counts
   Object.assign(S.players, msg.players);
+
+  // Toggle eliminated panel based on dice count after ghost revival
+  applyEliminatedMode(S.myDice.length === 0);
 
   renderMyDice(true);
   renderOtherPlayers();
@@ -1890,6 +1908,10 @@ function onReveal(msg) {
   document.getElementById('reveal-result').className = `reveal-result ${resultClass}`;
 
   log(resultText, resultClass);
+
+  if (msg.ghost_revival) {
+    log(`💀 ¡${msg.challenger_name} revivió con Gavilán Fantasma!`, 'win');
+  }
 
   if (resultClass === 'win') playSfx('win');
   if (resultClass === 'lose') playSfx('lose');
@@ -3311,17 +3333,29 @@ function updateControls() {
   const myOwnPaso     = S.activePaso?.player_id === S.playerId;
   const hasBid        = S.currentBid != null;
   const myOwnBid      = S.currentBid?.player_id === S.playerId;
+  const ghostDiceOk   = S.totalDice > Math.floor(S.initialTotalDice * 0.2);
+  const canGhost      = amEliminated && playing && !S.isSpectator
+    && S.rules?.allow_gavilan && S.rules?.allow_ghost_gavilan
+    && S.ghostCooldown === 0 && ghostDiceOk;
+  const canGhostWithAction = canGhost && (
+    (hasActivePaso && !myOwnPaso) ||
+    (!hasActivePaso && hasBid && !myOwnBid)
+  );
 
   // Gavilán habilita acciones fuera de turno (dudo/calzo).
   const canOutOfTurn = !!S.rules?.allow_gavilan;
 
-  // Dudo: disponible si hay acción activa (paso o apuesta) que no sea propia y no estoy eliminado
-  const canDudo = playing && !amEliminated && (
+  // Dudo: disponible si hay acción activa (paso o apuesta) que no sea propia y no estoy eliminado,
+  //         o si soy fantasma con cooldown listo
+  const canDudo = (playing && !amEliminated && (
     (hasActivePaso && !myOwnPaso && (isMyTurn || canOutOfTurn)) ||
     (!hasActivePaso && hasBid && !myOwnBid && (isMyTurn || canOutOfTurn))
-  );
-  // Calzo: solo si la acción activa es una apuesta (no paso) y no estoy eliminado
-  const canCalzo = playing && !amEliminated && !hasActivePaso && hasBid && !myOwnBid && (isMyTurn || canOutOfTurn);
+  )) || canGhostWithAction;
+
+  // Calzo: solo si la acción activa es una apuesta (no paso) y no estoy eliminado,
+  //         o si soy fantasma
+  const canCalzo = (playing && !amEliminated && !hasActivePaso && hasBid && !myOwnBid && (isMyTurn || canOutOfTurn))
+    || (canGhost && hasBid && !myOwnBid && !hasActivePaso);
   // Paso: solo en mi turno y si no he pasado esta ronda
   const canPaso = isMyTurn && !S.hasPassed;
   const pasoValido = canPaso && diceValidasParaPaso(S.myDice);
@@ -3338,6 +3372,13 @@ function updateControls() {
   // Qty grid y face picker
   document.querySelectorAll('.qty-cell').forEach(b => b.disabled = !isMyTurn);
   document.querySelectorAll('.face-btn').forEach(b => b.disabled = !isMyTurn);
+
+  // Ghost buttons
+  updateEliminatedGhostUI();
+  const ghostDudo = document.getElementById('ghost-btn-dudo');
+  const ghostCalzo = document.getElementById('ghost-btn-calzo');
+  if (ghostDudo) ghostDudo.disabled = !canGhostWithAction;
+  if (ghostCalzo) ghostCalzo.disabled = !(canGhost && hasBid && !myOwnBid && !hasActivePaso);
 }
 
 function hideControls() {
@@ -3345,6 +3386,10 @@ function hideControls() {
   document.getElementById('btn-paso').disabled  = true;
   document.getElementById('btn-dudo').disabled  = true;
   document.getElementById('btn-calzo').disabled = true;
+  const ghostDudo = document.getElementById('ghost-btn-dudo');
+  const ghostCalzo = document.getElementById('ghost-btn-calzo');
+  if (ghostDudo) ghostDudo.disabled = true;
+  if (ghostCalzo) ghostCalzo.disabled = true;
 }
 
 function openKickConfirm(playerId, playerName) {
@@ -3641,6 +3686,18 @@ function sendCalzo() {
   send({ type: 'calzo' });
 }
 
+function sendGhostDudo() {
+  if (S.isSpectator) return;
+  playSfx('click');
+  send({ type: 'dudo' });
+}
+
+function sendGhostCalzo() {
+  if (S.isSpectator) return;
+  playSfx('click');
+  send({ type: 'calzo' });
+}
+
 function applySpectatorMode() {
   const badge = document.getElementById('spectator-badge');
   const sidebar = document.querySelector('.sidebar');
@@ -3657,6 +3714,34 @@ function applyEliminatedMode(eliminated) {
   const elimPanel = document.getElementById('eliminated-panel');
   if (bidPanel)  bidPanel.style.display  = eliminated ? 'none' : '';
   if (elimPanel) elimPanel.style.display = eliminated ? 'flex' : 'none';
+  if (eliminated) updateEliminatedGhostUI();
+}
+
+function updateEliminatedGhostUI() {
+  const ghostEnabled = !!(S.rules?.allow_ghost_gavilan && S.rules?.allow_gavilan);
+  const diceOk = S.totalDice > Math.floor(S.initialTotalDice * 0.2);
+
+  const cooldownEl = document.getElementById('ghost-cooldown');
+  if (cooldownEl) {
+    if (ghostEnabled) {
+      if (S.ghostCooldown > 0) {
+        cooldownEl.textContent = `💀 Fantasma: disponible en ${S.ghostCooldown} ronda${S.ghostCooldown !== 1 ? 's' : ''}`;
+        cooldownEl.style.display = '';
+      } else if (!diceOk) {
+        cooldownEl.textContent = '💀 Muy pocos dados en juego para gavilán fantasma';
+        cooldownEl.style.display = '';
+      } else {
+        cooldownEl.textContent = '💀 Gavilán fantasma disponible';
+        cooldownEl.style.display = '';
+      }
+    } else {
+      cooldownEl.style.display = 'none';
+    }
+  }
+  const ghostBtns = document.getElementById('ghost-action-btns');
+  if (ghostBtns) {
+    ghostBtns.style.display = (ghostEnabled && S.ghostCooldown === 0 && diceOk) ? 'flex' : 'none';
+  }
 }
 
 // ══════════════════════════════════  LOBBY ACTIONS  ════════════════════════════
@@ -3776,6 +3861,7 @@ function normalizeRules(rules) {
     turn_timeout_seconds: timeout,
     allow_throwable_emojis: !!(src.allow_throwable_emojis ?? DEFAULT_RULES.allow_throwable_emojis),
     bot_chat_enabled: !!(src.bot_chat_enabled ?? DEFAULT_RULES.bot_chat_enabled),
+    allow_ghost_gavilan: !!(src.allow_ghost_gavilan ?? DEFAULT_RULES.allow_ghost_gavilan),
   };
 }
 
@@ -3814,6 +3900,12 @@ function rulesSummaryItems() {
         ? 'Los bots envian mensajes durante la partida (burlas, verdades o bluffs segun su dificultad).'
         : 'Los bots no enviaran mensajes en el chat.',
     },
+    {
+      label: `Gavilán fantasma: ${rules.allow_ghost_gavilan ? 'Si' : 'No'}`,
+      detail: rules.allow_ghost_gavilan
+        ? 'Los jugadores eliminados pueden intentar dudo/calzo fantasma para revivir con cooldown progresivo.'
+        : 'Los eliminados no pueden hacer gavilán.',
+    },
   ];
 }
 
@@ -3832,12 +3924,14 @@ function renderLobbyRules() {
   const calzoEl = document.getElementById('rule-calzo-on-turn');
   const emojiEl = document.getElementById('rule-allow-throwable-emojis');
   const botChatEl = document.getElementById('rule-bot-chat-enabled');
+  const ghostGavilanEl = document.getElementById('rule-allow-ghost-gavilan');
   const timeoutInputs = document.querySelectorAll('#rule-turn-timeout input[name="turn-timeout"]');
   if (modeEl)    { modeEl.checked = rules.elimination_mode === 'winner'; modeEl.disabled = !hostCanEdit; }
   if (gavilanEl) { gavilanEl.checked = rules.allow_gavilan;             gavilanEl.disabled = !hostCanEdit; }
   if (calzoEl)   { calzoEl.checked = rules.calzo_recovers_on_turn;     calzoEl.disabled = !hostCanEdit; }
   if (emojiEl)   { emojiEl.checked = rules.allow_throwable_emojis;     emojiEl.disabled = !hostCanEdit; }
   if (botChatEl) { botChatEl.checked = rules.bot_chat_enabled;         botChatEl.disabled = !hostCanEdit; }
+  if (ghostGavilanEl) { ghostGavilanEl.checked = rules.allow_ghost_gavilan; ghostGavilanEl.disabled = !hostCanEdit; }
   timeoutInputs.forEach((input) => {
     input.checked = Number(input.value) === rules.turn_timeout_seconds;
     input.disabled = !hostCanEdit;
@@ -3873,6 +3967,7 @@ function onHostRulesChanged() {
     turn_timeout_seconds: Number(timeoutSelected?.value || 0),
     allow_throwable_emojis: !!document.getElementById('rule-allow-throwable-emojis')?.checked,
     bot_chat_enabled: !!document.getElementById('rule-bot-chat-enabled')?.checked,
+    allow_ghost_gavilan: !!document.getElementById('rule-allow-ghost-gavilan')?.checked,
   };
   S.rules = normalizeRules(next);
   saveRulesToStorage(S.rules);
@@ -4149,6 +4244,8 @@ window.openPasoConfirmModal = openPasoConfirmModal;
 window.closePasoConfirmModal = closePasoConfirmModal;
 window.confirmPaso = confirmPaso;
 window.cancelPaso = cancelPaso;
+window.sendGhostDudo = sendGhostDudo;
+window.sendGhostCalzo = sendGhostCalzo;
 window.openRenameModal = openRenameModal;
 window.closeRenameModal = closeRenameModal;
 window.toggleRenameAvatarPicker = toggleRenameAvatarPicker;
