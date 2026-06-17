@@ -3250,6 +3250,16 @@ function updateDirectionIndicator() {
   }
 }
 
+function diceValidasParaPaso(dice) {
+  if (!dice || dice.length !== 5) return false;
+  const counts = {};
+  for (const d of dice) counts[d] = (counts[d] || 0) + 1;
+  const vals = Object.values(counts);
+  if (vals.length === 5 || vals.length === 1) return true;
+  if (vals.length === 2 && Math.min(...vals) === 2) return true;
+  return false;
+}
+
 function updateControls() {
   if (S.isSpectator) {
     hideControls();
@@ -3314,10 +3324,12 @@ function updateControls() {
   const canCalzo = playing && !amEliminated && !hasActivePaso && hasBid && !myOwnBid && (isMyTurn || canOutOfTurn);
   // Paso: solo en mi turno y si no he pasado esta ronda
   const canPaso = isMyTurn && !S.hasPassed;
+  const pasoValido = canPaso && diceValidasParaPaso(S.myDice);
 
   document.getElementById('bid-panel').style.opacity  = isMyTurn ? '1' : '0.5';
   document.getElementById('btn-bid').disabled          = !isMyTurn;
   document.getElementById('btn-paso').disabled         = !canPaso;
+  document.getElementById('btn-paso').classList.toggle('paso-valido', pasoValido);
   document.getElementById('btn-dudo').disabled         = !canDudo;
   document.getElementById('btn-calzo').disabled        = !canCalzo;
   document.getElementById('wait-msg').style.display   = isMyTurn ? 'none' : 'block';
@@ -3352,6 +3364,27 @@ function closeKickConfirm() {
   if (modal) modal.style.display = 'none';
 }
 
+function openPasoConfirmModal() {
+  const modal = document.getElementById('paso-confirm-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closePasoConfirmModal() {
+  const modal = document.getElementById('paso-confirm-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function confirmPaso() {
+  const skip = document.getElementById('paso-confirm-skip')?.checked;
+  if (skip) localStorage.setItem('pasoConfirmSkip', 'true');
+  closePasoConfirmModal();
+  send({ type: 'paso' });
+}
+
+function cancelPaso() {
+  closePasoConfirmModal();
+}
+
 function confirmKickPlayer() {
   if (!S.isHost || !S.pendingKickTargetId) return;
   send({ type: 'kick_player', target_id: S.pendingKickTargetId });
@@ -3372,9 +3405,7 @@ function minQtyForFace(face) {
 
 function selectFace(face) {
   S.bidFace = face;
-  if (S.bidQty === null) {
-    S.bidQty = minQtyForFace(face);
-  }
+  S.bidQty = minQtyForFace(face);
   saveBidSelection();
   refreshBidInputUI();
 }
@@ -3585,6 +3616,16 @@ function sendDirection(value) {
 function sendPaso() {
   if (S.isSpectator) return;
   playSfx('click');
+  const isMyTurn = S.currentPid === S.playerId && S.phase === 'playing';
+  const canPaso = isMyTurn && !S.hasPassed;
+  if (canPaso && !diceValidasParaPaso(S.myDice)) {
+    if (localStorage.getItem('pasoConfirmSkip') === 'true') {
+      send({ type: 'paso' });
+      return;
+    }
+    openPasoConfirmModal();
+    return;
+  }
   send({ type: 'paso' });
 }
 
@@ -4104,6 +4145,10 @@ window.rejectNotificationPrompt = rejectNotificationPrompt;
 window.toggleAvatarPicker = toggleAvatarPicker;
 window.closeKickConfirm = closeKickConfirm;
 window.confirmKickPlayer = confirmKickPlayer;
+window.openPasoConfirmModal = openPasoConfirmModal;
+window.closePasoConfirmModal = closePasoConfirmModal;
+window.confirmPaso = confirmPaso;
+window.cancelPaso = cancelPaso;
 window.openRenameModal = openRenameModal;
 window.closeRenameModal = closeRenameModal;
 window.toggleRenameAvatarPicker = toggleRenameAvatarPicker;
