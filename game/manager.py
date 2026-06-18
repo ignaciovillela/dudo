@@ -1722,6 +1722,14 @@ class GameManager:
         })
 
     async def _run_bot_action(self, room_id: str, game: Game, bot_id: str):
+        # Cambio de sentido: solo si el bot es round_first_player y no hay acción aún
+        if (game.round_first_player == bot_id
+                and game.current_bid is None
+                and game.last_paso is None):
+            direction = bot_engine.decide_direction(game, bot_id)
+            if direction is not None:
+                await self._h_direction(room_id, bot_id, game, {"value": direction})
+
         decision = bot_engine.decide(game, bot_id)
         action = decision.get("action")
 

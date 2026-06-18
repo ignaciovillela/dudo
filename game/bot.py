@@ -230,6 +230,36 @@ class BotStrategy(ABC):
         p_valid = p_escalera + p_generala + p_full_house   # ≈ 0.132
         return 1.0 - p_valid  # P(bluff) ≈ 0.868
 
+    # -- Sentido (dirección) --------------------------------------------------
+
+    @staticmethod
+    def _next_player_in_dir(game: "Game", bot_id: str, direction: int) -> str | None:
+        """Retorna el jugador que seguiría si el sentido fuese `direction` (1 o -1)."""
+        active = game.active_players()
+        if not active:
+            return None
+        try:
+            idx = active.index(bot_id)
+        except ValueError:
+            return None
+        return active[(idx + direction) % len(active)]
+
+    def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
+        """
+        Puntaje de amenaza de target_id para el bot.
+        A mayor puntaje, más problemático tenerlo cerca en el orden de turno.
+        Sobrescribir en subclases para mayor sofisticación.
+        """
+        return float(game.players[target_id].dice_count) if target_id in game.players else 0.0
+
+    def decide_direction(self, game: "Game", bot_id: str) -> str | None:
+        """
+        Decide si cambiar el sentido del juego basado en quién quedaría
+        como siguiente jugador en cada dirección.
+        Retorna "cw", "ccw" o None (mantener sentido actual).
+        """
+        return None
+
     # -- Interfaz pública ----------------------------------------------------
 
     @abstractmethod
@@ -259,6 +289,19 @@ class EasyBot(BotStrategy):
 
     DUDO_THRESHOLD = 0.25
     DUDO_NOISE     = 0.25   # ignora la señal el 25% de las veces (antes 40%)
+
+    def decide_direction(self, game: "Game", bot_id: str) -> str | None:
+        next_cw = self._next_player_in_dir(game, bot_id, game.direction)
+        next_ccw = self._next_player_in_dir(game, bot_id, -game.direction)
+        if not next_cw or not next_ccw or next_cw == next_ccw:
+            return None
+        tc = self._player_threat_score(game, bot_id, next_cw)
+        to = self._player_threat_score(game, bot_id, next_ccw)
+        if to < tc - 0.5:
+            return "ccw" if game.direction == 1 else "cw"
+        if random.random() < 0.25:
+            return "ccw" if game.direction == 1 else "cw"
+        return None
 
     def decide(self, game: "Game", bot_id: str) -> dict:
         own_dice = game.players[bot_id].dice
@@ -335,12 +378,28 @@ class MediumBot(BotStrategy):
     BID_MIN_PROB   = 0.42
     BLUFF_PROB     = 0.08
 
+    def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
+        return float(game.players[target_id].dice_count) if target_id in game.players else 0.0
+
+    def decide_direction(self, game: "Game", bot_id: str) -> str | None:
+        next_cw = self._next_player_in_dir(game, bot_id, game.direction)
+        next_ccw = self._next_player_in_dir(game, bot_id, -game.direction)
+        if not next_cw or not next_ccw or next_cw == next_ccw:
+            return None
+        tc = self._player_threat_score(game, bot_id, next_cw)
+        to = self._player_threat_score(game, bot_id, next_ccw)
+        if to < tc - 0.5:
+            return "ccw" if game.direction == 1 else "cw"
+        if random.random() < 0.15:
+            return "ccw" if game.direction == 1 else "cw"
+        return None
+
     def decide(self, game: "Game", bot_id: str) -> dict:
         own_dice = game.players[bot_id].dice
 
         if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
-            if prob < self.DUDO_THRESHOLD:
+            if prob < self.DUDO_THRESHOLD and random.random() > self.DUDO_NOISE:
                 return {"action": "dudo"}
 
         if game.last_paso is not None:
@@ -407,6 +466,22 @@ class HardBot(BotStrategy):
     CALZO_RAND     = 0.75   # antes 0.60 — más decidido cuando las condiciones se dan
     BID_MIN_PROB   = 0.48
     BLUFF_PROB     = 0.08
+
+    def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
+        return float(game.players[target_id].dice_count) if target_id in game.players else 0.0
+
+    def decide_direction(self, game: "Game", bot_id: str) -> str | None:
+        next_cw = self._next_player_in_dir(game, bot_id, game.direction)
+        next_ccw = self._next_player_in_dir(game, bot_id, -game.direction)
+        if not next_cw or not next_ccw or next_cw == next_ccw:
+            return None
+        tc = self._player_threat_score(game, bot_id, next_cw)
+        to = self._player_threat_score(game, bot_id, next_ccw)
+        if to < tc - 0.5:
+            return "ccw" if game.direction == 1 else "cw"
+        if random.random() < 0.15:
+            return "ccw" if game.direction == 1 else "cw"
+        return None
 
     def decide(self, game: "Game", bot_id: str) -> dict:
         own_dice = game.players[bot_id].dice
@@ -687,6 +762,31 @@ class VeryHardBot(BotStrategy):
     DUDO_PASO_PROB_BASE      = 0.40
     DUDO_PASO_PROB_MAX       = 0.90   # si sabemos que siempre miente
     DUDO_PASO_PROB_MIN       = 0.15   # si sabemos que casi nunca miente
+
+    def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
+        mem = self._memory.get(bot_id)
+        key = self._stable_id(game, target_id)
+        stats = mem.player_stats.get(key) if mem else None
+        score = float(game.players[target_id].dice_count) if target_id in game.players else 0.0
+        if stats and stats.bids_total >= 5:
+            if stats.bluff_rate > 0.45:
+                score *= 1.3
+            elif stats.bluff_rate < 0.15:
+                score *= 1.2
+        return score
+
+    def decide_direction(self, game: "Game", bot_id: str) -> str | None:
+        next_cw = self._next_player_in_dir(game, bot_id, game.direction)
+        next_ccw = self._next_player_in_dir(game, bot_id, -game.direction)
+        if not next_cw or not next_ccw or next_cw == next_ccw:
+            return None
+        tc = self._player_threat_score(game, bot_id, next_cw)
+        to = self._player_threat_score(game, bot_id, next_ccw)
+        own_dice = len(game.players[bot_id].dice)
+        threshold = 0.3 if own_dice <= 2 else 0.5
+        if to < tc - threshold:
+            return "ccw" if game.direction == 1 else "cw"
+        return None
 
     def __init__(self):
         self._memory: dict[str, _BotMemory] = defaultdict(_BotMemory)
@@ -1304,6 +1404,19 @@ class ExpertBot(VeryHardBot):
         # bot_id activo durante decide() — se usa en _dudo_threshold
         self._current_bot_id: str = ""
 
+    def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
+        score = super()._player_threat_score(game, bot_id, target_id)
+        key = self._stable_id(game, target_id)
+        igps = self._igps.get(bot_id, {}).get(key)
+        if igps and igps.actions_total >= 3:
+            if igps.aggression_index > 0.55:
+                score *= 1.3
+            if igps.calzo_tendency > 0.25 and igps.calzos_game >= 2:
+                hit_rate = igps.calzos_hit / max(igps.calzos_game, 1)
+                if hit_rate > 0.5:
+                    score *= 1.25
+        return score
+
     # ------------------------------------------------------------------ IGPS / Nash
 
     def _get_igps(self, bot_id: str, player_key: str) -> InGamePlayerState:
@@ -1803,6 +1916,18 @@ def decide(game: "Game", bot_id: str) -> dict:
 
     strategy = _REGISTRY.get(player.bot_difficulty, _REGISTRY["medium"])
     return strategy.decide(game, bot_id)
+
+
+def decide_direction(game: "Game", bot_id: str) -> str | None:
+    """
+    Punto de entrada público para decisión de sentido.
+    Retorna "cw", "ccw" o None (mantener).
+    """
+    player = game.players.get(bot_id)
+    if not player or not player.is_bot:
+        return None
+    strategy = _REGISTRY.get(player.bot_difficulty, _REGISTRY["medium"])
+    return strategy.decide_direction(game, bot_id)
 
 
 def notify_reveal(game: "Game", result: dict):
