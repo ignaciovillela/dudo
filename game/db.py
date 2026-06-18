@@ -26,6 +26,7 @@ async def get_pool() -> asyncpg.Pool:
             database=os.getenv("POSTGRES_DB", "postgres"),
             user=os.getenv("POSTGRES_USER", "postgres"),
             password=os.getenv("POSTGRES_PASSWORD", ""),
+            #ssl='disable',
             min_size=1,
             max_size=10,
             server_settings={"search_path": _SCHEMA},

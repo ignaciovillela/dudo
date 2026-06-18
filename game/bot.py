@@ -656,14 +656,17 @@ class VeryHardBot(BotStrategy):
     DUDO_COPY_BONUS        = 0.04   # bonus si el jugador copió en esta ronda
 
     # Calzo
-    CALZO_PROB_MIN     = 0.75
-    CALZO_DIFF_MAX     = 0.35
-    SAFE_BID_THRESHOLD = 0.82  # si existe apuesta con prob >= esto, preferir sobre calzo
+    CALZO_PROB_MIN         = 0.75
+    CALZO_PROB_MIN_RECOVER = 0.68   # umbral más bajo cuando la regla permite recuperar dado
+    CALZO_DIFF_MAX         = 0.35
+    SAFE_BID_THRESHOLD     = 0.82  # si existe apuesta con prob >= esto, preferir sobre calzo
 
     # Gavilán
-    GAVILAN_PROB_MIN          = 0.85
+    GAVILAN_PROB_MIN          = 0.85   # sin recuperación
+    GAVILAN_PROB_MIN_RECOVER  = 0.78   # con recuperación posible (< 5 dados)
     GAVILAN_PROB_MIN_5DICE    = 0.98
     GAVILAN_RAND              = 0.55
+    GAVILAN_RAND_RECOVER      = 0.68   # gate más alto cuando puede recuperar
     GAVILAN_RAND_5DICE        = 0.20
     GAVILAN_MIN_BIDS_IN_ROUND = 1
 
@@ -753,8 +756,14 @@ class VeryHardBot(BotStrategy):
                 if self._try_gavilan(game, bot_id, own_dice, dice_count, prob):
                     return {"action": "dudo"}
 
-            # Calzo — solo cuando no hay apuesta suficientemente segura disponible
-            if (prob >= self.CALZO_PROB_MIN
+            # Calzo — umbral más bajo si puede recuperar dado
+            is_off_turn   = game.current_player_id() != bot_id
+            can_recover   = dice_count < 5 and (
+                game.rules.calzo_recovers_on_turn
+                or (is_off_turn and game.rules.allow_gavilan)
+            )
+            calzo_min = self.CALZO_PROB_MIN_RECOVER if can_recover else self.CALZO_PROB_MIN
+            if (prob >= calzo_min
                     and bid.player_id != bot_id
                     and self._calzo_makes_sense(game, own_dice)
                     and not self._has_safe_bid_alternative(
@@ -1060,6 +1069,8 @@ class VeryHardBot(BotStrategy):
         return min(threshold, 0.45)
 
     def _gavilan_allowed(self, game: "Game", bot_id: str) -> bool:
+        if not game.rules.allow_gavilan:
+            return False
         foreign_bids = sum(
             1 for b in game.bid_history
             if getattr(b, "player_id", None) != bot_id
@@ -1069,11 +1080,13 @@ class VeryHardBot(BotStrategy):
     def _try_gavilan(self, game: "Game", bot_id: str,
                      own_dice: list, dice_count: int, prob: float) -> bool:
         if dice_count >= 5:
+            # Sin posibilidad de recuperar: umbral muy exigente
             threshold = self.GAVILAN_PROB_MIN_5DICE
             gate      = self.GAVILAN_RAND_5DICE
         else:
-            threshold = self.GAVILAN_PROB_MIN
-            gate      = self.GAVILAN_RAND
+            # Puede recuperar un dado si gana el gavilán → más agresivo
+            threshold = self.GAVILAN_PROB_MIN_RECOVER
+            gate      = self.GAVILAN_RAND_RECOVER
 
         if prob < threshold:
             return False
@@ -1274,10 +1287,11 @@ class ExpertBot(VeryHardBot):
     comportamiento in-game, análisis multi-jugador y estabilización Nash-aware.
     """
 
-    EXPERT_CALZO_PROB_MIN     = 0.72
-    EXPERT_SAFE_BID_THRESHOLD = 0.80  # si existe apuesta con prob >= esto, preferir sobre calzo
-    EXPERT_BID_MIN_PROB       = 0.52
-    EXPERT_BLUFF_PROB         = 0.10
+    EXPERT_CALZO_PROB_MIN         = 0.72
+    EXPERT_CALZO_PROB_MIN_RECOVER = 0.65   # con recuperación activa y < 5 dados
+    EXPERT_SAFE_BID_THRESHOLD     = 0.80  # si existe apuesta con prob >= esto, preferir sobre calzo
+    EXPERT_BID_MIN_PROB           = 0.52
+    EXPERT_BLUFF_PROB             = 0.10
 
     def __init__(self):
         super().__init__()
@@ -1487,8 +1501,17 @@ class ExpertBot(VeryHardBot):
                 if self._try_gavilan(game, bot_id, own_dice, dice_count, prob):
                     return {"action": "dudo"}
 
-            # Calzo — solo cuando no hay apuesta suficientemente segura disponible
-            if (prob >= self.EXPERT_CALZO_PROB_MIN
+            # Calzo — umbral más bajo si puede recuperar; evita calzar a spammers
+            is_off_turn      = game.current_player_id() != bot_id
+            can_recover      = dice_count < 5 and (
+                game.rules.calzo_recovers_on_turn
+                or (is_off_turn and game.rules.allow_gavilan)
+            )
+            expert_calzo_min = (
+                self.EXPERT_CALZO_PROB_MIN_RECOVER if can_recover
+                else self.EXPERT_CALZO_PROB_MIN
+            )
+            if (prob >= expert_calzo_min
                     and bid.player_id != bot_id
                     and self._calzo_makes_sense(game, own_dice)
                     and not self._skip_calzo_vs_spammer(bot_id, bid.player_id, game)

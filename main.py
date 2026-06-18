@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import uuid
 from html import escape
@@ -13,19 +14,61 @@ from game.manager import GameManager
 from game.db import get_pool, close_pool
 from game.migrations import run_migrations
 
+log = logging.getLogger(__name__)
+
 app = FastAPI(title="Dudo")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 manager = GameManager()
 INDEX_PATH = Path("static/index.html")
 
+_db_ok = False  # se vuelve True si la DB arranca bien
+
 
 @app.on_event("startup")
 async def _startup():
-    pool = await get_pool()
-    await run_migrations(pool)
-    from game.player_model import bluff_model
-    await bluff_model.load_and_train(pool)
+    global _db_ok
+    try:
+        pool = await get_pool()
+        await run_migrations(pool)
+        from game.player_model import bluff_model
+        await bluff_model.load_and_train(pool)
+        _db_ok = True
+        log.info("Base de datos conectada y migraciones aplicadas.")
+    except OSError as exc:
+        log.error(
+            "\n"
+            "╔══════════════════════════════════════════════════════════╗\n"
+            "║  ERROR: No se pudo conectar a PostgreSQL                ║\n"
+            "╠══════════════════════════════════════════════════════════╣\n"
+            "║  Host : %s\n"
+            "║  Causa: %s\n"
+            "╠══════════════════════════════════════════════════════════╣\n"
+            "║  El servidor arranca en modo degradado (sin persistencia)║\n"
+            "║  Verifica POSTGRES_HOST / PORT en el archivo .env        ║\n"
+            "╚══════════════════════════════════════════════════════════╝",
+            _db_host(),
+            exc,
+        )
+    except Exception as exc:
+        log.error(
+            "\n"
+            "╔══════════════════════════════════════════════════════════╗\n"
+            "║  ERROR de base de datos al iniciar                      ║\n"
+            "╠══════════════════════════════════════════════════════════╣\n"
+            "║  %s\n"
+            "╠══════════════════════════════════════════════════════════╣\n"
+            "║  El servidor arranca en modo degradado (sin persistencia)║\n"
+            "╚══════════════════════════════════════════════════════════╝",
+            exc,
+        )
+
+
+def _db_host() -> str:
+    import os
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    return f"{host}:{port}"
 
 
 @app.on_event("shutdown")
@@ -130,19 +173,26 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
 @app.get("/api/player/{anon_id}")
 async def get_player(anon_id: str):
     """Return persistent stats for a player identified by their anonymous ID."""
-    pool = await get_pool()
-    row = await pool.fetchrow(
-        """
-        SELECT anon_id, display_name, xp, level,
-               games_played, games_won,
-               total_duelos, duelos_won,
-               total_calzas, calzas_hit,
-               total_pasos, pasos_bluff
-        FROM players
-        WHERE anon_id = $1
-        """,
-        anon_id,
-    )
+    try:
+        pool = await get_pool()
+    except Exception:
+        return JSONResponse({"found": False, "error": "db_unavailable"}, status_code=503)
+    try:
+        row = await pool.fetchrow(
+            """
+            SELECT anon_id, display_name, xp, level,
+                   games_played, games_won,
+                   total_duelos, duelos_won,
+                   total_calzas, calzas_hit,
+                   total_pasos, pasos_bluff
+            FROM players
+            WHERE anon_id = $1
+            """,
+            anon_id,
+        )
+    except Exception as exc:
+        log.warning("Error consultando jugador %s: %s", anon_id, exc)
+        return JSONResponse({"found": False, "error": "db_error"}, status_code=503)
     if row is None:
         return JSONResponse({"found": False})
     return JSONResponse({"found": True, **dict(row)})

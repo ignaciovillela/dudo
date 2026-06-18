@@ -3450,7 +3450,10 @@ function minQtyForFace(face) {
 
 function selectFace(face) {
   S.bidFace = face;
-  S.bidQty = minQtyForFace(face);
+  const min = minQtyForFace(face);
+  if (S.bidQty === null || S.bidQty < min) {
+    S.bidQty = min;
+  }
   saveBidSelection();
   refreshBidInputUI();
 }
@@ -3578,12 +3581,15 @@ function refreshBidInputUI() {
     requestAnimationFrame(() => {
       const sel = grid.querySelector('.qty-cell.selected');
       if (!sel) return;
-      // Horizontal (móvil): centrar la celda seleccionada en el contenedor
-      const left = sel.offsetLeft - (grid.offsetWidth / 2) + (sel.offsetWidth / 2);
-      grid.scrollLeft = Math.max(0, left);
-      // Vertical (escritorio): mostrar la fila seleccionada
-      const top = sel.offsetTop - (grid.offsetHeight / 2) + (sel.offsetHeight / 2);
-      grid.scrollTop = Math.max(0, top);
+      const isMobile = window.innerWidth <= 600 || (window.innerWidth <= 900 && window.innerHeight <= 500);
+      if (isMobile) {
+        // Horizontal (móvil): centrar la celda seleccionada en el contenedor
+        const left = sel.offsetLeft - (grid.offsetWidth / 2) + (sel.offsetWidth / 2);
+        grid.scrollLeft = Math.max(0, left);
+      } else {
+        // Vertical (escritorio): asegurar que la celda quede visible dentro del grid
+        sel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
     });
   }
 

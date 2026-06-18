@@ -1084,6 +1084,10 @@ class GameManager:
         game.bid_history = []
         game.round_number = 0
         game.elimination_order = []
+        game.streaks = {}
+        game.best_streaks = {}
+        game.ghost_failures = {}
+        game.ghost_cooldown = {}
 
     async def _persist_game_result(
         self, room_id: str, game: Game, outcome, standings: list[dict]
