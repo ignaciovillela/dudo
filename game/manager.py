@@ -210,7 +210,7 @@ class GameManager:
             })
             return
 
-        if reconnect_id and reconnect_id in game.players and game.phase in {"playing", "lobby"}:
+        if reconnect_id and reconnect_id in game.players and game.phase in {"playing", "lobby", "reveal"}:
             old = game.players[reconnect_id]
             # Permitir takeover incluso si aún figura conectado (carrera de desconexión).
             ws = self.connections[room_id].pop(player_id, None)
@@ -251,7 +251,7 @@ class GameManager:
             if host_changed_msg:
                 await self._broadcast(room_id, host_changed_msg)
 
-            if game.phase == "playing":
+            if game.phase in {"playing", "reveal"}:
                 # Reenviar estado actual de la partida al jugador reconectado
                 await self._send(room_id, reconnect_id, {
                     "type": "your_dice",
