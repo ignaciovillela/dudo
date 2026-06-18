@@ -4236,11 +4236,15 @@ function positionPlayers() {
 
   // Margin keeps cards from being clipped by overflow:hidden on the table
   const margin = isPortraitMobile ? 30 : 56;
+  const MAX_DIST = 150;
+  const MIN_CENTER_DIST = 150;
+
+  // Posiciones de dados perdidos (oponentes + propio)
+  const lostPositions = [];
 
   cards.forEach((card, i) => {
     const deg = N === 1 ? 270 : startDeg + i * (arcDeg / (N - 1));
     const rad = deg * Math.PI / 180;
-    // En coords de pantalla (y hacia abajo): sin(270°)=-1 → arriba ✓
     const rawX = cx + rx * Math.cos(rad);
     const rawY = cy + ry * Math.sin(rad);
     const x = Math.max(margin, Math.min(W - margin, rawX));
@@ -4251,12 +4255,36 @@ function positionPlayers() {
     const pid = card.dataset.pid;
     const lost = table.querySelector(`.player-lost-dice[data-for="${pid}"]`);
     if (!lost) return;
-    // Interpolar hacia el centro para que quede entre la carta y la mesa
-    const t = 0.50;
+    const dist = Math.hypot(cx - rawX, cy - rawY);
+    const t = dist > 0 ? Math.min(0.50, MAX_DIST / dist) : 0.50;
     const lx = rawX + (cx - rawX) * t;
     const ly = rawY + (cy - rawY) * t;
-    lost.style.left = `${lx}px`;
-    lost.style.top = `${ly}px`;
+    lostPositions.push({ el: lost, lx, ly });
+  });
+
+  // Propios dados perdidos
+  const myLost = document.getElementById('my-lost-dice');
+  const myArea = document.querySelector('.my-area');
+  let myPos = null;
+  if (myLost && myArea) {
+    const areaRect = myArea.getBoundingClientRect();
+    const tableRect = table.getBoundingClientRect();
+    const ax = areaRect.left + areaRect.width / 2 - tableRect.left;
+    const ay = areaRect.top + areaRect.height / 2 - tableRect.top;
+    const myDist = Math.hypot(cx - ax, cy - ay);
+    const myT = myDist > 0 ? Math.min(0.50, MAX_DIST / myDist) : 0.50;
+    const mlx = ax + (cx - ax) * myT;
+    const mly = ay + (cy - ay) * myT;
+    myPos = { el: myLost, lx: mlx, ly: mly };
+    lostPositions.push(myPos);
+  }
+
+  // Si alguno queda muy cerca del centro, ninguno muestra dados perdidos
+  const anyNearCenter = lostPositions.some(p => Math.hypot(cx - p.lx, cy - p.ly) < MIN_CENTER_DIST);
+  lostPositions.forEach(p => {
+    p.el.style.left = `${p.lx}px`;
+    p.el.style.top = `${p.ly}px`;
+    p.el.style.display = anyNearCenter ? 'none' : '';
   });
 }
 
