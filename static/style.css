@@ -1486,7 +1486,7 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 /* ── Table Center ── */
 .table-center {
   position: absolute;
-  top: 43%;
+  top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   display: flex;

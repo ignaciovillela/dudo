@@ -238,6 +238,10 @@ const S = {
   pendingKickTargetName: '',
   gameOverTimer: null,
   spectatorCount: 0,
+  challengeGuardMs: 500,         // ms tras apuesta/paso (evita accion accidental)
+  challengeConsecutiveMs: 300,   // ms tras dudo/calzo (limita consecutivos)
+  _lastChallengeAt: 0,           // timestamp del último bid/paso
+  _lastDudoAt: 0,                // timestamp del último dudo/calzo
 };
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
@@ -251,6 +255,7 @@ let notificationPrompted = false;
 let turnCountdownTimer = null;
 let _activeNotification = null;
 let turnCountdownDeadline = 0;
+let _challengeCooldownTimer = null;
 
 const NOTIF_PREF_STORAGE_KEY = 'dudoNotifPref';
 
@@ -1269,6 +1274,8 @@ function onGhostFailed(msg) {
 function onConnected(msg) {
   S.playerId = msg.player_id;
   S.roomId   = msg.room_id;
+  if (msg.challenge_guard_ms !== undefined) S.challengeGuardMs = msg.challenge_guard_ms;
+  if (msg.challenge_consecutive_ms !== undefined) S.challengeConsecutiveMs = msg.challenge_consecutive_ms;
   // Enviar join con posible reconnect_id si la sala coincide
   const session = loadSession();
   if (session?.avatar && AVATAR_OPTIONS.includes(session.avatar)) {
@@ -1288,6 +1295,8 @@ function onJoined(msg) {
   S.rules       = normalizeRules(msg.rules);
   S.playerAvatar = S.players[S.playerId]?.avatar || S.playerAvatar;
   S.spectatorCount = msg.spectator_count ?? 0;
+  if (msg.challenge_guard_ms !== undefined) S.challengeGuardMs = msg.challenge_guard_ms;
+  if (msg.challenge_consecutive_ms !== undefined) S.challengeConsecutiveMs = msg.challenge_consecutive_ms;
   updateSpectatorCount();
   saveSession();
 
@@ -1326,6 +1335,8 @@ function onJoinedSpectator(msg) {
   S.roundNum = msg.round_number || 0;
   S.totalDice = msg.total_dice || 0;
   S.myDice = [];
+  if (msg.challenge_guard_ms !== undefined) S.challengeGuardMs = msg.challenge_guard_ms;
+  if (msg.challenge_consecutive_ms !== undefined) S.challengeConsecutiveMs = msg.challenge_consecutive_ms;
   if (msg.turn) onTurn(msg.turn);
   showScreen('game');
   applySpectatorMode();
@@ -1464,6 +1475,8 @@ function onReconnected(msg) {
   S.rules       = normalizeRules(msg.rules);
   S.phase       = msg.phase;
   S.spectatorCount = msg.spectator_count ?? S.spectatorCount;
+  if (msg.challenge_guard_ms !== undefined) S.challengeGuardMs = msg.challenge_guard_ms;
+  if (msg.challenge_consecutive_ms !== undefined) S.challengeConsecutiveMs = msg.challenge_consecutive_ms;
   updateSpectatorCount();
   S.playerAvatar = S.players[S.playerId]?.avatar || S.playerAvatar;
   if (msg.streaks)      S.streaks      = msg.streaks;
@@ -1740,6 +1753,7 @@ function onTurn(msg) {
 }
 
 function onBidMade(msg) {
+  _applyChallengeCooldown();
   playSfxFor('bid', msg.bid?.player_id);
   hideTimeoutActionHint();
   S.currentBid = msg.bid;
@@ -1754,6 +1768,7 @@ function onBidMade(msg) {
 }
 
 function onPasoMade(msg) {
+  _applyChallengeCooldown();
   playSfxFor('paso', msg.passer_id);
   hideTimeoutActionHint();
   S.activePaso = { player_id: msg.passer_id, player_name: msg.passer_name };
@@ -3364,8 +3379,8 @@ function updateControls() {
   document.getElementById('btn-bid').disabled          = !isMyTurn;
   document.getElementById('btn-paso').disabled         = !canPaso;
   document.getElementById('btn-paso').classList.toggle('paso-valido', pasoValido);
-  document.getElementById('btn-dudo').disabled         = !canDudo;
-  document.getElementById('btn-calzo').disabled        = !canCalzo;
+  document.getElementById('btn-dudo').disabled         = !canDudo  || _challengeOnCooldown();
+  document.getElementById('btn-calzo').disabled        = !canCalzo || _challengeOnCooldown();
   document.getElementById('wait-msg').style.display   = isMyTurn ? 'none' : 'block';
   document.getElementById('wait-msg').textContent = 'Esperando tu turno…';
 
@@ -3680,28 +3695,66 @@ function sendPaso() {
   send({ type: 'paso' });
 }
 
+function _challengeOnCooldown() {
+  if (S.challengeGuardMs > 0 && Date.now() - S._lastChallengeAt < S.challengeGuardMs) return true;
+  if (S.challengeConsecutiveMs > 0 && Date.now() - S._lastDudoAt < S.challengeConsecutiveMs) return true;
+  return false;
+}
+
+function _applyChallengeCooldown() {
+  if (S.challengeGuardMs <= 0) return;
+  S._lastChallengeAt = Date.now();
+  document.getElementById('btn-dudo').disabled = true;
+  document.getElementById('btn-calzo').disabled = true;
+  if (_challengeCooldownTimer) clearTimeout(_challengeCooldownTimer);
+  _challengeCooldownTimer = setTimeout(() => {
+    _challengeCooldownTimer = null;
+    if (S.phase === 'playing') updateControls();
+  }, S.challengeGuardMs);
+}
+
+function _applyDudoCooldown() {
+  if (S.challengeConsecutiveMs <= 0) return;
+  S._lastDudoAt = Date.now();
+  document.getElementById('btn-dudo').disabled = true;
+  document.getElementById('btn-calzo').disabled = true;
+  if (_challengeCooldownTimer) clearTimeout(_challengeCooldownTimer);
+  _challengeCooldownTimer = setTimeout(() => {
+    _challengeCooldownTimer = null;
+    if (S.phase === 'playing') updateControls();
+  }, S.challengeConsecutiveMs);
+}
+
 function sendDudo() {
   if (S.isSpectator) return;
+  if (_challengeOnCooldown()) return;
   playSfx('click');
   send({ type: 'dudo' });
+  _applyDudoCooldown();
 }
 
 function sendCalzo() {
   if (S.isSpectator) return;
+  if (_challengeOnCooldown()) return;
   playSfx('click');
   send({ type: 'calzo' });
+  _applyDudoCooldown();
 }
 
 function sendGhostDudo() {
   if (S.isSpectator) return;
+  if (_challengeOnCooldown()) return;
   playSfx('click');
   send({ type: 'dudo' });
+  _applyDudoCooldown();
 }
 
 function sendGhostCalzo() {
   if (S.isSpectator) return;
+  if (_challengeOnCooldown()) return;
   playSfx('click');
   send({ type: 'calzo' });
+  _applyDudoCooldown();
 }
 
 function applySpectatorMode() {
@@ -4199,7 +4252,7 @@ function positionPlayers() {
     const lost = table.querySelector(`.player-lost-dice[data-for="${pid}"]`);
     if (!lost) return;
     // Interpolar hacia el centro para que quede entre la carta y la mesa
-    const t = 0.34;
+    const t = 0.50;
     const lx = rawX + (cx - rawX) * t;
     const ly = rawY + (cy - rawY) * t;
     lost.style.left = `${lx}px`;
@@ -4299,8 +4352,8 @@ document.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
 
   // Acciones fuera de turno (dudo/calzo con gavilán) y en turno
-  if (key === 'a') { e.preventDefault(); sendDudo();  return; }
-  if (key === 's') { e.preventDefault(); sendCalzo(); return; }
+  if (key === 'a') { e.preventDefault(); if (!_challengeOnCooldown()) sendDudo();  return; }
+  if (key === 's') { e.preventDefault(); if (!_challengeOnCooldown()) sendCalzo(); return; }
 
   if (!isMyTurn) return;
 

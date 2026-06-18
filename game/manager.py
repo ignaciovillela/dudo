@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import WebSocket
 
-from game.config import DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
+from game.config import CHALLENGE_CONSECUTIVE_MS, CHALLENGE_GUARD_MS, DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 from game.actions import CalzoAction, DudoAction, DudoBidResult, DudoPasoResult
@@ -70,6 +70,8 @@ class GameManager:
             "type": "connected",
             "player_id": player_id,
             "room_id": room_id,
+            "challenge_guard_ms": CHALLENGE_GUARD_MS,
+            "challenge_consecutive_ms": CHALLENGE_CONSECUTIVE_MS,
         })
 
     def resolve_player_id(self, room_id: str, websocket: WebSocket) -> str | None:
@@ -241,6 +243,8 @@ class GameManager:
                 "spectator_count": len(game.spectators),
                 "streaks": game.streaks,
                 "best_streaks": game.best_streaks,
+"challenge_guard_ms": CHALLENGE_GUARD_MS,
+            "challenge_consecutive_ms": CHALLENGE_CONSECUTIVE_MS,
             })
             await self._broadcast_except(room_id, reconnect_id, {
                 "type": "player_reconnected",
@@ -305,6 +309,8 @@ class GameManager:
             "player_order": game.player_order,
             "rules": game.rules.to_dict(),
             "spectator_count": len(game.spectators),
+            "challenge_guard_ms": CHALLENGE_GUARD_MS,
+            "challenge_consecutive_ms": CHALLENGE_CONSECUTIVE_MS,
         })
         await self._broadcast_except(room_id, player_id, {
             "type": "player_joined",
@@ -1396,6 +1402,8 @@ class GameManager:
             "host_id": self._host_id(game.room_id, game),
             "turn": self._turn_payload(game) if game.phase in {"playing", "reveal"} else None,
             "spectator_count": len(game.spectators),
+            "challenge_guard_ms": CHALLENGE_GUARD_MS,
+            "challenge_consecutive_ms": CHALLENGE_CONSECUTIVE_MS,
         }
 
     def _pick_connected_host(self, game: Game) -> str | None:

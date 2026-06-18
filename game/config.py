@@ -12,6 +12,8 @@ REVEAL_SECONDS = int(os.getenv("REVEAL_SECONDS", 7))
 MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", 6))
 RATE_LIMIT_MS = int(os.getenv("RATE_LIMIT_MS", 200))
 DISCONNECT_GRACE_SECONDS = int(os.getenv("DISCONNECT_GRACE_SECONDS", 300))
+CHALLENGE_GUARD_MS = int(os.getenv("CHALLENGE_GUARD_MS", 500))
+CHALLENGE_CONSECUTIVE_MS = int(os.getenv("CHALLENGE_CONSECUTIVE_MS", 300))
 
 # Fuente de verdad: /static/face_names.json (compartido con el front)
 _face_data = json.loads((_ROOT / "static" / "face_names.json").read_text(encoding="utf-8"))
