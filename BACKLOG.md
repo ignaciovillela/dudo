@@ -76,6 +76,33 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: durante el reveal se muestra un resumen del tipo "Había 7 🎲5 en la mesa (se apostaron 8)"; el número de dados coincidentes y el total apostado son visibles durante toda la fase de revelación.
 
+### 30. Highlight: Mayor mentira sobrevivida
+**Por qué:** captura las jugadas más absurdamente improbables que aun así no fueron castigadas; genera historias memorables al final de la partida.
+- Alcance técnico: backend + frontend.
+- Archivos principales: `game/manager.py`, `static/app.js`, `static/index.html`.
+- Dificultad estimada: `Media`.
+- Riesgo de implementación: `Bajo`.
+- Dependencias: #23.
+- Criterio de término: el resumen final muestra la apuesta sobrevivida con menor probabilidad estimada (jugador, ronda, probabilidad).
+
+### 31. Highlight: Dudo más heroico
+**Por qué:** identifica el Dudo correcto más “arriesgado” y lo convierte en un momento destacado.
+- Alcance técnico: backend + frontend.
+- Archivos principales: `game/manager.py`, `static/app.js`, `static/index.html`.
+- Dificultad estimada: `Media`.
+- Riesgo de implementación: `Bajo`.
+- Dependencias: #23.
+- Criterio de término: el sistema identifica el Dudo correcto realizado sobre la apuesta con mayor probabilidad de ser cierta y lo muestra en el resumen final.
+
+### 32. Highlight: Calzo legendario
+**Por qué:** los Calzos correctos de baja probabilidad son de los momentos más espectaculares del juego.
+- Alcance técnico: backend + frontend.
+- Archivos principales: `game/manager.py`, `static/app.js`, `static/index.html`.
+- Dificultad estimada: `Media`.
+- Riesgo de implementación: `Bajo`.
+- Dependencias: #23.
+- Criterio de término: el resumen final incluye el Calzo exitoso con menor probabilidad estimada.
+
 ---
 
 ## 🟡 Prioridad media
@@ -104,6 +131,24 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Medio`.
 - Dependencias: #17 (clasificación final; comparten el overlay de game over).
 - Criterio de término: el backend registra eventos destacados durante la partida (apuesta más alta, calzo exacto, dudo más ajustado, bluff más audaz); el payload `game_over` incluye una lista de highlights; el overlay de fin de partida muestra una sección "Momentos de la partida" con estos eventos.
+
+### 33. Sistema de títulos de fin de partida
+**Por qué:** añade identidad narrativa a cada partida sin afectar reglas; convierte estadísticas en “personajes”.
+- Alcance técnico: backend + frontend.
+- Archivos principales: `game/manager.py`, `static/app.js`, `static/index.html`.
+- Dificultad estimada: `Media`.
+- Riesgo de implementación: `Bajo`.
+- Dependencias: #30, #31, #32.
+- Criterio de término: el game over incluye entre 3 y 8 títulos generados dinámicamente según estadísticas de la partida (ej. Kamikaze, Mentiroso Profesional, Rey del Reloj, etc.).
+
+### 35. Estadísticas absurdas acumuladas (perfil del jugador)
+**Por qué:** permite persistencia de récords raros entre partidas, aumentando engagement a largo plazo.
+- Alcance técnico: backend.
+- Archivos principales: sistema de perfil/estadísticas persistentes.
+- Dificultad estimada: `Alta`.
+- Riesgo de implementación: `Medio`.
+- Dependencias: #33.
+- Criterio de término: el perfil del jugador almacena récords históricos como mayor mentira sobrevivida, mejor Dudo heroico, mejor Calzo legendario, mayor tiempo muerto antes de revivir, etc.
 
 ---
 
@@ -140,6 +185,15 @@ Referencia completa en `CHANGELOG.md`.
 - Dificultad estimada: `Media`.
 - Riesgo de implementación: `Medio`.
 - Criterio de término: el anfitrión puede elegir entre 3, 4, 5 o 6 dados iniciales desde el panel de reglas del lobby; el backend usa ese valor al iniciar la partida y lo incluye en el payload de `game_started`.
+
+### 34. Highlight: Regresado de la muerte (Gavilán Fantasma)
+**Por qué:** hace visible una de tus mecánicas más únicas, dándole valor narrativo en el cierre de partida.
+- Alcance técnico: backend + frontend.
+- Archivos principales: `game/manager.py`, `static/app.js`, `static/index.html`.
+- Dificultad estimada: `Baja`.
+- Riesgo de implementación: `Bajo`.
+- Dependencias: #23.
+- Criterio de término: el resumen final destaca al jugador que más tiempo estuvo eliminado antes de volver mediante Gavilán Fantasma.
 
 ---
 
