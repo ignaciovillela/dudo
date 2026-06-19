@@ -1563,6 +1563,62 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   justify-content: center;
   cursor: default;
   flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.direction-indicator.clickable {
+  cursor: pointer;
+  background: linear-gradient(135deg, #f0c97a 0%, var(--gold) 50%, #c9a04a 100%);
+  border: 2px solid rgba(160,120,60,0.5);
+  box-shadow: 0 3px 12px rgba(232,184,109,0.35);
+  color: #1a0e00;
+  overflow: hidden;
+  position: relative;
+  animation: goldBtnPulse 1.2s ease-in-out infinite;
+}
+.direction-indicator.clickable::after {
+  content: '';
+  position: absolute;
+  top: -200%;
+  left: -100%;
+  width: 300%;
+  height: 300%;
+  background: linear-gradient(
+    45deg,
+    transparent 25%,
+    rgba(255,235,180,0.7) 32%,
+    rgba(255,245,210,0.9) 38%,
+    rgba(255,235,180,0.7) 44%,
+    transparent 51%
+  );
+  pointer-events: none;
+  animation: goldShimmer 1.8s ease-in-out infinite;
+}
+.direction-indicator.clickable i {
+  position: relative;
+  z-index: 1;
+}
+.direction-indicator.clickable:hover {
+  animation: none;
+  background: linear-gradient(135deg, #f5d48a 0%, #d4a24a 100%);
+  box-shadow: 0 5px 20px rgba(232,184,109,0.55);
+  transform: scale(1.08);
+}
+.direction-indicator.clickable:hover::after {
+  opacity: 0;
+}
+.direction-indicator.clickable:active {
+  animation: none;
+  transform: scale(0.93);
+  box-shadow: 0 1px 4px rgba(232,184,109,0.3);
+}
+
+@keyframes goldShimmer {
+  0%   { transform: translateX(-80%) translateY(-80%) rotate(35deg); }
+  100% { transform: translateX(80%) translateY(80%) rotate(35deg); }
+}
+@keyframes goldBtnPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 3px 12px rgba(232,184,109,0.35); }
+  50%      { transform: scale(1.2); box-shadow: 0 6px 30px rgba(232,184,109,0.7); }
 }
 
 /* Overlay de cambio de sentido — flecha gigante con rebote */
@@ -2272,38 +2328,6 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .panel-title-row .panel-title {
   margin-bottom: 0;
 }
-.dir-toggle {
-  display: flex;
-  gap: 4px;
-}
-.dir-tog {
-  width: 32px;
-  height: 32px;
-  border: 1.5px solid rgba(255,255,255,0.12);
-  border-radius: 8px;
-  background: rgba(255,255,255,0.05);
-  color: var(--text-dim);
-  font-size: 1.1rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  line-height: 1;
-}
-.dir-tog:hover:not(:disabled) {
-  background: rgba(255,255,255,0.12);
-  color: var(--cream);
-}
-.dir-tog.dir-active {
-  border-color: var(--gold);
-  background: rgba(232,184,109,0.18);
-  color: var(--gold);
-}
-.dir-tog:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
 
 /* ── Bid builder ── */
 .bid-builder {
@@ -2466,10 +2490,7 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   gap: 5px;
 }
 .face-row .face-picker { width: 100%; }
-.face-row .dir-toggle  { display: flex; justify-content: flex-end; gap: 4px; }
 
-/* Botón de dirección único para móvil — oculto en desktop */
-#btn-dir-mobile { display: none; }
 
 /* Contenedor de botones de acción */
 .action-btns  { display: flex; flex-direction: column; gap: 8px; }
@@ -3217,11 +3238,7 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   /* Face-row en móvil: pintas a la izquierda, botón de dirección a la derecha */
   .face-row { flex-direction: row; align-items: center; gap: 6px; }
   .face-row .face-picker { flex: 1; min-width: 0; }
-  .face-row .dir-toggle  { flex-shrink: 0; justify-content: flex-end; }
 
-  /* Ocultar botones CW/CCW de escritorio, mostrar toggle único */
-  #btn-dir-cw, #btn-dir-ccw { display: none; }
-  #btn-dir-mobile            { display: flex; }
 
   /* Face-picker: limitar tamaño de dado a ~40 px */
   .face-picker { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
@@ -3322,8 +3339,6 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   /* face-row en landscape: igual que portrait */
   .face-row { flex-direction: row; align-items: center; gap: 4px; }
   .face-row .face-picker { flex: 1; min-width: 0; }
-  #btn-dir-cw, #btn-dir-ccw { display: none; }
-  #btn-dir-mobile            { display: flex; }
 
   /* action-row1: misma fila */
   .action-row1 { flex-direction: row; align-items: center; gap: 4px; }

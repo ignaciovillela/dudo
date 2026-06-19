@@ -3276,35 +3276,18 @@ function updateBidDisplay() {
 
 // ══════════════════════════════════  CONTROLS  ════════════════════════════════
 function updateDirectionIndicator() {
-  const btnCW  = document.getElementById('btn-dir-cw');
-  const btnCCW = document.getElementById('btn-dir-ccw');
-  if (!btnCW || !btnCCW) return;
-
-  btnCW.classList.toggle('dir-active',  S.direction === 1);
-  btnCCW.classList.toggle('dir-active', S.direction === -1);
-
   const canChange = S.playerId === S.roundFirstPlayer && !S.hasFirstAction && S.phase === 'playing';
-  btnCW.disabled  = !canChange;
-  btnCCW.disabled = !canChange;
 
-  // Botón único de móvil: icono refleja la dirección actual, click la alterna
-  const btnMob = document.getElementById('btn-dir-mobile');
-  if (btnMob) {
-    const icon = btnMob.querySelector('i');
-    if (icon) icon.className = S.direction === 1 ? 'fa-solid fa-rotate-right' : 'fa-solid fa-rotate-left';
-    btnMob.disabled = !canChange;
-    btnMob.classList.toggle('dir-active', canChange);
-  }
-
-  // Indicador en la mesa (junto al banner)
   const ind = document.getElementById('direction-indicator');
-  if (ind) {
-    ind.innerHTML = S.direction === 1
-      ? '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>'
-      : '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>';
-    ind.title = S.direction === 1 ? 'Sentido horario' : 'Sentido antihorario';
-    ind.style.display = 'inline-flex';
-  }
+  if (!ind) return;
+
+  ind.innerHTML = S.direction === 1
+    ? '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>'
+    : '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>';
+  ind.title = S.direction === 1 ? 'Sentido horario (toca para cambiar)' : 'Sentido antihorario (toca para cambiar)';
+  ind.style.display = 'inline-flex';
+
+  ind.classList.toggle('clickable', canChange);
 }
 
 function diceValidasParaPaso(dice) {
@@ -3690,6 +3673,9 @@ function sendBid() {
 }
 
 function toggleDirection() {
+  if (S.isSpectator) return;
+  const canChange = S.playerId === S.roundFirstPlayer && !S.hasFirstAction && S.phase === 'playing';
+  if (!canChange) return;
   sendDirection(S.direction === 1 ? 'ccw' : 'cw');
 }
 
@@ -4257,7 +4243,7 @@ function positionPlayers() {
   // Margin keeps cards from being clipped by overflow:hidden on the table
   const margin = isPortraitMobile ? 30 : 56;
   const MAX_DIST = 150;
-  const MIN_CENTER_DIST = 150;
+  const MIN_CENTER_DIST = 120;
 
   // Posiciones de dados perdidos (oponentes + propio)
   const lostPositions = [];
