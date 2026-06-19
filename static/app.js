@@ -1788,6 +1788,26 @@ function onDirectionSet(msg) {
   log(`${name} eligió sentido ${arrow}`, 'system');
   updateDirectionIndicator();
   updateControls();
+  showDirectionEffect(msg.direction);
+}
+
+function showDirectionEffect(dir) {
+  const overlay = document.getElementById('direction-overlay');
+  if (!overlay) return;
+  const icon = overlay.querySelector('.dir-icon i');
+  if (icon) {
+    icon.className = dir === 'cw' ? 'fa-solid fa-rotate-right' : 'fa-solid fa-rotate-left';
+  }
+  overlay.style.display = '';
+  // Reiniciar animación re-clonando
+  const wrapper = overlay.querySelector('.dir-icon');
+  if (wrapper) {
+    const clone = wrapper.cloneNode(true);
+    wrapper.replaceWith(clone);
+  }
+  // Ocultar al terminar la animación (1s)
+  clearTimeout(overlay._hideTimer);
+  overlay._hideTimer = setTimeout(() => { overlay.style.display = 'none'; }, 1000);
 }
 
 function onReveal(msg) {
