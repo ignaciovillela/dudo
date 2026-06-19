@@ -3448,6 +3448,27 @@ function cancelPaso() {
   closePasoConfirmModal();
 }
 
+function openPasoDiceCountModal() {
+  const modal = document.getElementById('paso-dicecount-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closePasoDiceCountModal() {
+  const modal = document.getElementById('paso-dicecount-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function confirmPasoDiceCount() {
+  const skip = document.getElementById('paso-dicecount-skip')?.checked;
+  if (skip) localStorage.setItem('pasoDiceCountConfirmSkip', 'true');
+  closePasoDiceCountModal();
+  send({ type: 'paso' });
+}
+
+function cancelPasoDiceCount() {
+  closePasoDiceCountModal();
+}
+
 function confirmKickPlayer() {
   if (!S.isHost || !S.pendingKickTargetId) return;
   send({ type: 'kick_player', target_id: S.pendingKickTargetId });
@@ -3691,6 +3712,15 @@ function sendPaso() {
   const isMyTurn = S.currentPid === S.playerId && S.phase === 'playing';
   const canPaso = isMyTurn && !S.hasPassed;
   if (canPaso && !diceValidasParaPaso(S.myDice)) {
+    const diceCount = S.myDice ? S.myDice.length : 0;
+    if (diceCount < 5) {
+      if (localStorage.getItem('pasoDiceCountConfirmSkip') === 'true') {
+        send({ type: 'paso' });
+        return;
+      }
+      openPasoDiceCountModal();
+      return;
+    }
     if (localStorage.getItem('pasoConfirmSkip') === 'true') {
       send({ type: 'paso' });
       return;

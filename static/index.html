@@ -421,7 +421,7 @@
 <div id="paso-confirm-modal" class="stats-modal" style="display:none">
   <div class="stats-box">
     <h2><i class="fa-solid fa-forward" aria-hidden="true"></i> ¿Pasar sin escalera?</h2>
-    <p>Tus dados no tienen escalera, poker ni full. Si pasas, <strong>alguien podría dudar y perderás un dado</strong> si tu paso no es válido.</p>
+    <p>No tienes un paso válido, <strong>alguien podría dudar y perderás un dado</strong></p>
     <p>¿Estás seguro de que quieres pasar?</p>
     <label class="paso-confirm-skip-label">
       <input id="paso-confirm-skip" type="checkbox" /> No volver a mostrar
@@ -429,6 +429,21 @@
     <div class="lobby-actions">
       <button class="btn btn-gold" type="button" onclick="confirmPaso()">Sí, pasar</button>
       <button class="btn btn-sm" type="button" onclick="cancelPaso()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="paso-dicecount-modal" class="stats-modal" style="display:none">
+  <div class="stats-box">
+    <h2><i class="fa-solid fa-forward" aria-hidden="true"></i> No puedes pasar</h2>
+    <p>Solo se puede pasar cuando tienes <strong>5 dados</strong>.</p>
+    <p>¿Estás seguro de que quieres pasar?</p>
+    <label class="paso-confirm-skip-label">
+      <input id="paso-dicecount-skip" type="checkbox" /> No volver a mostrar
+    </label>
+    <div class="lobby-actions">
+      <button class="btn btn-gold" type="button" onclick="confirmPasoDiceCount()">Sí, pasar</button>
+      <button class="btn btn-sm" type="button" onclick="cancelPasoDiceCount()">Cancelar</button>
     </div>
   </div>
 </div>
