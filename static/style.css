@@ -1773,6 +1773,31 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   white-space: nowrap;
 }
 
+.player-ghost-cooldown {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(167,139,250,0.6);
+  z-index: 10;
+  pointer-events: none;
+  color: #e0d6ff;
+  background: rgba(88, 28, 135, 0.85);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.6);
+  box-shadow: 0 0 14px rgba(167,139,250,0.5), 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.my-area .player-ghost-cooldown {
+  bottom: -14px;
+  left: 50%;
+}
+
 .ghost-action-btns {
   display: flex;
   flex-direction: column;
@@ -1889,14 +1914,6 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   color: rgba(255,255,255,0.3);
 }
 .bv-die-wrap { /* big die display */ }
-.bv-wild {
-  font-size: 0.72rem;
-  color: var(--gold);
-  opacity: 0.85;
-  align-self: flex-end;
-  margin-bottom: 4px;
-  letter-spacing: 0.02em;
-}
 
 /* ── Spectator quick-chat display (center of table, below bid-area) ── */
 .spectator-qc-display {
@@ -3206,7 +3223,6 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   .notif-toggle { bottom: auto; top: 12px; left: 48px; }
 
   /* ── Elementos no esenciales: ocultar para ganar espacio ── */
-  #bv-wild          { display: none !important; }  /* JS puede sobreescribir, de ahí !important */
   #current-bid-prob { display: block; font-size: 0.65rem; }
   #spectator-count  { display: none; }
   .player-bot-tag   { display: none; }
@@ -3374,7 +3390,6 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   .wait-msg      { font-size: 0.72rem; margin-top: 2px; }
 
   /* Elementos no esenciales */
-  #bv-wild          { display: none !important; }
   #current-bid-prob { display: block; font-size: 0.65rem; }
   #spectator-count  { display: none; }
   .player-bot-tag   { display: none; }

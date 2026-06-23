@@ -257,12 +257,17 @@ class GameManager:
 
             if game.phase in {"playing", "reveal"}:
                 # Reenviar estado actual de la partida al jugador reconectado
+                reconnect_players = {p: pl.to_public_dict() for p, pl in game.players.items()}
+                if game.rules.allow_ghost_gavilan:
+                    for pid, pl in game.players.items():
+                        if pl.dice_count <= 0:
+                            reconnect_players[pid]["ghost_cooldown"] = game.ghost_cooldown_for(pid)
                 await self._send(room_id, reconnect_id, {
                     "type": "your_dice",
                     "dice": old.dice,
                     "round_number": game.round_number,
                     "total_dice": game.total_dice(),
-                    "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
+                    "players": reconnect_players,
                     "has_passed": reconnect_id in game.passed_players,
                 })
                 await self._announce_turn(room_id, game)
@@ -1392,9 +1397,14 @@ class GameManager:
         }
 
     def _spectator_state_payload(self, game: Game) -> dict:
+        players_dict = {pid: p.to_public_dict() for pid, p in game.players.items()}
+        if game.rules.allow_ghost_gavilan:
+            for pid, pl in game.players.items():
+                if pl.dice_count <= 0:
+                    players_dict[pid]["ghost_cooldown"] = game.ghost_cooldown_for(pid)
         return {
             "phase": game.phase,
-            "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
+            "players": players_dict,
             "player_order": game.player_order,
             "rules": game.rules.to_dict(),
             "round_number": game.round_number,
@@ -1436,6 +1446,11 @@ class GameManager:
         return None
 
     async def _send_dice(self, room_id: str, game: Game):
+        players_dict = {p: pl.to_public_dict() for p, pl in game.players.items()}
+        if game.rules.allow_ghost_gavilan:
+            for pid, pl in game.players.items():
+                if pl.dice_count <= 0:
+                    players_dict[pid]["ghost_cooldown"] = game.ghost_cooldown_for(pid)
         for pid, player in game.players.items():
             if player.connected:
                 payload = {
@@ -1444,7 +1459,7 @@ class GameManager:
                     "round_number": game.round_number,
                     "total_dice": game.total_dice(),
                     "initial_total_dice": game.initial_total_dice,
-                    "players": {p: pl.to_public_dict() for p, pl in game.players.items()},
+                    "players": players_dict,
                 }
                 if player.dice_count <= 0 and game.rules.allow_ghost_gavilan:
                     payload["ghost_cooldown"] = game.ghost_cooldown_for(pid)

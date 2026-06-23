@@ -22,8 +22,6 @@ function makeDie(value, opts = {}) {
 
   if (!value) {
     el.classList.add('die-down');
-    // Fill grid so ::after trick works
-    for (let i = 0; i < 9; i++) el.appendChild(document.createElement('div'));
     return el;
   }
 
@@ -1268,7 +1266,8 @@ function onGhostFailed(msg) {
   S.ghostCooldown = msg.ghost_cooldown;
   S.ghostFailures = msg.ghost_failures;
   updateEliminatedGhostUI();
-  showToast('💀 Gavilán fantasma falló — nadie se dio cuenta', true);
+  updateMyAreaGhostBadge();
+  showToast('👻 Gavilán fantasma falló — nadie se dio cuenta', true);
 }
 
 function onConnected(msg) {
@@ -1341,7 +1340,7 @@ function onJoinedSpectator(msg) {
   showScreen('game');
   applySpectatorMode();
   renderOtherPlayers();
-  renderMyDice();
+  if (!S.isSpectator) renderMyDice();
   maybeInitEmojiHover();
   updateBidDisplay();
   document.getElementById('disp-round').textContent = S.roundNum;
@@ -1361,7 +1360,7 @@ function onSpectatorState(msg) {
   updateSpectatorCount();
   if (msg.turn) onTurn(msg.turn);
   renderOtherPlayers();
-  renderMyDice();
+  if (!S.isSpectator) renderMyDice();
   updateBidDisplay();
   document.getElementById('disp-round').textContent = S.roundNum;
   document.getElementById('disp-total').textContent = S.totalDice;
@@ -1945,7 +1944,7 @@ function onReveal(msg) {
   log(resultText, resultClass);
 
   if (msg.ghost_revival) {
-    log(`💀 ¡${msg.challenger_name} revivió con Gavilán Fantasma!`, 'win');
+    log(`👻 ¡${msg.challenger_name} revivió con Gavilán Fantasma!`, 'win');
   }
 
   if (resultClass === 'win') playSfx('win');
@@ -3201,6 +3200,23 @@ function renderOtherPlayers() {
     card.appendChild(headerEl);
     if (offlineEl) card.appendChild(offlineEl);
     card.appendChild(diceRow);
+    const ghostEnabled = !!(S.rules?.allow_ghost_gavilan && S.rules?.allow_gavilan);
+    if (ghostEnabled && p.dice_count <= 0 && p.ghost_cooldown !== undefined) {
+      const ghostBadge = document.createElement('div');
+      ghostBadge.className = 'player-ghost-cooldown';
+      ghostBadge.dataset.ghostFor = pid;
+      if (p.ghost_cooldown > 0) {
+        const diceOk = S.totalDice > Math.floor(S.initialTotalDice * 0.2);
+        if (!diceOk) {
+          ghostBadge.textContent = '👻 Pocos dados para Fantasma';
+        } else {
+          ghostBadge.textContent = `👻 En ${p.ghost_cooldown} ronda${p.ghost_cooldown !== 1 ? 's' : ''}`;
+        }
+      } else {
+        ghostBadge.textContent = '👻 disponible';
+      }
+      container.appendChild(ghostBadge);
+    }
     if (actionBadge) card.appendChild(actionBadge);
     card.appendChild(emojiBar);
     container.appendChild(card);
@@ -3267,9 +3283,6 @@ function updateBidDisplay() {
   const dieWrap = document.getElementById('bv-die');
   dieWrap.innerHTML = '';
   dieWrap.appendChild(makeDie(S.currentBid.face, { size: 'lg' }));
-
-  document.getElementById('bv-wild').style.display =
-    S.currentBid.face !== 1 ? 'inline' : 'none';
 
   updateCurrentBidProb();
 }
@@ -3810,6 +3823,29 @@ function applyEliminatedMode(eliminated) {
   if (bidPanel)  bidPanel.style.display  = eliminated ? 'none' : '';
   if (elimPanel) elimPanel.style.display = eliminated ? 'flex' : 'none';
   if (eliminated) updateEliminatedGhostUI();
+  updateMyAreaGhostBadge();
+}
+
+function updateMyAreaGhostBadge() {
+  const el = document.getElementById('my-ghost-cooldown');
+  if (!el) return;
+  const ghostEnabled = !!(S.rules?.allow_ghost_gavilan && S.rules?.allow_gavilan);
+  const amEliminated = (S.players[S.playerId]?.dice_count ?? 1) <= 0;
+  if (ghostEnabled && amEliminated && S.ghostCooldown !== undefined) {
+    const diceOk = S.totalDice > Math.floor(S.initialTotalDice * 0.2);
+    if (S.ghostCooldown > 0) {
+      if (!diceOk) {
+        el.textContent = '👻 Pocos dados para Fantasma';
+      } else {
+        el.textContent = `👻 En ${S.ghostCooldown} ronda${S.ghostCooldown !== 1 ? 's' : ''}`;
+      }
+    } else {
+      el.textContent = '👻 Disponible';
+    }
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function updateEliminatedGhostUI() {
@@ -3820,13 +3856,13 @@ function updateEliminatedGhostUI() {
   if (cooldownEl) {
     if (ghostEnabled) {
       if (S.ghostCooldown > 0) {
-        cooldownEl.textContent = `💀 Fantasma: disponible en ${S.ghostCooldown} ronda${S.ghostCooldown !== 1 ? 's' : ''}`;
+        cooldownEl.textContent = `👻 Fantasma: disponible en ${S.ghostCooldown} ronda${S.ghostCooldown !== 1 ? 's' : ''}`;
         cooldownEl.style.display = '';
       } else if (!diceOk) {
-        cooldownEl.textContent = '💀 Muy pocos dados en juego para gavilán fantasma';
+        cooldownEl.textContent = '👻 Muy pocos dados en juego para gavilán fantasma';
         cooldownEl.style.display = '';
       } else {
-        cooldownEl.textContent = '💀 Gavilán fantasma disponible';
+        cooldownEl.textContent = '👻 Gavilán fantasma disponible';
         cooldownEl.style.display = '';
       }
     } else {
@@ -3837,6 +3873,7 @@ function updateEliminatedGhostUI() {
   if (ghostBtns) {
     ghostBtns.style.display = (ghostEnabled && S.ghostCooldown === 0 && diceOk) ? 'flex' : 'none';
   }
+  updateMyAreaGhostBadge();
 }
 
 // ══════════════════════════════════  LOBBY ACTIONS  ════════════════════════════
@@ -4256,10 +4293,11 @@ function positionPlayers() {
   const isPortraitMobile = W < 769 && W < H;
 
   // Centro y radios de la elipse (coincide con el ::after del CSS)
+  // En modo espectador se estira un poco la elipse y se baja el centro
   const cx = W * 0.50;
-  const cy = H * 0.47;
+  const cy = H * (0.47 + (S.isSpectator ? 0.03 : 0));
   const rx = W * (isPortraitMobile ? 0.38 : 0.42);
-  const ry = H * (isPortraitMobile ? 0.30 : 0.32);
+  const ry = H * (isPortraitMobile ? 0.30 : 0.32) * (S.isSpectator ? 1.15 : 1);
 
   const cards = Array.from(table.querySelectorAll('.player-card[data-pid]'));
   const N = cards.length;
@@ -4267,8 +4305,10 @@ function positionPlayers() {
 
   // Arco superior: de ~210° a ~330° pasando por 270° (arriba en coords de pantalla)
   // Para N jugadores: spread proporcional, máx 280°
-  const arcDeg = N === 1 ? 0 : Math.min(280, 100 + (N - 1) * 40);
-  const startDeg = 270 - arcDeg / 2;
+  // En modo espectador se usa el círculo completo (360°) para aprovechar toda la mesa
+  const fullCircle = S.isSpectator;
+  const arcDeg = fullCircle ? 360 : (N === 1 ? 0 : Math.min(280, 100 + (N - 1) * 40));
+  const startDeg = fullCircle ? 90 : (270 - arcDeg / 2);
 
   // Margin keeps cards from being clipped by overflow:hidden on the table
   const margin = isPortraitMobile ? 30 : 56;
@@ -4279,7 +4319,7 @@ function positionPlayers() {
   const lostPositions = [];
 
   cards.forEach((card, i) => {
-    const deg = N === 1 ? 270 : startDeg + i * (arcDeg / (N - 1));
+    const deg = N === 1 ? 270 : (fullCircle ? startDeg + i * (360 / N) : startDeg + i * (arcDeg / (N - 1)));
     const rad = deg * Math.PI / 180;
     const rawX = cx + rx * Math.cos(rad);
     const rawY = cy + ry * Math.sin(rad);
@@ -4290,29 +4330,38 @@ function positionPlayers() {
 
     const pid = card.dataset.pid;
     const lost = table.querySelector(`.player-lost-dice[data-for="${pid}"]`);
-    if (!lost) return;
-    const dist = Math.hypot(cx - rawX, cy - rawY);
-    const t = dist > 0 ? Math.min(0.50, MAX_DIST / dist) : 0.50;
-    const lx = rawX + (cx - rawX) * t;
-    const ly = rawY + (cy - rawY) * t;
-    lostPositions.push({ el: lost, lx, ly });
+    if (lost) {
+      const dist = Math.hypot(cx - rawX, cy - rawY);
+      const t = dist > 0 ? Math.min(0.50, MAX_DIST / dist) : 0.50;
+      const lx = rawX + (cx - rawX) * t;
+      const ly = rawY + (cy - rawY) * t;
+      lostPositions.push({ el: lost, lx, ly });
+    }
+    const ghostBadge = table.querySelector(`[data-ghost-for="${pid}"]`);
+    if (ghostBadge) {
+      const cardH = card.offsetHeight;
+      ghostBadge.style.left = `${x}px`;
+      ghostBadge.style.top = `${y + cardH / 2 + 14}px`;
+    }
   });
 
-  // Propios dados perdidos
-  const myLost = document.getElementById('my-lost-dice');
-  const myArea = document.querySelector('.my-area');
-  let myPos = null;
-  if (myLost && myArea) {
-    const areaRect = myArea.getBoundingClientRect();
-    const tableRect = table.getBoundingClientRect();
-    const ax = areaRect.left + areaRect.width / 2 - tableRect.left;
-    const ay = areaRect.top + areaRect.height / 2 - tableRect.top;
-    const myDist = Math.hypot(cx - ax, cy - ay);
-    const myT = myDist > 0 ? Math.min(0.50, MAX_DIST / myDist) : 0.50;
-    const mlx = ax + (cx - ax) * myT;
-    const mly = ay + (cy - ay) * myT;
-    myPos = { el: myLost, lx: mlx, ly: mly };
-    lostPositions.push(myPos);
+  // Propios dados perdidos (solo si no es espectador)
+  if (!S.isSpectator) {
+    const myLost = document.getElementById('my-lost-dice');
+    const myArea = document.querySelector('.my-area');
+    let myPos = null;
+    if (myLost && myArea) {
+      const areaRect = myArea.getBoundingClientRect();
+      const tableRect = table.getBoundingClientRect();
+      const ax = areaRect.left + areaRect.width / 2 - tableRect.left;
+      const ay = areaRect.top + areaRect.height / 2 - tableRect.top;
+      const myDist = Math.hypot(cx - ax, cy - ay);
+      const myT = myDist > 0 ? Math.min(0.50, MAX_DIST / myDist) : 0.50;
+      const mlx = ax + (cx - ax) * myT;
+      const mly = ay + (cy - ay) * myT;
+      myPos = { el: myLost, lx: mlx, ly: mly };
+      lostPositions.push(myPos);
+    }
   }
 
   // Si alguno queda muy cerca del centro, ninguno muestra dados perdidos
