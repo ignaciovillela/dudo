@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import WebSocket
 
-from game.config import CHALLENGE_CONSECUTIVE_MS, CHALLENGE_GUARD_MS, DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
+from game.config import CHALLENGE_CONSECUTIVE_MS, CHALLENGE_GUARD_MS, DEBUG_MODE, DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 from game.actions import CalzoAction, DudoAction, DudoBidResult, DudoPasoResult
@@ -58,6 +58,8 @@ class GameManager:
         self.disconnect_resolution_tasks: dict[tuple[str, str], asyncio.Task] = {}
         self.room_cleanup_tasks: dict[str, asyncio.Task] = {}
         self.turn_started_at: dict[str, float] = {}   # room_id → monotonic timestamp
+        self.admin_sessions: dict[str, set[str]] = {}  # room_id → {player_id, ...} sesiones admin
+        self.paused_rooms: set[str] = set()  # salas pausadas por admin
 
     # ------------------------------------------------------------------ connect
 
@@ -103,6 +105,9 @@ class GameManager:
             })
             return
 
+        # Limpiar sesión admin si corresponde
+        self.admin_sessions.get(room_id, set()).discard(player_id)
+
         if player_id not in game.players:
             return
 
@@ -142,12 +147,29 @@ class GameManager:
         if not game:
             return
         msg_type = msg.get("type")
+
+        # ── Debug/admin messages (solo cuando DEBUG_MODE=true) ──
+        if DEBUG_MODE and msg_type == "debug_auth":
+            self.admin_sessions.setdefault(room_id, set()).add(player_id)
+            await self._send_debug_full_state(room_id, player_id)
+            return
+        if DEBUG_MODE and msg_type == "debug_cmd" and player_id in self.admin_sessions.get(room_id, set()):
+            await self._h_debug_cmd(room_id, player_id, game, msg)
+            return
+
+        # ── Sala pausada: los bots no actúan ──
+        if room_id in self.paused_rooms and msg_type in {"bid", "dudo", "calzo", "paso", "direction", "ready", "start", "select_bid"}:
+            player = game.players.get(player_id)
+            if player and player.is_bot:
+                return
+
         _spectator_allowed = {"join", "emoji", "quick_chat", "become_player"}
-        # El host conserva privilegios aunque sea espectador en el lobby
         if player_id in game.spectators and game.phase == "lobby" and self._host_id(room_id, game) == player_id:
             _spectator_allowed |= {"set_rules", "kick_player", "add_bot", "remove_bot", "start"}
         if player_id in game.spectators and msg_type not in _spectator_allowed:
             return
+        if player_id in self.admin_sessions.get(room_id, set()):
+            return  # admin no participa en el juego normal
         if msg_type not in {"join", "connected", "select_bid", "become_spectator", "become_player", "add_bot", "remove_bot", "leave", "reorder"} and not self._allow_message(player_id):
             return
         handlers = {
@@ -1470,6 +1492,9 @@ class GameManager:
                 "type": "spectator_state",
                 **self._spectator_state_payload(game),
             })
+        # Enviar estado completo a sesiones admin
+        for aid in list(self.admin_sessions.get(room_id, set())):
+            await self._send_debug_full_state(room_id, aid)
 
     async def _announce_turn(self, room_id: str, game: Game):
         self.turn_started_at[room_id] = time.monotonic()
@@ -1502,6 +1527,8 @@ class GameManager:
                 self.games.pop(room_id, None)
                 self.connections.pop(room_id, None)
                 self.hosts.pop(room_id, None)
+                self.admin_sessions.pop(room_id, None)
+                self.paused_rooms.discard(room_id)
                 log.info("[room] %s limpiada tras gracia de desconexión", room_id)
             except asyncio.CancelledError:
                 return
@@ -1745,6 +1772,8 @@ class GameManager:
         })
 
     async def _run_bot_action(self, room_id: str, game: Game, bot_id: str):
+        if room_id in self.paused_rooms:
+            return  # sala pausada, el bot no actúa
         # Cambio de sentido: solo si el bot es round_first_player y no hay acción aún
         if (game.round_first_player == bot_id
                 and game.current_bid is None
@@ -1790,6 +1819,134 @@ class GameManager:
             self._cancel_turn_timeout(room_id)
             await self._h_bid(room_id, bot_id, game, {"quantity": qty, "face": face})
             await self._maybe_bot_chat(room_id, bot_id, "bid")
+
+    # ------------------------------------------------------------------ debug / admin
+
+    async def _send_debug_full_state(self, room_id: str, admin_pid: str):
+        game = self.games.get(room_id)
+        if not game:
+            return
+        players = []
+        for pid in game.player_order:
+            p = game.players.get(pid)
+            if not p:
+                continue
+            players.append({
+                "id": p.id,
+                "name": p.name,
+                "avatar": p.avatar,
+                "dice_count": p.dice_count,
+                "dice": list(p.dice) if p.dice else [],
+                "connected": p.connected,
+                "is_bot": p.is_bot,
+            })
+        bid_dict = game.current_bid.to_dict() if game.current_bid else None
+        await self._send(room_id, admin_pid, {
+            "type": "debug_state",
+            "phase": game.phase,
+            "round_number": game.round_number,
+            "player_order": game.player_order,
+            "players": players,
+            "paused": room_id in self.paused_rooms,
+            "current_bid": bid_dict,
+            "passed_players": list(game.passed_players),
+        })
+
+    async def _h_debug_cmd(self, room_id: str, admin_pid: str, game, msg: dict):
+        cmd = msg.get("cmd")
+        if not isinstance(cmd, str):
+            return
+
+        # ── Comandos que no dependen de un jugador ──
+        if cmd == "set_paused":
+            paused = msg.get("paused", False)
+            if paused:
+                self.paused_rooms.add(room_id)
+            else:
+                self.paused_rooms.discard(room_id)
+                if game.phase == "playing":
+                    current = game.current_player_id()
+                    if current and current in game.players and game.players[current].is_bot:
+                        self._cancel_turn_timeout(room_id)
+                        await self._announce_turn(room_id, game)
+            await self._broadcast(room_id, {"type": "debug_paused", "paused": paused})
+            for aid in list(self.admin_sessions.get(room_id, set())):
+                await self._send_debug_full_state(room_id, aid)
+            return
+
+        if cmd == "clear_bid":
+            game.current_bid = None
+            game.last_paso = None
+            game.passed_players.clear()
+            await self._announce_turn(room_id, game)
+            for aid in list(self.admin_sessions.get(room_id, set())):
+                await self._send_debug_full_state(room_id, aid)
+            return
+
+        if cmd == "set_bid":
+            qty = msg.get("quantity")
+            face = msg.get("face")
+            if isinstance(qty, int) and isinstance(face, int) and 1 <= face <= 6 and qty >= 1:
+                game.current_bid = Bid(quantity=qty, face=face, player_id="admin", player_name="Admin")
+                game.last_paso = None
+                await self._announce_turn(room_id, game)
+                for aid in list(self.admin_sessions.get(room_id, set())):
+                    await self._send_debug_full_state(room_id, aid)
+            return
+
+        # ── Comandos que requieren target_id ──
+        target_id = msg.get("target_id")
+        if not isinstance(target_id, str):
+            return
+        player = game.players.get(target_id)
+        if not player:
+            return
+
+        if cmd == "set_passed":
+            passed = msg.get("passed", False)
+            if passed:
+                game.passed_players.add(target_id)
+            else:
+                game.passed_players.discard(target_id)
+            await self._announce_turn(room_id, game)
+            for aid in list(self.admin_sessions.get(room_id, set())):
+                await self._send_debug_full_state(room_id, aid)
+            return
+
+        if cmd == "set_dice_count":
+            delta = msg.get("delta", 0)
+            if not isinstance(delta, int):
+                return
+            new_count = max(0, min(5, player.dice_count + delta))
+            old_count = player.dice_count
+            player.dice_count = new_count
+            diff = new_count - old_count
+            if diff > 0:
+                player.dice.extend(random.randint(1, 6) for _ in range(diff))
+            elif diff < 0:
+                player.dice = player.dice[:new_count]
+            if player.dice_count <= 0:
+                player.dice = []
+
+        elif cmd == "set_dice":
+            dice = msg.get("dice")
+            if not isinstance(dice, list):
+                return
+            dice = [int(d) for d in dice if isinstance(d, (int, float)) and 1 <= int(d) <= 6][:5]
+            player.dice = dice
+            player.dice_count = len(dice)
+
+        else:
+            return
+
+        # Broadcast updated state to all regular players
+        await self._send_dice(room_id, game)
+        if game.phase in {"playing", "reveal"}:
+            await self._announce_turn(room_id, game)
+
+        # Send updated full state to all connected admins
+        for aid in list(self.admin_sessions.get(room_id, set())):
+            await self._send_debug_full_state(room_id, aid)
 
     # ------------------------------------------------------------------ transport
 

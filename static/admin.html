@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin — Dudo</title>
+<link rel="icon" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a1a0f;--bg2:#0f2318;--felt:#1e5c38;--gold:#e8b86d;--danger:#c0392b;--danger-dk:#992d22;--warn:#e67e22;--text:#e8e8e8;--text-dim:#8a9bb0;--border:rgba(255,255,255,0.08);--radius:12px;--shadow:0 8px 32px rgba(0,0,0,0.5)}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:var(--shadow)}
+header h1{font-size:1.1rem;font-weight:700;color:var(--gold);letter-spacing:0.5px;white-space:nowrap}
+header h1 small{font-weight:400;font-size:0.7rem;color:var(--text-dim);margin-left:6px}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1}
+.room-input{display:flex;gap:6px;align-items:center}
+.room-input label{font-size:0.8rem;color:var(--text-dim)}
+.room-input input{background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:0.8rem;width:100px;outline:none;transition:border-color 0.2s}
+.room-input input:focus{border-color:var(--gold)}
+.room-input input:disabled{opacity:0.5}
+.btn{background:var(--felt);color:var(--text);border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:600;transition:background 0.2s;white-space:nowrap}
+.btn:hover{background:var(--felt-light)}
+.btn:disabled{opacity:0.4;cursor:default}
+.btn-warn{background:var(--warn)}
+.btn-warn:hover{background:#d68910}
+.btn-danger{background:var(--danger)}
+.btn-danger:hover{background:var(--danger-dk)}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{background:rgba(255,255,255,0.06)}
+.btn-pause{background:var(--warn);color:#fff}
+.btn-pause.active{background:var(--danger);color:#fff}
+.ws-status{display:inline-flex;align-items:center;gap:4px;font-size:0.7rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap}
+.ws-status.connected{color:#5fc45f;border-color:rgba(95,196,95,0.3)}
+.ws-status.disconnected{color:var(--danger);border-color:rgba(192,57,43,0.3)}
+.ws-status.connecting{color:var(--gold);border-color:rgba(232,184,109,0.3)}
+#main{max-width:960px;margin:16px auto;padding:0 12px}
+.header-info{display:flex;gap:14px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.header-info .tag{font-size:0.8rem;color:var(--text-dim)}
+.header-info .tag strong{color:var(--gold)}
+.pause-banner{background:rgba(192,57,43,0.15);border:1px solid rgba(192,57,43,0.4);border-radius:var(--radius);padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--danger)}
+.pause-banner .btn{margin-left:auto}
+.bid-editor{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bid-editor .label{font-size:0.8rem;color:var(--text-dim)}
+.bid-editor input{background:rgba(0,0,0,0.3);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:0.85rem;width:50px;outline:none;text-align:center}
+.bid-editor input:focus{border-color:var(--gold)}
+.bid-editor .bid-display{font-size:0.9rem;color:var(--gold);font-weight:600}
+.players{display:flex;flex-direction:column;gap:8px}
+.player-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:var(--shadow)}
+.player-card .avatar{font-size:1.4rem;line-height:1;width:32px;text-align:center;flex-shrink:0}
+.player-card .name{font-weight:600;font-size:0.95rem;min-width:70px;flex:1 1 auto}
+.player-card .name .bot-tag{font-size:0.65rem;color:var(--text-dim);font-weight:400;margin-left:4px}
+.player-card .name .passed-badge{display:inline-block;font-size:0.6rem;background:rgba(46,204,113,0.2);color:#5fc45f;padding:1px 6px;border-radius:999px;margin-left:6px;cursor:pointer;transition:background 0.15s}
+.player-card .name .passed-badge.off{background:rgba(255,255,255,0.06);color:var(--text-dim)}
+.player-card .name .passed-badge:hover{background:rgba(46,204,113,0.35)}
+.player-card .name .passed-badge.off:hover{background:rgba(255,255,255,0.12)}
+.player-card .status{font-size:0.7rem;padding:2px 6px;border-radius:999px;background:rgba(0,0,0,0.2);flex-shrink:0}
+.player-card .status.on{color:#5fc45f}
+.player-card .status.off{color:var(--danger)}
+.dice-section{display:flex;align-items:center;gap:10px;flex-wrap:nowrap;flex-shrink:0}
+.dice-faces{display:flex;gap:4px;flex-wrap:nowrap}
+.die-box{width:30px;height:30px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:5px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;font-size:0.85rem;color:var(--gold);transition:background 0.15s,border-color 0.15s,transform 0.1s;user-select:none}
+.die-box:hover{background:rgba(232,184,109,0.12);border-color:var(--gold);transform:scale(1.12)}
+.dice-controls{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.dice-controls .count{font-size:1rem;font-weight:700;min-width:24px;text-align:center;color:var(--gold)}
+.dice-controls .btn-sm{background:rgba(255,255,255,0.08);border:1px solid var(--border);color:var(--text);width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:0.9rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;transition:background 0.15s;flex-shrink:0;line-height:1}
+.dice-controls .btn-sm:hover{background:rgba(255,255,255,0.15)}
+.dice-controls .btn-sm.minus:hover{border-color:var(--danger);color:var(--danger)}
+.dice-controls .btn-sm.plus:hover{border-color:#5fc45f;color:#5fc45f}
+.no-room{text-align:center;padding:60px 0;color:var(--text-dim)}
+.no-room p{font-size:0.85rem;margin-top:6px}
+.toast{position:fixed;bottom:16px;right:16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:0.8rem;color:var(--gold);box-shadow:var(--shadow);z-index:999;opacity:0;transition:opacity 0.3s}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>🛠 Admin <small>Debug</small></h1>
+  <div class="toolbar">
+    <button class="btn btn-outline" id="btn-pause" onclick="togglePause()" style="display:none">⏸ Pausar</button>
+    <span id="ws-status" class="ws-status disconnected">🔴 Desconectado</span>
+  </div>
+  <div class="room-input">
+    <label for="inp-room">Sala:</label>
+    <input id="inp-room" type="text" placeholder="ej: sala01" maxlength="20" autofocus>
+    <button class="btn" id="btn-connect" onclick="connectRoom()">Conectar</button>
+  </div>
+</header>
+<div id="main"><div class="no-room"><h2>🔌 Ingresa un código de sala y conecta</h2></div></div>
+<div id="toast" class="toast"></div>
+<script>
+let ws = null;
+let currentRoom = '';
+let myAdminId = null;
+let playersData = [];
+let currentPhase = 'lobby';
+let currentRound = 0;
+let paused = false;
+let currentBid = null;
+let passedSet = new Set();
+
+function connectRoom() {
+  const inp = document.getElementById('inp-room');
+  const room = inp.value.trim().slice(0, 20);
+  if (!room) { showToast('Ingresa un código de sala'); return; }
+  if (ws) { ws.close(); ws = null; }
+  currentRoom = room;
+  setStatus('connecting', '🟡 Conectando...');
+  document.getElementById('btn-connect').disabled = true;
+  inp.disabled = true;
+  document.getElementById('btn-pause').style.display = 'none';
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${room}`);
+
+  ws.onopen = () => {
+    setStatus('connected', '🟢 Conectado');
+    showToast(`Conectado a sala ${room}`);
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleMsg(msg);
+  };
+
+  ws.onclose = () => {
+    setStatus('disconnected', '🔴 Desconectado');
+    document.getElementById('btn-connect').disabled = false;
+    document.getElementById('inp-room').disabled = false;
+    document.getElementById('btn-pause').style.display = 'none';
+    document.getElementById('main').innerHTML = '<div class="no-room"><h2>🔌 Desconectado</h2><p>Presiona Conectar para reconectar</p></div>';
+    ws = null;
+  };
+
+  ws.onerror = () => {
+    showToast('Error de conexión', true);
+  };
+}
+
+function setStatus(cls, label) {
+  const el = document.getElementById('ws-status');
+  el.className = 'ws-status ' + cls;
+  el.textContent = label;
+}
+
+function togglePause() {
+  if (!ws) return;
+  ws.send(JSON.stringify({
+    type: 'debug_cmd',
+    cmd: 'set_paused',
+    paused: !paused,
+  }));
+}
+
+function handleMsg(msg) {
+  switch (msg.type) {
+    case 'connected':
+      myAdminId = msg.player_id;
+      ws.send(JSON.stringify({type: 'debug_auth'}));
+      break;
+
+    case 'debug_state':
+      playersData = msg.players || [];
+      currentPhase = msg.phase || currentPhase;
+      currentRound = msg.round_number || currentRound;
+      paused = !!msg.paused;
+      currentBid = msg.current_bid || null;
+      passedSet = new Set(msg.passed_players || []);
+      updatePauseBtn();
+      render();
+      break;
+
+    case 'debug_paused':
+      paused = !!msg.paused;
+      updatePauseBtn();
+      render();
+      break;
+
+    case 'player_joined':
+      {
+        const p = msg.player || msg;
+        playersData.push({
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar || '🎲',
+          dice_count: p.dice_count ?? 5,
+          dice: [],
+          connected: p.connected !== false,
+          is_bot: p.is_bot || false,
+        });
+        render();
+      }
+      break;
+
+    case 'player_kicked':
+    case 'player_left':
+      playersData = playersData.filter(p => p.id !== msg.player_id);
+      render();
+      break;
+
+    case 'player_disconnected':
+      {
+        const p = playersData.find(p => p.id === msg.player_id);
+        if (p) p.connected = false;
+        render();
+      }
+      break;
+
+    case 'player_reconnected':
+      {
+        const p = playersData.find(p => p.id === msg.player_id);
+        if (p) p.connected = true;
+        render();
+      }
+      break;
+
+    case 'player_renamed':
+      {
+        const p = playersData.find(p => p.id === msg.player_id);
+        if (p) { p.name = msg.name; p.avatar = msg.avatar || p.avatar; }
+        render();
+      }
+      break;
+
+    case 'player_eliminated':
+      {
+        const p = playersData.find(p => p.id === msg.player_id);
+        if (p) { p.dice_count = 0; p.dice = []; }
+        render();
+      }
+      break;
+
+    case 'reordered':
+      {
+        const order = msg.player_order || [];
+        playersData.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+        render();
+      }
+      break;
+
+    case 'game_started':
+      currentPhase = 'playing';
+      currentRound = 1;
+      render();
+      break;
+
+    case 'new_round':
+      currentRound = msg.round_number || currentRound;
+      render();
+      break;
+
+    case 'reveal':
+      currentPhase = 'reveal';
+      render();
+      setTimeout(() => {
+        if (currentPhase === 'reveal') currentPhase = 'playing';
+        render();
+      }, 7000);
+      break;
+
+    case 'game_over':
+      currentPhase = 'lobby';
+      render();
+      break;
+  }
+}
+
+function updatePauseBtn() {
+  const btn = document.getElementById('btn-pause');
+  btn.style.display = 'inline-block';
+  btn.className = 'btn' + (paused ? ' btn-danger active' : ' btn-outline');
+  btn.textContent = paused ? '▶ Reanudar' : '⏸ Pausar';
+}
+
+function render() {
+  const main = document.getElementById('main');
+  if (!main) return;
+  const phaseLabel = {lobby: '🏠 Lobby', playing: '🎲 Jugando', reveal: '👀 Revelando'};
+
+  let html = '<div class="header-info">';
+  html += `<span class="tag">Fase: <strong>${phaseLabel[currentPhase] || currentPhase}</strong></span>`;
+  html += `<span class="tag">Ronda: <strong>${currentRound}</strong></span>`;
+  html += `<span class="tag">Jugadores: <strong>${playersData.length}</strong></span>`;
+  html += '</div>';
+
+  if (paused) {
+    html += '<div class="pause-banner">⏸ Juego pausado — los bots no actúan</div>';
+  }
+
+  // Bid editor
+  html += '<div class="bid-editor">';
+  html += '<span class="label">💎 Apuesta actual:</span>';
+  if (currentBid) {
+    html += `<span class="bid-display">${currentBid.quantity}x ${currentBid.face} (por ${esc(currentBid.player_name || '?')})</span>`;
+    html += `<input id="bid-qty" type="number" min="1" max="20" value="${currentBid.quantity}" style="width:44px">`;
+    html += `<input id="bid-face" type="number" min="1" max="6" value="${currentBid.face}" style="width:44px">`;
+    html += `<button class="btn" onclick="applyBid()">Aplicar</button>`;
+    html += `<button class="btn btn-danger" onclick="clearBid()">Limpiar</button>`;
+  } else {
+    html += '<span class="bid-display" style="color:var(--text-dim)">— ninguna —</span>';
+    html += `<input id="bid-qty" type="number" min="1" max="20" value="2" style="width:44px">`;
+    html += `<input id="bid-face" type="number" min="1" max="6" value="3" style="width:44px">`;
+    html += `<button class="btn" onclick="applyBid()">Poner</button>`;
+    html += `<button class="btn btn-danger" onclick="clearBid()" disabled>Limpiar</button>`;
+  }
+  html += '</div>';
+
+  html += '<div class="players">';
+  for (const p of playersData) {
+    const connected = p.connected ? '🟢' : '🔴';
+    const botTag = p.is_bot ? '<span class="bot-tag">🤖 bot</span>' : '';
+    const hasPassed = passedSet.has(p.id);
+    const passedCls = hasPassed ? '' : ' off';
+    html += `<div class="player-card">
+      <div class="avatar">${esc(p.avatar || '🎲')}</div>
+      <div class="name">
+        ${esc(p.name)}${botTag}
+        <span class="passed-badge${passedCls}" onclick="togglePassed('${p.id}')" title="Click: alternar si pasó">${hasPassed ? '✅ Pasó' : '⬜ Pendiente'}</span>
+      </div>
+      <div class="dice-section">
+        <div class="dice-faces">${renderDiceFaces(p.dice || [], p.id)}</div>
+        <div class="dice-controls">
+          <button class="btn-sm minus" onclick="cmdDiceCount('${p.id}', -1)">−</button>
+          <span class="count" id="count-${p.id}">${p.dice_count}</span>
+          <button class="btn-sm plus" onclick="cmdDiceCount('${p.id}', 1)">+</button>
+        </div>
+      </div>
+      <span class="status ${p.connected ? 'on' : 'off'}">${connected}</span>
+    </div>`;
+  }
+  html += '</div>';
+  main.innerHTML = html;
+}
+
+function renderDiceFaces(dice, pid) {
+  if (!dice || dice.length === 0) return '<span style="color:var(--text-dim);font-size:0.75rem">sin dados</span>';
+  return dice.map((val, i) =>
+    `<div class="die-box" onclick="cycleDie('${pid}', ${i}, 1)" oncontextmenu="return cycleDie('${pid}', ${i}, -1)" title="Click: suma · Click der: resta">${val}</div>`
+  ).join('');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function cmdDiceCount(pid, delta) {
+  if (!ws) return;
+  ws.send(JSON.stringify({type:'debug_cmd',cmd:'set_dice_count',target_id:pid,delta}));
+}
+
+function cycleDie(pid, dieIdx, dir) {
+  if (!ws) return false;
+  const p = playersData.find(p => p.id === pid);
+  if (!p) return false;
+  const dice = [...(p.dice || [])];
+  if (dieIdx >= dice.length) return false;
+  const cur = dice[dieIdx];
+  dice[dieIdx] = dir > 0 ? (cur >= 6 ? 1 : cur + 1) : (cur <= 1 ? 6 : cur - 1);
+  ws.send(JSON.stringify({type:'debug_cmd',cmd:'set_dice',target_id:pid,dice}));
+  return false;
+}
+
+function togglePassed(pid) {
+  if (!ws) return;
+  const newState = !passedSet.has(pid);
+  ws.send(JSON.stringify({type:'debug_cmd',cmd:'set_passed',target_id:pid,passed:newState}));
+}
+
+function applyBid() {
+  if (!ws) return;
+  const qty = parseInt(document.getElementById('bid-qty').value, 10);
+  const face = parseInt(document.getElementById('bid-face').value, 10);
+  if (isNaN(qty) || isNaN(face) || qty < 1 || face < 1 || face > 6) {
+    showToast('Cantidad o cara inválida'); return;
+  }
+  ws.send(JSON.stringify({type:'debug_cmd',cmd:'set_bid',quantity:qty,face}));
+}
+
+function clearBid() {
+  if (!ws) return;
+  ws.send(JSON.stringify({type:'debug_cmd',cmd:'clear_bid'}));
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('inp-room')) {
+    connectRoom();
+  }
+});
+
+let toastTimer = null;
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--danger)' : 'var(--gold)';
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+(function(){
+  const params = new URLSearchParams(location.search);
+  const sala = params.get('sala');
+  if (sala) {
+    document.getElementById('inp-room').value = sala;
+    connectRoom();
+  }
+})();
+</script>
+</body>
+</html>

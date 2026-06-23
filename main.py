@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from game.manager import GameManager
 from game.db import get_pool, close_pool
 from game.migrations import run_migrations
+from game.config import DEBUG_MODE
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +147,31 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
 async def root(request: Request, sala: str | None = None):
     room_id = sala.strip()[:20] if sala else None
     return HTMLResponse(_build_index_with_dynamic_meta(request, room_id))
+
+
+# ---------------------------------------------------------------------------
+# DEBUG / ADMIN (solo disponible cuando DEBUG_MODE=true)
+# ---------------------------------------------------------------------------
+
+_ADMIN_HTML: str | None = None
+
+
+def _load_admin_html() -> str:
+    global _ADMIN_HTML
+    if _ADMIN_HTML is None:
+        p = Path(__file__).resolve().parent / "static" / "admin.html"
+        if p.exists():
+            _ADMIN_HTML = p.read_text(encoding="utf-8")
+        else:
+            _ADMIN_HTML = "<h1>admin.html no encontrado</h1>"
+    return _ADMIN_HTML
+
+
+@app.get("/admin")
+async def admin_page():
+    if not DEBUG_MODE:
+        return HTMLResponse("<h1>404 Not Found</h1>", status_code=404)
+    return HTMLResponse(_load_admin_html())
 
 
 @app.websocket("/ws/{room_id}")
