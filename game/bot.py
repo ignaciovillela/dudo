@@ -135,6 +135,65 @@ class BotStrategy(ABC):
         )
 
     @staticmethod
+    def _min_qty_for_paso(
+        total_dice: int,
+        own_dice_count: int = 0,
+        rival_dice: int = 0,
+    ) -> int:
+        """Cantidad mínima de apuesta para que el paso sea una opción racional.
+
+        La lógica central: pasar transfiere el riesgo al siguiente.  Solo
+        tiene sentido hacerlo cuando la apuesta ya refleja una presión real
+        sobre la mesa (suficientes dados han sido "reclamados").  Si la
+        apuesta es baja respecto a la masa de dados rivales, el juego aún
+        es abierto y lo mejor es apostar o dudar — no pasar.
+
+        Separamos intencionalmente los dados **rivales** de los **propios**:
+
+        * Dados rivales  → definen la incertidumbre real del paso.  Con pocos
+          rivales (1-2 dados) la barra sube: incluso una apuesta de 2 puede
+          ser una gran fracción de lo razonable, y pasarla le da al rival
+          una ventaja gratuita a menos que la apuesta sea claramente alta.
+        * Dados propios  → descuentan el umbral porque contribuyes con certeza
+          a validar la apuesta; mano fuerte = puedes pasar con menos cantidad.
+
+        La escala no es lineal: con muy pocos rivales la fracción esperada es
+        pequeña en términos absolutos, pero el riesgo relativo es altísimo
+        (si fallan los dados rivales, pierdes o el siguiente lo paga caro).
+        Por eso el umbral escala al menos a ceil(rival_dice * 0.55) para
+        rivales con ≤ 3 dados, asegurando que nunca sea trivialmente bajo.
+
+        Parámetros
+        ----------
+        total_dice      : total de dados en la mesa (fallback si no se da rival_dice)
+        own_dice_count  : dados propios del bot que decide
+        rival_dice      : dados de todos los demás jugadores combinados
+        """
+        if rival_dice <= 0:
+            rival_dice = max(1, total_dice - own_dice_count)
+
+        # Factor de incertidumbre: con pocos rivales la barra porcentual sube
+        # porque cada dado rival vale más individualmente y el margen de error
+        # es menor.  Con muchos rivales se suaviza hacia ~0.40.
+        if rival_dice <= 2:
+            pct = 0.65        # pocos rivales → barra alta
+        elif rival_dice <= 4:
+            pct = 0.55
+        elif rival_dice <= 7:
+            pct = 0.45
+        else:
+            pct = 0.38        # muchos rivales → barra razonable
+
+        base = rival_dice * pct
+
+        # Descuento por mano propia (certeza que aportas directamente)
+        # Se cap-ea a la mitad del base para no anular el umbral
+        own_discount = min(own_dice_count * 0.12, base * 0.50)
+
+        raw = base - own_discount
+        return max(2, int(math.ceil(raw)))
+
+    @staticmethod
     def _pick_bid(
         scored: list,
         min_prob: float,
@@ -413,8 +472,18 @@ class MediumBot(BotStrategy):
                 return {"action": "dudo"}
 
         if self.can_paso(game, bot_id) and game.current_bid is not None:
-            prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
-            if prob > 0.65 and random.random() < 0.30:
+            prob     = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+            _own_n   = len(own_dice)
+            _rival_n = game.total_dice() - _own_n
+            # Zona imposible: prob muy baja → dudar, no pasar
+            # Zona segura: prob muy alta y apuesta no supera umbral → apostar, no pasar
+            _min_qty = self._min_qty_for_paso(game.total_dice(), _own_n, _rival_n)
+            _rival_pressure = _rival_n / game.total_dice() if game.total_dice() > 0 else 0.5
+            _impossible_cap = 0.32 - _rival_pressure * 0.06
+            if (prob > _impossible_cap
+                    and prob > 0.65
+                    and random.random() < 0.30
+                    and game.current_bid.quantity >= _min_qty):
                 return {"action": "paso"}
 
         strong = self._strong_faces(own_dice)
@@ -506,7 +575,21 @@ class HardBot(BotStrategy):
 
         if self.can_paso(game, bot_id) and game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
-            if prob > 0.68 and random.random() < 0.42:
+            _own_n   = len(own_dice)
+            _rival_n = game.total_dice() - _own_n
+        if self.can_paso(game, bot_id) and game.current_bid is not None:
+            prob     = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+            _own_n   = len(own_dice)
+            _rival_n = game.total_dice() - _own_n
+            # Zona imposible: no pasar si la apuesta ya es casi seguramente falsa
+            # Zona segura alta: no pasar si hay margen; mejor seguir apostando
+            _min_qty = self._min_qty_for_paso(game.total_dice(), _own_n, _rival_n)
+            _rival_pressure = _rival_n / game.total_dice() if game.total_dice() > 0 else 0.5
+            _impossible_cap = 0.28 - _rival_pressure * 0.05
+            if (prob > _impossible_cap
+                    and prob > 0.68
+                    and random.random() < 0.42
+                    and game.current_bid.quantity >= _min_qty):
                 return {"action": "paso"}
 
         strong = self._strong_faces(own_dice)
@@ -886,9 +969,9 @@ class VeryHardBot(BotStrategy):
                 return {"action": "dudo"}
 
         paso_threshold = self.PASO_PROB_THRESHOLD_LOW_DICE if low_dice else self.PASO_PROB_THRESHOLD
-        if self.can_paso(game, bot_id) and game.current_bid is not None:
+        if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
-            if prob > paso_threshold and random.random() < self.PASO_RAND:
+            if self._should_paso(game, bot_id, own_dice, dice_count, prob, paso_threshold):
                 return {"action": "paso"}
 
         return self._choose_bid(game, bot_id, own_dice, low_dice)
@@ -1226,6 +1309,111 @@ class VeryHardBot(BotStrategy):
             if self.prob_bid_holds_bayesian(game, c, bot_id) >= safe_prob:
                 return True
         return False
+
+    def _should_paso(
+        self,
+        game: "Game",
+        bot_id: str,
+        own_dice: list,
+        dice_count: int,
+        prob: float,
+        paso_threshold: float,
+    ) -> bool:
+        """
+        Decisión de paso inteligente para VeryHardBot.
+
+        Clasifica la situación en tres zonas según la probabilidad de que la
+        apuesta se sostenga y la presión de los dados rivales:
+
+          ZONA SEGURA (prob alta):  El juego está controlado.  No hay
+            necesidad de pasar todavía — apostar es la jugada óptima porque
+            aumenta la presión sobre el rival.  Se pasa solo si la cantidad
+            ya supera ampliamente el umbral y la cobertura propia es alta.
+
+          ZONA DE PASO (prob media):  El juego tiene incertidumbre moderada.
+            Aquí el paso es legítimo si la apuesta ya es suficientemente alta
+            (supera min_qty) y tienes cobertura razonable.
+
+          ZONA IMPOSIBLE (prob muy baja):  La apuesta es casi seguramente
+            falsa o insostenible.  Pasar sería absurdo — aquí corresponde
+            dudar.  _should_paso devuelve False para que el flujo superior
+            evalúe dudo.
+
+        El umbral de "seguro" y de "imposible" se ajustan dinámicamente por:
+          - Cobertura propia (cuántos de tus dados ya cuentan)
+          - Presión rival: con pocos rivales el juego es más expuesto
+        """
+        if not self.can_paso(game, bot_id) or game.current_bid is None:
+            return False
+
+        bid     = game.current_bid
+        rival_n = game.total_dice() - dice_count
+        min_qty = self._min_qty_for_paso(game.total_dice(), dice_count, rival_n)
+
+        # Cantidad mínima dinámica no alcanzada → no pasar
+        if bid.quantity < min_qty:
+            return False
+
+        # Cobertura propia: cuántos dados propios coinciden con la cara apostada
+        face = bid.face
+        if face == 1:
+            own_coverage = sum(1 for d in own_dice if d == 1)
+        else:
+            own_coverage = sum(1 for d in own_dice if d == face or d == 1)
+
+        # Fracción de la apuesta cubierta por dados propios
+        coverage_ratio = own_coverage / bid.quantity if bid.quantity > 0 else 0.0
+
+        # ---------------------------------------------------------------
+        # Presión rival normalizada: qué fracción de dados en la mesa son
+        # rivales.  Con pocos rivales (ej: 1 dado vs 5 propios) el riesgo
+        # oculto es muy concentrado; con muchos rivales se dispersa.
+        total_dice = game.total_dice()
+        rival_pressure = rival_n / total_dice if total_dice > 0 else 0.5
+        # rival_pressure ∈ (0, 1): 0 = todos propios, 1 = todos rivales
+
+        # ---------------------------------------------------------------
+        # ZONA IMPOSIBLE: prob muy baja → no pasar, dejar que flujo
+        # principal evalúe dudo (umbral: 0.30 base, baja si muchos rivales
+        # porque hay más incertidumbre genuina)
+        impossible_cap = 0.30 - rival_pressure * 0.08   # ~0.22–0.30
+        if prob < impossible_cap:
+            return False
+
+        # ---------------------------------------------------------------
+        # ZONA SEGURA: prob muy alta → el juego está controlado; pasar
+        # solo si la cantidad ya es notablemente alta (excede min_qty en
+        # al menos un dado más) Y tienes cobertura sólida.
+        # Si no se cumple: apostar es mejor que pasar gratis al rival.
+        safe_floor = 0.78 + rival_pressure * 0.07   # ~0.78–0.85
+        if prob >= safe_floor:
+            # En zona segura solo pasamos con cobertura fuerte y cantidad holgada
+            if coverage_ratio < 0.35 or bid.quantity < min_qty + 1:
+                return False
+            # Con cobertura buena y apuesta alta, paso es razonable (menor gate)
+            return random.random() < self.PASO_RAND * 0.70
+
+        # ---------------------------------------------------------------
+        # ZONA DE PASO (prob media: impossible_cap ≤ prob < safe_floor)
+        # Ajustar umbral de prob por cobertura y presión rival:
+        #   - Cobertura alta (>= 50%): umbral baja (puedes pasar con más confianza)
+        #   - Cobertura baja (< 20%): umbral sube (dependes mucho del rival)
+        #   - Pocos rivales: umbral sube levemente (riesgo concentrado)
+        cov_adj = 0.0
+        if coverage_ratio >= 0.50:
+            cov_adj = -0.07
+        elif coverage_ratio < 0.20:
+            cov_adj = +0.07
+
+        rival_adj = -0.03 if rival_pressure > 0.65 else (+0.04 if rival_pressure < 0.30 else 0.0)
+
+        effective_threshold = paso_threshold + cov_adj + rival_adj
+
+        if prob <= effective_threshold:
+            return False
+
+        # Gate aleatorio — variación natural del bot
+        return random.random() < self.PASO_RAND
 
     def _choose_bid(self, game: "Game", bot_id: str,
                     own_dice: list, low_dice: bool) -> dict:
@@ -1648,9 +1836,9 @@ class ExpertBot(VeryHardBot):
 
         paso_threshold = (self.PASO_PROB_THRESHOLD_LOW_DICE if low_dice
                           else self.PASO_PROB_THRESHOLD)
-        if self.can_paso(game, bot_id) and game.current_bid is not None:
+        if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
-            if prob > paso_threshold and random.random() < self.PASO_RAND:
+            if self._should_paso(game, bot_id, own_dice, dice_count, prob, paso_threshold):
                 return {"action": "paso"}
 
         return self._expert_choose_bid(game, bot_id, own_dice, low_dice, nash)
@@ -1664,6 +1852,67 @@ class ExpertBot(VeryHardBot):
         if igps and igps.calzo_tendency > 0.40 and igps.calzos_game >= 2:
             return random.random() < 0.55
         return False
+
+    def _should_paso(
+        self,
+        game: "Game",
+        bot_id: str,
+        own_dice: list,
+        dice_count: int,
+        prob: float,
+        paso_threshold: float,
+    ) -> bool:
+        """
+        Override ExpertBot: extiende la lógica de VeryHardBot con una capa
+        basada en el historial del apostador actual.
+
+        Ajusta el umbral de paso según:
+          - Si el apostador actual tiende a apostar cosas falsas (bluff_rate alto):
+            la apuesta corriente es probablemente exagerada → pasar es más arriesgado,
+            sube el umbral (es mejor dudar o subir).
+          - Si el apostador es conservador (bluff_rate bajo):
+            la apuesta es probablemente segura → bajar el umbral (pasar es más sensato).
+          - Si el apostador tiene pocos dados (rival débil individual):
+            la masa de incertidumbre proviene de los otros → umbral intermedio.
+        """
+        if not self.can_paso(game, bot_id) or game.current_bid is None:
+            return False
+
+        bid       = game.current_bid
+        bidder_id = bid.player_id
+        mem       = self._memory.get(bot_id)
+
+        adjusted_threshold = paso_threshold
+
+        if mem is not None and bidder_id != bot_id:
+            key   = self._stable_id(game, bidder_id)
+            stats = mem.player_stats.get(key)
+            igps  = self._igps.get(bot_id, {}).get(key)
+
+            if stats and stats.bids_total >= 5:
+                br = stats.bluff_rate
+                # Apostador bluffea mucho → sus apuestas altas son probablemente falsas
+                # pero pasar las valida; subir el umbral = preferir dudar o subir
+                if br > 0.45:
+                    adjusted_threshold += 0.06
+                # Apostador honesto → pasar es cómodo; bajar el umbral
+                elif br < 0.18:
+                    adjusted_threshold -= 0.06
+
+            # Si el apostador tiene muy pocos dados, parte de la probabilidad
+            # ya está "cubierta" por su escasez; pasar es más seguro
+            bidder = game.players.get(bidder_id)
+            if bidder and bidder.dice_count <= 2:
+                adjusted_threshold -= 0.04
+
+            # IGPS: si el apostador es agresivo en esta partida, sus apuestas
+            # corrientes tienden a ser estiradas → más difícil que se sostengan
+            if igps and igps.actions_total >= 3 and igps.aggression_index > 0.60:
+                adjusted_threshold += 0.04
+
+        return super()._should_paso(
+            game, bot_id, own_dice, dice_count, prob, adjusted_threshold
+        )
 
     def _dudo_threshold(self, mem: "_BotMemory", bid: "Bid", game: "Game") -> float:
         """
