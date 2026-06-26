@@ -319,6 +319,83 @@ class BotStrategy(ABC):
         """
         return None
 
+    # -- Gavilán fantasma / gavilán fuera de turno ---------------------------
+
+    # Constantes base para ghost gavilan (sobrescribir en subclases)
+    GHOST_DUDO_THRESHOLD  = 0.35   # duda si prob < este valor
+    GHOST_CALZO_THRESHOLD: float | None = None  # None = no intenta calzo
+    GHOST_ACTION_RATE     = 0.70   # gate: probabilidad de actuar al evaluar bid
+    GHOST_CALZO_RATE      = 0.35   # gate extra para calzo (más difícil acertar)
+    GHOST_PASO_BLUFF_THRESHOLD = 0.90  # p_bluff mínimo para dudar un paso activo
+
+    # Constantes base para gavilán vivo fuera de turno (sobrescribir en subclases)
+    GAVILAN_LIVE_ENABLED  = False  # Easy/Medium/Hard lo habilitan explícitamente
+    GAVILAN_LIVE_RATE     = 0.0    # gate: probabilidad de intentar gavilán vivo
+    GAVILAN_LIVE_DUDO_MAX = 0.20   # solo gavila si prob < este umbral
+
+    _NO_ACTION = {"action": "bid", "quantity": 1, "face": 2}
+
+    def _decide_ghost(self, game: "Game", bot_id: str) -> dict:
+        """
+        Decisión de gavilán fantasma para un bot eliminado (dice_count == 0).
+
+        Orden de prioridad:
+        1. Dudar paso activo si parece mentira (mismas directrices que bot vivo)
+        2. Evaluar bid activo: dudo prioritario, calzo con doble gate
+        3. No actuar (devuelve _NO_ACTION como señal)
+        """
+        # --- 1. Paso activo ---
+        if game.last_paso is not None:
+            passer_id = game.last_paso["player_id"]
+            p_bluff = self.prob_paso_is_bluff(game, passer_id)
+            if p_bluff >= 1.0:
+                # Físicamente imposible: duda con su gate de acción
+                if random.random() < self.GHOST_ACTION_RATE:
+                    return {"action": "dudo"}
+                return self._NO_ACTION
+            if p_bluff >= self.GHOST_PASO_BLUFF_THRESHOLD:
+                if random.random() < self.GHOST_ACTION_RATE:
+                    return {"action": "dudo"}
+            return self._NO_ACTION
+
+        # --- 2. Bid activo ---
+        if game.current_bid is None:
+            return self._NO_ACTION
+        if random.random() > self.GHOST_ACTION_RATE:
+            return self._NO_ACTION
+
+        prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+
+        # Dudo prioritario
+        if prob < self.GHOST_DUDO_THRESHOLD:
+            return {"action": "dudo"}
+
+        # Calzo solo si el nivel lo permite, umbral alto y gate adicional
+        if (self.GHOST_CALZO_THRESHOLD is not None
+                and prob >= self.GHOST_CALZO_THRESHOLD
+                and game.current_bid.player_id != bot_id
+                and random.random() < self.GHOST_CALZO_RATE):
+            return {"action": "calzo"}
+
+        return self._NO_ACTION
+
+    def _try_gavilan_live(self, game: "Game", bot_id: str, own_dice: list) -> bool:
+        """
+        Evalúa si un bot vivo (con dados) debe hacer gavilán fuera de turno.
+        Solo para Easy/Medium que no usan _try_gavilan de VeryHardBot.
+        Usa umbrales simples: prob < GAVILAN_LIVE_DUDO_MAX + gate aleatorio.
+        """
+        if not self.GAVILAN_LIVE_ENABLED:
+            return False
+        if game.current_bid is None:
+            return False
+        if game.current_bid.player_id == bot_id:
+            return False
+        prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+        if prob >= self.GAVILAN_LIVE_DUDO_MAX:
+            return False
+        return random.random() < self.GAVILAN_LIVE_RATE
+
     # -- Interfaz pública ----------------------------------------------------
 
     @abstractmethod
@@ -349,6 +426,17 @@ class EasyBot(BotStrategy):
     DUDO_THRESHOLD = 0.25
     DUDO_NOISE     = 0.25   # ignora la señal el 25% de las veces (antes 40%)
 
+    # Gavilán fantasma: muy conservador, actúa poco y solo en casos obvios
+    GHOST_DUDO_THRESHOLD       = 0.20
+    GHOST_CALZO_THRESHOLD      = None
+    GHOST_ACTION_RATE          = 0.50
+    GHOST_PASO_BLUFF_THRESHOLD = 0.95
+
+    # Gavilán vivo fuera de turno: casi nunca, solo apuestas absurdas
+    GAVILAN_LIVE_ENABLED  = True
+    GAVILAN_LIVE_RATE     = 0.05
+    GAVILAN_LIVE_DUDO_MAX = 0.15
+
     def decide_direction(self, game: "Game", bot_id: str) -> str | None:
         next_cw = self._next_player_in_dir(game, bot_id, game.direction)
         next_ccw = self._next_player_in_dir(game, bot_id, -game.direction)
@@ -363,7 +451,18 @@ class EasyBot(BotStrategy):
         return None
 
     def decide(self, game: "Game", bot_id: str) -> dict:
+        # -- Gavilán fantasma (bot eliminado) --
+        if game.players[bot_id].dice_count == 0:
+            if game.can_ghost_gavilan(bot_id):
+                return self._decide_ghost(game, bot_id)
+            return self._NO_ACTION
+
         own_dice = game.players[bot_id].dice
+
+        # -- Gavilán vivo fuera de turno --
+        if (game.current_player_id() != bot_id
+                and self._try_gavilan_live(game, bot_id, own_dice)):
+            return {"action": "dudo"}
 
         # -- Evaluar dudo --
         if game.current_bid is not None:
@@ -437,6 +536,17 @@ class MediumBot(BotStrategy):
     BID_MIN_PROB   = 0.42
     BLUFF_PROB     = 0.08
 
+    # Gavilán fantasma: conservador, sin calzo
+    GHOST_DUDO_THRESHOLD       = 0.28
+    GHOST_CALZO_THRESHOLD      = None
+    GHOST_ACTION_RATE          = 0.65
+    GHOST_PASO_BLUFF_THRESHOLD = 0.90
+
+    # Gavilán vivo fuera de turno: muy conservador
+    GAVILAN_LIVE_ENABLED  = True
+    GAVILAN_LIVE_RATE     = 0.15
+    GAVILAN_LIVE_DUDO_MAX = 0.20
+
     def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
         return float(game.players[target_id].dice_count) if target_id in game.players else 0.0
 
@@ -454,7 +564,18 @@ class MediumBot(BotStrategy):
         return None
 
     def decide(self, game: "Game", bot_id: str) -> dict:
+        # -- Gavilán fantasma (bot eliminado) --
+        if game.players[bot_id].dice_count == 0:
+            if game.can_ghost_gavilan(bot_id):
+                return self._decide_ghost(game, bot_id)
+            return self._NO_ACTION
+
         own_dice = game.players[bot_id].dice
+
+        # -- Gavilán vivo fuera de turno --
+        if (game.current_player_id() != bot_id
+                and self._try_gavilan_live(game, bot_id, own_dice)):
+            return {"action": "dudo"}
 
         if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
@@ -536,6 +657,18 @@ class HardBot(BotStrategy):
     BID_MIN_PROB   = 0.48
     BLUFF_PROB     = 0.08
 
+    # Gavilán fantasma: moderado, calzo muy conservador
+    GHOST_DUDO_THRESHOLD       = 0.30
+    GHOST_CALZO_THRESHOLD      = 0.90
+    GHOST_ACTION_RATE          = 0.75
+    GHOST_CALZO_RATE           = 0.35
+    GHOST_PASO_BLUFF_THRESHOLD = 0.90
+
+    # Gavilán vivo fuera de turno: moderado, usa _try_gavilan con GAVILAN_RAND reducido
+    GAVILAN_LIVE_ENABLED  = True
+    GAVILAN_LIVE_RATE     = 0.30   # gate aplicado sobre _try_gavilan
+    GAVILAN_LIVE_DUDO_MAX = 0.25   # umbral propio (más conservador que VeryHard)
+
     def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
         return float(game.players[target_id].dice_count) if target_id in game.players else 0.0
 
@@ -553,7 +686,20 @@ class HardBot(BotStrategy):
         return None
 
     def decide(self, game: "Game", bot_id: str) -> dict:
+        # -- Gavilán fantasma (bot eliminado) --
+        if game.players[bot_id].dice_count == 0:
+            if game.can_ghost_gavilan(bot_id):
+                return self._decide_ghost(game, bot_id)
+            return self._NO_ACTION
+
         own_dice = game.players[bot_id].dice
+
+        # -- Gavilán vivo fuera de turno (moderado, con gate propio) --
+        if game.current_player_id() != bot_id and game.current_bid is not None:
+            if game.current_bid.player_id != bot_id:
+                prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+                if prob < self.GAVILAN_LIVE_DUDO_MAX and random.random() < self.GAVILAN_LIVE_RATE:
+                    return {"action": "dudo"}
 
         if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
@@ -846,6 +992,13 @@ class VeryHardBot(BotStrategy):
     DUDO_PASO_PROB_MAX       = 0.90   # si sabemos que siempre miente
     DUDO_PASO_PROB_MIN       = 0.15   # si sabemos que casi nunca miente
 
+    # Gavilán fantasma: agresivo, con calzo moderado; usa memoria de rivales
+    GHOST_DUDO_THRESHOLD       = 0.32
+    GHOST_CALZO_THRESHOLD      = 0.86
+    GHOST_ACTION_RATE          = 0.85
+    GHOST_CALZO_RATE           = 0.40
+    GHOST_PASO_BLUFF_THRESHOLD = 0.85  # más bajo: usa historial si lo tiene
+
     def _player_threat_score(self, game: "Game", bot_id: str, target_id: str) -> float:
         mem = self._memory.get(bot_id)
         key = self._stable_id(game, target_id)
@@ -890,6 +1043,47 @@ class VeryHardBot(BotStrategy):
 
     # ------------------------------------------------------------------ decide
 
+    def _decide_ghost_veryhard(self, game: "Game", bot_id: str) -> dict:
+        """
+        Versión de _decide_ghost que usa la memoria de rivales para el paso.
+        VeryHardBot y ExpertBot usan este método en lugar del base.
+        """
+        mem = self._get_mem(bot_id, game)
+
+        # --- 1. Paso activo: usa _dudo_paso_threshold con historial ---
+        if game.last_paso is not None:
+            passer_id = game.last_paso["player_id"]
+            p_bluff   = self.prob_paso_is_bluff(game, passer_id)
+            if p_bluff >= 1.0:
+                if random.random() < self.GHOST_ACTION_RATE:
+                    return {"action": "dudo"}
+                return self._NO_ACTION
+            dudo_prob = self._dudo_paso_threshold(mem, passer_id, game)
+            if random.random() < dudo_prob * self.GHOST_ACTION_RATE:
+                return {"action": "dudo"}
+            return self._NO_ACTION
+
+        # --- 2. Bid activo ---
+        if game.current_bid is None:
+            return self._NO_ACTION
+        if random.random() > self.GHOST_ACTION_RATE:
+            return self._NO_ACTION
+
+        prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+
+        # Dudo prioritario
+        if prob < self.GHOST_DUDO_THRESHOLD:
+            return {"action": "dudo"}
+
+        # Calzo con doble gate
+        if (self.GHOST_CALZO_THRESHOLD is not None
+                and prob >= self.GHOST_CALZO_THRESHOLD
+                and game.current_bid.player_id != bot_id
+                and random.random() < self.GHOST_CALZO_RATE):
+            return {"action": "calzo"}
+
+        return self._NO_ACTION
+
     def _get_mem(self, bot_id: str, game: "Game") -> "_BotMemory":
         """
         Retorna la memoria de este bot, fusionando stats globales (de DB) si
@@ -921,6 +1115,12 @@ class VeryHardBot(BotStrategy):
         return mem
 
     def decide(self, game: "Game", bot_id: str) -> dict:
+        # -- Gavilán fantasma (bot eliminado) --
+        if game.players[bot_id].dice_count == 0:
+            if game.can_ghost_gavilan(bot_id):
+                return self._decide_ghost_veryhard(game, bot_id)
+            return self._NO_ACTION
+
         mem = self._get_mem(bot_id, game)
         self._sync_round_bids(game, bot_id, mem)
 
@@ -1581,6 +1781,13 @@ class ExpertBot(VeryHardBot):
     EXPERT_BID_MIN_PROB           = 0.52
     EXPERT_BLUFF_PROB             = 0.10
 
+    # Gavilán fantasma: más agresivo que VeryHard
+    GHOST_DUDO_THRESHOLD       = 0.34
+    GHOST_CALZO_THRESHOLD      = 0.84
+    GHOST_ACTION_RATE          = 0.90
+    GHOST_CALZO_RATE           = 0.45
+    GHOST_PASO_BLUFF_THRESHOLD = 0.82  # aún más bajo: confía más en su memoria
+
     def __init__(self):
         super().__init__()
         # bot_id → {stable_player_id → InGamePlayerState}
@@ -1781,6 +1988,12 @@ class ExpertBot(VeryHardBot):
         self._igps_watermark[bot_id] = len(mem.round_bids)
 
     def decide(self, game: "Game", bot_id: str) -> dict:
+        # -- Gavilán fantasma (bot eliminado) --
+        if game.players[bot_id].dice_count == 0:
+            if game.can_ghost_gavilan(bot_id):
+                return self._decide_ghost_veryhard(game, bot_id)
+            return self._NO_ACTION
+
         self._current_bot_id = bot_id
         mem      = self._get_mem(bot_id, game)
         nash     = self._get_nash(bot_id, game)

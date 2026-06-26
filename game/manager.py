@@ -1504,6 +1504,11 @@ class GameManager:
         current = game.current_player_id()
         if current and current in game.players and game.players[current].is_bot:
             self._schedule_bot_action(room_id, game, current)
+        # Gavilán fuera de turno: bots vivos que no son el jugador activo
+        if game.current_bid is not None or game.last_paso is not None:
+            self._schedule_gavilan_bots(room_id, game)
+        # Gavilán fantasma: bots eliminados que pueden actuar
+        self._schedule_ghost_bots(room_id, game)
 
     def _cancel_turn_timeout(self, room_id: str):
         task = self.turn_timeout_tasks.pop(room_id, None)
@@ -1667,8 +1672,26 @@ class GameManager:
 
     # Delay de pensamiento por dificultad (segundos)
     _BOT_THINK_DELAY = {"easy": 1.8, "medium": 1.2, "hard": 0.7, "very_hard": 0.5, "expert": 0.5}
-    # Delay extra cuando hay humanos en juego (para parecer más natural)
-    _BOT_HUMAN_DELAY_EXTRA = {"easy": 3.0, "medium": 2.0, "hard": 1.3, "very_hard": 1.0, "expert": 0.7}
+    # Delay extra cuando hay humanos en juego (para parecer más natural).
+    # hard/very_hard/expert subidos para dar tiempo real a gavilanes y sentirse menos robóticos.
+    _BOT_HUMAN_DELAY_EXTRA = {"easy": 3.0, "medium": 2.0, "hard": 2.5, "very_hard": 2.5, "expert": 2.0}
+
+    # Delays para gavilán vivo fuera de turno.
+    # base mínimo = 1.0s para todos; jitter asimétrico (sesgado a valores altos
+    # con random.random()**0.4): bots lentos ocasionalmente reaccionan rápido.
+    # Jitters reducidos vs versión anterior para que hard/medium tengan chance real
+    # contra bots rápidos en turno (jugada pésima: hard ~50%, medium ~21%, easy ~13%).
+    _BOT_GAVILAN_LIVE_BASE   = {"easy": 1.0, "medium": 1.0, "hard": 1.0, "very_hard": 1.0, "expert": 1.0}
+    _BOT_GAVILAN_LIVE_JITTER = {"easy": 9.0, "medium": 7.0, "hard": 5.0, "very_hard": 4.5, "expert": 3.0}
+
+    # Delays para gavilán fantasma (bot eliminado).
+    # Ligeramente más lentos que el gavilán vivo — el bot "muerto" tarda más.
+    _BOT_GHOST_BASE   = {"easy": 1.0, "medium": 1.0, "hard": 1.0, "very_hard": 1.0, "expert": 1.0}
+    _BOT_GHOST_JITTER = {"easy": 11.0, "medium": 8.5, "hard": 6.0, "very_hard": 5.5, "expert": 3.5}
+
+    # Rank numérico por dificultad — usado para calcular la reducción de delay
+    # por probabilidad baja de apuesta (urgency).
+    _BOT_LEVEL_RANK = {"easy": 0, "medium": 1, "hard": 2, "very_hard": 3, "expert": 4}
 
     # Frases por categoría para el chat de bots (usan las mismas frases que los humanos)
     _BOT_PHRASES = {
@@ -1720,7 +1743,8 @@ class GameManager:
                 current_game = self.games.get(room_id)
                 if not current_game or current_game.phase != "playing":
                     return
-                if current_game.current_player_id() != bot_id:
+                is_ghost = current_game.can_ghost_gavilan(bot_id)
+                if current_game.current_player_id() != bot_id and not is_ghost:
                     return
                 await self._run_bot_action(room_id, current_game, bot_id)
             except asyncio.CancelledError:
@@ -1735,6 +1759,156 @@ class GameManager:
                     self._cancel_turn_timeout(room_id)
                     await self._h_bid(room_id, bot_id, current_game,
                                       {"quantity": fallback.quantity, "face": fallback.face})
+
+        asyncio.create_task(_runner())
+
+    def _gavilan_delay(self, difficulty: str, prob: float, jitter_table: dict, base_table: dict) -> float:
+        """
+        Calcula el delay para un gavilán fuera de turno (vivo o fantasma).
+
+        Distribución no lineal: random.random()**0.4 sesga hacia valores altos del
+        rango, de modo que los delays cortos son posibles pero poco probables.
+        Todos los bots comparten el mismo base mínimo (~1s) pero el jitter máximo
+        crece mucho para los niveles bajos → bots lentos ocasionalmente ganan el
+        timing a bots rápidos.
+
+        Urgency con curva cóncava (prob**0.6): más agresiva en el rango bajo-medio
+        (0.20–0.40) donde ocurren la mayoría de los gavilanes, sin colapsar el delay
+        en los extremos. Rango: 0.35 (prob=0) → 1.0 (prob=1).
+        """
+        base   = base_table.get(difficulty, 1.0)
+        jitter = jitter_table.get(difficulty, 7.0)
+        # Sesgo: valores bajos del rango son raros (exponente < 1 acumula cerca del máximo)
+        raw_jitter = jitter * (random.random() ** 0.4)
+        # Urgency cóncava: reduce más agresivamente en el rango bajo-medio
+        p = max(0.0, min(1.0, prob))
+        urgency = 0.35 + 0.65 * (p ** 0.6)
+        return base + raw_jitter * urgency
+
+    def _schedule_gavilan_bots(self, room_id: str, game: Game):
+        """
+        Programa intentos de gavilán vivo para bots activos que no son el turno actual
+        y tienen la mecánica habilitada (GAVILAN_LIVE_ENABLED o _gavilan_allowed).
+        """
+        current = game.current_player_id()
+        bid = game.current_bid
+        if bid is None and game.last_paso is None:
+            return
+        prob = 0.5  # fallback si no hay bid
+        if bid is not None:
+            # Estimación de prob desde el punto de vista de un bot genérico
+            # (cada bot calculará la suya en decide(), este valor solo afecta el delay)
+            total = game.total_dice()
+            p_match = 1/6 if bid.face == 1 else 2/6
+            import math
+            prob = sum(
+                math.comb(total, i) * (p_match ** i) * ((1 - p_match) ** (total - i))
+                for i in range(bid.quantity, total + 1)
+            ) if total >= bid.quantity else 0.0
+            prob = max(0.0, min(1.0, prob))
+
+        for pid, player in game.players.items():
+            if not player.is_bot:
+                continue
+            if player.dice_count == 0:
+                continue
+            if pid == current:
+                continue  # es su turno — ya tiene _schedule_bot_action
+            if bid is not None and bid.player_id == pid:
+                continue  # es su propia apuesta
+            self._schedule_single_gavilan_bot(room_id, game, pid, bid, prob)
+
+    def _schedule_single_gavilan_bot(
+        self, room_id: str, game: Game, bot_id: str,
+        bid_snapshot: object, prob: float
+    ):
+        difficulty = game.players[bot_id].bot_difficulty
+        delay = self._gavilan_delay(
+            difficulty, prob,
+            self._BOT_GAVILAN_LIVE_JITTER,
+            self._BOT_GAVILAN_LIVE_BASE,
+        )
+
+        async def _runner():
+            try:
+                await asyncio.sleep(delay)
+                current_game = self.games.get(room_id)
+                if not current_game or current_game.phase != "playing":
+                    return
+                # Si el bid cambió durante el delay → cancelar (el nuevo _announce_turn
+                # ya habrá programado un nuevo intento con el bid actualizado)
+                if current_game.current_bid is not bid_snapshot:
+                    return
+                if game.last_paso is not None and current_game.last_paso is not game.last_paso:
+                    return
+                # Verificar que el bot sigue vivo y fuera de turno
+                player = current_game.players.get(bot_id)
+                if not player or player.dice_count == 0:
+                    return
+                if current_game.current_player_id() == bot_id:
+                    return  # ya es su turno, _schedule_bot_action lo manejará
+                await self._run_bot_action(room_id, current_game, bot_id)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                import traceback
+                print(f"[gavilan bot error] {bot_id}: {e}\n{''.join(traceback.format_exc())}")
+
+        asyncio.create_task(_runner())
+
+    def _schedule_ghost_bots(self, room_id: str, game: Game):
+        """
+        Programa intentos de gavilán fantasma para bots eliminados que pueden actuar.
+        """
+        bid = game.current_bid
+        prob = 0.5
+        if bid is not None:
+            import math
+            total = game.total_dice()
+            p_match = 1/6 if bid.face == 1 else 2/6
+            prob = sum(
+                math.comb(total, i) * (p_match ** i) * ((1 - p_match) ** (total - i))
+                for i in range(bid.quantity, total + 1)
+            ) if total >= bid.quantity else 0.0
+            prob = max(0.0, min(1.0, prob))
+
+        for pid, player in game.players.items():
+            if not player.is_bot:
+                continue
+            if player.dice_count > 0:
+                continue
+            if not game.can_ghost_gavilan(pid):
+                continue
+            self._schedule_single_ghost_bot(room_id, game, pid, bid, prob)
+
+    def _schedule_single_ghost_bot(
+        self, room_id: str, game: Game, bot_id: str,
+        bid_snapshot: object, prob: float
+    ):
+        difficulty = game.players[bot_id].bot_difficulty
+        delay = self._gavilan_delay(
+            difficulty, prob,
+            self._BOT_GHOST_JITTER,
+            self._BOT_GHOST_BASE,
+        )
+
+        async def _runner():
+            try:
+                await asyncio.sleep(delay)
+                current_game = self.games.get(room_id)
+                if not current_game or current_game.phase != "playing":
+                    return
+                # Si el bid cambió → cancelar (el siguiente _announce_turn reprogramará)
+                if current_game.current_bid is not bid_snapshot:
+                    return
+                if not current_game.can_ghost_gavilan(bot_id):
+                    return
+                await self._run_bot_action(room_id, current_game, bot_id)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                import traceback
+                print(f"[ghost bot error] {bot_id}: {e}\n{''.join(traceback.format_exc())}")
 
         asyncio.create_task(_runner())
 
@@ -1784,6 +1958,13 @@ class GameManager:
 
         decision = bot_engine.decide(game, bot_id)
         action = decision.get("action")
+
+        # Bot eliminado (fantasma) o bot vivo fuera de turno que decidió no actuar:
+        # _decide_ghost / _try_gavilan_live devuelven {"action": "bid"} como señal de no-acción.
+        player = game.players.get(bot_id)
+        is_off_turn = game.current_player_id() != bot_id
+        if is_off_turn and action == "bid":
+            return  # no actúa esta vez
 
         if action == "dudo":
             # Verificar que haya algo que dudar
