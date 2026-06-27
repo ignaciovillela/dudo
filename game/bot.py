@@ -351,11 +351,11 @@ class BotStrategy(ABC):
             if p_bluff >= 1.0:
                 # Físicamente imposible: duda con su gate de acción
                 if random.random() < self.GHOST_ACTION_RATE:
-                    return {"action": "dudo"}
+                    return {"action": "dudo", "gavilan": True}
                 return self._NO_ACTION
             if p_bluff >= self.GHOST_PASO_BLUFF_THRESHOLD:
                 if random.random() < self.GHOST_ACTION_RATE:
-                    return {"action": "dudo"}
+                    return {"action": "dudo", "gavilan": True}
             return self._NO_ACTION
 
         # --- 2. Bid activo ---
@@ -368,14 +368,14 @@ class BotStrategy(ABC):
 
         # Dudo prioritario
         if prob < self.GHOST_DUDO_THRESHOLD:
-            return {"action": "dudo"}
+            return {"action": "dudo", "gavilan": True}
 
         # Calzo solo si el nivel lo permite, umbral alto y gate adicional
         if (self.GHOST_CALZO_THRESHOLD is not None
                 and prob >= self.GHOST_CALZO_THRESHOLD
                 and game.current_bid.player_id != bot_id
                 and random.random() < self.GHOST_CALZO_RATE):
-            return {"action": "calzo"}
+            return {"action": "calzo", "gavilan": True}
 
         return self._NO_ACTION
 
@@ -383,15 +383,22 @@ class BotStrategy(ABC):
         """
         Evalúa si un bot vivo (con dados) debe hacer gavilán fuera de turno.
         Solo para Easy/Medium que no usan _try_gavilan de VeryHardBot.
-        Usa umbrales simples: prob < GAVILAN_LIVE_DUDO_MAX + gate aleatorio.
+        Con 5 dados (sin recuperación): umbral muy estricto y gate mínimo.
+        Con < 5 dados: umbral y gate normales del nivel.
         """
         if not self.GAVILAN_LIVE_ENABLED:
+            return False
+        if not game.rules.allow_gavilan:
             return False
         if game.current_bid is None:
             return False
         if game.current_bid.player_id == bot_id:
             return False
         prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
+        dice_count = len(own_dice)
+        if dice_count >= 5:
+            # Sin recuperación: solo apuestas casi imposibles, muy raramente
+            return prob < 0.08 and random.random() < 0.08
         if prob >= self.GAVILAN_LIVE_DUDO_MAX:
             return False
         return random.random() < self.GAVILAN_LIVE_RATE
@@ -459,10 +466,11 @@ class EasyBot(BotStrategy):
 
         own_dice = game.players[bot_id].dice
 
-        # -- Gavilán vivo fuera de turno --
-        if (game.current_player_id() != bot_id
-                and self._try_gavilan_live(game, bot_id, own_dice)):
-            return {"action": "dudo"}
+        # -- Gavilán vivo fuera de turno: si no gavila, no ejecuta nada más --
+        if game.current_player_id() != bot_id:
+            if self._try_gavilan_live(game, bot_id, own_dice):
+                return {"action": "dudo", "gavilan": True}
+            return self._NO_ACTION
 
         # -- Evaluar dudo --
         if game.current_bid is not None:
@@ -572,10 +580,11 @@ class MediumBot(BotStrategy):
 
         own_dice = game.players[bot_id].dice
 
-        # -- Gavilán vivo fuera de turno --
-        if (game.current_player_id() != bot_id
-                and self._try_gavilan_live(game, bot_id, own_dice)):
-            return {"action": "dudo"}
+        # -- Gavilán vivo fuera de turno: si no gavila, no ejecuta nada más --
+        if game.current_player_id() != bot_id:
+            if self._try_gavilan_live(game, bot_id, own_dice):
+                return {"action": "dudo", "gavilan": True}
+            return self._NO_ACTION
 
         if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
@@ -694,12 +703,21 @@ class HardBot(BotStrategy):
 
         own_dice = game.players[bot_id].dice
 
-        # -- Gavilán vivo fuera de turno (moderado, con gate propio) --
-        if game.current_player_id() != bot_id and game.current_bid is not None:
-            if game.current_bid.player_id != bot_id:
+        # -- Gavilán vivo fuera de turno: si no gavila, no ejecuta nada más --
+        if game.current_player_id() != bot_id:
+            if (game.current_bid is not None
+                    and game.rules.allow_gavilan
+                    and game.current_bid.player_id != bot_id):
                 prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
-                if prob < self.GAVILAN_LIVE_DUDO_MAX and random.random() < self.GAVILAN_LIVE_RATE:
-                    return {"action": "dudo"}
+                dice_count = len(own_dice)
+                if dice_count >= 5:
+                    # Sin recuperación: solo apuestas muy improbables, raramente
+                    if prob < self.DUDO_THRESHOLD and random.random() < 0.10:
+                        return {"action": "dudo", "gavilan": True}
+                else:
+                    if prob < self.GAVILAN_LIVE_DUDO_MAX and random.random() < self.GAVILAN_LIVE_RATE:
+                        return {"action": "dudo", "gavilan": True}
+            return self._NO_ACTION
 
         if game.current_bid is not None:
             prob = self.prob_bid_holds_bayesian(game, game.current_bid, bot_id)
@@ -1056,11 +1074,11 @@ class VeryHardBot(BotStrategy):
             p_bluff   = self.prob_paso_is_bluff(game, passer_id)
             if p_bluff >= 1.0:
                 if random.random() < self.GHOST_ACTION_RATE:
-                    return {"action": "dudo"}
+                    return {"action": "dudo", "gavilan": True}
                 return self._NO_ACTION
             dudo_prob = self._dudo_paso_threshold(mem, passer_id, game)
             if random.random() < dudo_prob * self.GHOST_ACTION_RATE:
-                return {"action": "dudo"}
+                return {"action": "dudo", "gavilan": True}
             return self._NO_ACTION
 
         # --- 2. Bid activo ---
@@ -1073,14 +1091,14 @@ class VeryHardBot(BotStrategy):
 
         # Dudo prioritario
         if prob < self.GHOST_DUDO_THRESHOLD:
-            return {"action": "dudo"}
+            return {"action": "dudo", "gavilan": True}
 
         # Calzo con doble gate
         if (self.GHOST_CALZO_THRESHOLD is not None
                 and prob >= self.GHOST_CALZO_THRESHOLD
                 and game.current_bid.player_id != bot_id
                 and random.random() < self.GHOST_CALZO_RATE):
-            return {"action": "calzo"}
+            return {"action": "calzo", "gavilan": True}
 
         return self._NO_ACTION
 
@@ -1132,12 +1150,22 @@ class VeryHardBot(BotStrategy):
             bid  = game.current_bid
             prob = self.prob_bid_holds_bayesian(game, bid, bot_id)
 
-            # Gavilán: fuera de turno
-            if (bid.player_id != bot_id
-                    and game.current_player_id() != bot_id
-                    and self._gavilan_allowed(game, bot_id)):
-                if self._try_gavilan(game, bot_id, own_dice, dice_count, prob):
-                    return {"action": "dudo"}
+            # Gavilán fuera de turno: duda si la apuesta parece falsa (prob baja).
+            # Con 5 dados no hay recuperación posible → umbral muy estricto y gate mínimo.
+            # Con < 5 dados puede recuperar → umbral normal de dudo, gate moderado.
+            if game.current_player_id() != bot_id:
+                if (bid.player_id != bot_id
+                        and self._gavilan_allowed(game, bot_id)):
+                    if dice_count >= 5:
+                        # Sin recuperación: solo apuestas muy improbables y raramente
+                        if prob < self.DUDO_THRESHOLD_BASE and random.random() < 0.15:
+                            return {"action": "dudo", "gavilan": True}
+                    else:
+                        # Con recuperación: umbral enriquecido, gate moderado
+                        threshold = self._dudo_threshold(mem, bid, game)
+                        if prob < threshold and random.random() < 0.35:
+                            return {"action": "dudo", "gavilan": True}
+                return self._NO_ACTION
 
             # Calzo — umbral más bajo si puede recuperar dado
             is_off_turn   = game.current_player_id() != bot_id
@@ -2008,12 +2036,20 @@ class ExpertBot(VeryHardBot):
             bid  = game.current_bid
             prob = self.prob_bid_holds_bayesian(game, bid, bot_id)
 
-            # Gavilán (heredado)
-            if (bid.player_id != bot_id
-                    and game.current_player_id() != bot_id
-                    and self._gavilan_allowed(game, bot_id)):
-                if self._try_gavilan(game, bot_id, own_dice, dice_count, prob):
-                    return {"action": "dudo"}
+            # Gavilán fuera de turno: duda si la apuesta parece falsa (prob baja).
+            # Con 5 dados no hay recuperación posible → umbral muy estricto y gate mínimo.
+            # Con < 5 dados puede recuperar → umbral enriquecido (4 capas), gate moderado.
+            if game.current_player_id() != bot_id:
+                if (bid.player_id != bot_id
+                        and self._gavilan_allowed(game, bot_id)):
+                    if dice_count >= 5:
+                        if prob < self.DUDO_THRESHOLD_BASE and random.random() < 0.15:
+                            return {"action": "dudo", "gavilan": True}
+                    else:
+                        threshold = self._dudo_threshold(mem, bid, game)
+                        if prob < threshold and random.random() < 0.35:
+                            return {"action": "dudo", "gavilan": True}
+                return self._NO_ACTION
 
             # Calzo — umbral más bajo si puede recuperar; evita calzar a spammers
             is_off_turn      = game.current_player_id() != bot_id

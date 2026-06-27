@@ -60,6 +60,9 @@ class GameManager:
         self.turn_started_at: dict[str, float] = {}   # room_id → monotonic timestamp
         self.admin_sessions: dict[str, set[str]] = {}  # room_id → {player_id, ...} sesiones admin
         self.paused_rooms: set[str] = set()  # salas pausadas por admin
+        # Tasks de gavilán fuera de turno: (room_id, bot_id) → Task
+        # Se cancelan antes de crear uno nuevo para evitar duplicados por bid.
+        self.gavilan_tasks: dict[tuple[str, str], asyncio.Task] = {}
 
     # ------------------------------------------------------------------ connect
 
@@ -1822,6 +1825,12 @@ class GameManager:
         self, room_id: str, game: Game, bot_id: str,
         bid_snapshot: object, prob: float
     ):
+        # Cancelar task previo de este bot en esta sala para evitar duplicados
+        key = (room_id, bot_id)
+        old = self.gavilan_tasks.pop(key, None)
+        if old and not old.done():
+            old.cancel()
+
         difficulty = game.players[bot_id].bot_difficulty
         delay = self._gavilan_delay(
             difficulty, prob,
@@ -1853,8 +1862,10 @@ class GameManager:
             except Exception as e:
                 import traceback
                 print(f"[gavilan bot error] {bot_id}: {e}\n{''.join(traceback.format_exc())}")
+            finally:
+                self.gavilan_tasks.pop(key, None)
 
-        asyncio.create_task(_runner())
+        self.gavilan_tasks[key] = asyncio.create_task(_runner())
 
     def _schedule_ghost_bots(self, room_id: str, game: Game):
         """
@@ -1885,6 +1896,12 @@ class GameManager:
         self, room_id: str, game: Game, bot_id: str,
         bid_snapshot: object, prob: float
     ):
+        # Cancelar task previo de este bot fantasma en esta sala
+        key = (room_id, bot_id + ":ghost")
+        old = self.gavilan_tasks.pop(key, None)
+        if old and not old.done():
+            old.cancel()
+
         difficulty = game.players[bot_id].bot_difficulty
         delay = self._gavilan_delay(
             difficulty, prob,
@@ -1909,8 +1926,10 @@ class GameManager:
             except Exception as e:
                 import traceback
                 print(f"[ghost bot error] {bot_id}: {e}\n{''.join(traceback.format_exc())}")
+            finally:
+                self.gavilan_tasks.pop(key, None)
 
-        asyncio.create_task(_runner())
+        self.gavilan_tasks[key] = asyncio.create_task(_runner())
 
     async def _maybe_bot_chat(self, room_id: str, bot_id: str, action: str):
         game = self.games.get(room_id)
@@ -1958,13 +1977,14 @@ class GameManager:
 
         decision = bot_engine.decide(game, bot_id)
         action = decision.get("action")
+        is_gavilan = decision.get("gavilan", False)
 
-        # Bot eliminado (fantasma) o bot vivo fuera de turno que decidió no actuar:
-        # _decide_ghost / _try_gavilan_live devuelven {"action": "bid"} como señal de no-acción.
-        player = game.players.get(bot_id)
+        # Fuera de turno: solo se permiten dudo/calzo marcados explícitamente
+        # como gavilán. Cualquier otra acción (incluyendo dudo por flujo normal)
+        # se descarta — el bot no está en turno para actuar normalmente.
         is_off_turn = game.current_player_id() != bot_id
-        if is_off_turn and action == "bid":
-            return  # no actúa esta vez
+        if is_off_turn and not is_gavilan:
+            return
 
         if action == "dudo":
             # Verificar que haya algo que dudar
