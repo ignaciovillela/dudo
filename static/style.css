@@ -31,40 +31,56 @@ body {
   overflow: hidden;
 }
 
-.sound-toggle {
+/* ── Sound control: icon button + volume slider (slider visible on hover) ── */
+.sound-control {
   position: fixed;
   left: 14px;
   bottom: 14px;
   z-index: 80;
-  border: 1px solid rgba(232,184,109,0.28);
+  display: flex;
+  align-items: center;
   background: rgba(0,0,0,0.32);
+  border: 1px solid rgba(232,184,109,0.28);
+  border-radius: 999px;
+  padding: 0 4px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  opacity: 0.72;
+  overflow: hidden;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.sound-control:hover,
+.sound-control:focus-within {
+  opacity: 1;
+  border-color: rgba(232,184,109,0.55);
+}
+
+.sound-toggle {
+  border: none;
+  background: transparent;
   color: var(--gold);
   border-radius: 999px;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.68;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
-  backdrop-filter: blur(4px);
-  transition: background 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s, transform 0.2s;
+  flex-shrink: 0;
+  transition: color 0.2s, transform 0.15s;
 }
 
 .sound-toggle:hover {
-  background: rgba(232,184,109,0.12);
-  opacity: 0.95;
-  transform: translateY(-1px);
+  color: #f0c96b;
+  transform: scale(1.1);
 }
 
 .sound-toggle.muted {
-  border-color: rgba(255,255,255,0.25);
   color: var(--text-dim);
-  opacity: 0.5;
 }
 
 .sound-toggle:focus-visible {
@@ -72,9 +88,68 @@ body {
   outline-offset: 2px;
 }
 
+/* Slider: oculto por defecto, se expande al hacer hover en el contenedor */
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0;
+  max-width: 80px;
+  height: 4px;
+  background: rgba(232,184,109,0.25);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  margin-left: 0;
+  transition: width 0.25s ease, opacity 0.2s ease, margin-left 0.25s ease;
+}
+
+.sound-control:hover .volume-slider,
+.sound-control:focus-within .volume-slider {
+  width: 80px;
+  opacity: 1;
+  pointer-events: auto;
+  margin-left: 6px;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--gold);
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(0,0,0,0.4);
+  transition: transform 0.15s;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--gold);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 4px rgba(0,0,0,0.4);
+}
+
+.volume-slider:hover::-webkit-slider-thumb,
+.volume-slider:focus::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+
+.volume-slider:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+
+
 .notif-toggle {
   position: fixed;
-  left: 58px;
+  left: 62px;
   bottom: 14px;
   z-index: 80;
   border: 1px solid rgba(126,200,227,0.45);
@@ -3270,7 +3345,10 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   .bid-shortcuts { display: none; }
 
   /* ── Botones de sonido/notif: arriba para no tapar sidebar ── */
-  .sound-toggle { bottom: auto; top: 8px; left: 8px; width: 34px; height: 34px; font-size: 0.9rem; }
+  .sound-control { bottom: auto; top: 8px; left: 8px; padding: 0 2px; }
+  .sound-toggle { width: 30px; height: 30px; font-size: 0.85rem; }
+  .sound-control:hover .volume-slider,
+  .sound-control:focus-within .volume-slider { width: 60px; max-width: 60px; }
   .notif-toggle { bottom: auto; top: 12px; left: 48px; }
 
   /* ── Elementos no esenciales: ocultar para ganar espacio ── */

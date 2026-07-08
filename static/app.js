@@ -753,6 +753,7 @@ function closeAchievementsModal() {
   if (modal) modal.style.display = 'none';
 }
 const AUDIO_STORAGE_KEY    = 'dudoMuted';
+const AUDIO_VOLUME_KEY     = 'dudoVolume';
 const RULES_STORAGE_KEY    = 'dudoRules';
 const STATS_STORAGE_KEY    = 'dudoStats';
 const GAME_LOG_STORAGE_KEY = 'dudoGameLog_v1';
@@ -918,7 +919,9 @@ function closeStatsModal() {
 }
 const AudioState = {
   ctx: null,
+  masterGain: null,
   muted: localStorage.getItem(AUDIO_STORAGE_KEY) === '1',
+  volume: parseFloat(localStorage.getItem(AUDIO_VOLUME_KEY) ?? '0.7'),
 };
 
 function ensureAudioCtx() {
@@ -926,6 +929,9 @@ function ensureAudioCtx() {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return null;
   AudioState.ctx = new AC();
+  AudioState.masterGain = AudioState.ctx.createGain();
+  AudioState.masterGain.gain.value = AudioState.muted ? 0 : AudioState.volume;
+  AudioState.masterGain.connect(AudioState.ctx.destination);
   return AudioState.ctx;
 }
 
@@ -954,13 +960,14 @@ function playTone(freq, duration = 0.08, opts = {}) {
 
   osc.connect(gain);
   const pan = opts.pan ?? 0;
+  const dest = AudioState.masterGain || ctx.destination;
   if (pan !== 0 && ctx.createStereoPanner) {
     const panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, pan));
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(dest);
   } else {
-    gain.connect(ctx.destination);
+    gain.connect(dest);
   }
   osc.start(when);
   osc.stop(when + duration + 0.02);
@@ -982,13 +989,14 @@ function playSweep(startFreq, endFreq, duration = 0.12, opts = {}) {
   gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
   osc.connect(gain);
   const pan = opts.pan ?? 0;
+  const dest = AudioState.masterGain || ctx.destination;
   if (pan !== 0 && ctx.createStereoPanner) {
     const panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, pan));
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(dest);
   } else {
-    gain.connect(ctx.destination);
+    gain.connect(dest);
   }
   osc.start(when);
   osc.stop(when + duration + 0.02);
@@ -1024,9 +1032,9 @@ function playNoiseBurst(duration = 0.12, opts = {}) {
     const panner = ctx.createStereoPanner();
     panner.pan.value = Math.max(-1, Math.min(1, pan));
     gain.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(AudioState.masterGain || ctx.destination);
   } else {
-    gain.connect(ctx.destination);
+    gain.connect(AudioState.masterGain || ctx.destination);
   }
   source.start(when);
 }
@@ -1129,15 +1137,25 @@ function playSfxFor(name, pid = null) {
 
 function updateSoundButton() {
   const btn = document.getElementById('btn-sound');
+  const slider = document.getElementById('volume-slider');
   if (!btn) return;
-  btn.classList.toggle('muted', AudioState.muted);
-  btn.innerHTML = AudioState.muted
+  const effectiveMuted = AudioState.muted || AudioState.volume === 0;
+  btn.classList.toggle('muted', effectiveMuted);
+  btn.innerHTML = effectiveMuted
     ? '<i class="fa-solid fa-volume-xmark" aria-hidden="true"></i>'
-    : '<i class="fa-solid fa-volume-high" aria-hidden="true"></i>';
-  btn.setAttribute('aria-pressed', AudioState.muted ? 'true' : 'false');
-  const label = AudioState.muted ? 'Activar sonido' : 'Silenciar sonido';
+    : AudioState.volume < 0.4
+      ? '<i class="fa-solid fa-volume-low" aria-hidden="true"></i>'
+      : '<i class="fa-solid fa-volume-high" aria-hidden="true"></i>';
+  btn.setAttribute('aria-pressed', effectiveMuted ? 'true' : 'false');
+  const label = effectiveMuted ? 'Activar sonido' : 'Silenciar sonido';
   btn.title = label;
   btn.setAttribute('aria-label', label);
+  if (slider) {
+    slider.value = AudioState.muted ? 0 : Math.round(AudioState.volume * 100);
+  }
+  if (AudioState.masterGain) {
+    AudioState.masterGain.gain.value = effectiveMuted ? 0 : AudioState.volume;
+  }
   updateNotificationButton();
 }
 
@@ -1146,6 +1164,20 @@ function toggleSound() {
   localStorage.setItem(AUDIO_STORAGE_KEY, AudioState.muted ? '1' : '0');
   updateSoundButton();
   if (!AudioState.muted) playSfx('click');
+}
+
+function onVolumeChange(val) {
+  const v = parseInt(val, 10) / 100;
+  AudioState.volume = v;
+  localStorage.setItem(AUDIO_VOLUME_KEY, String(v));
+  if (v === 0) {
+    AudioState.muted = true;
+    localStorage.setItem(AUDIO_STORAGE_KEY, '1');
+  } else if (AudioState.muted) {
+    AudioState.muted = false;
+    localStorage.setItem(AUDIO_STORAGE_KEY, '0');
+  }
+  updateSoundButton();
 }
 
 // ══════════════════════════════════  WEBSOCKET  ════════════════════════════════
@@ -4405,6 +4437,7 @@ function playerColor(pid) {
 refreshBidInputUI();
 updateSoundButton();
 window.toggleSound = toggleSound;
+window.onVolumeChange = onVolumeChange;
 window.onHostRulesChanged = onHostRulesChanged;
 window.openStatsModal = openStatsModal;
 window.closeStatsModal = closeStatsModal;

@@ -29,9 +29,14 @@
 </head>
 <body>
 
-<button id="btn-sound" class="sound-toggle" type="button" onclick="toggleSound()" aria-pressed="false" aria-label="Silenciar sonido" title="Silenciar sonido">
-  <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
-</button>
+<div class="sound-control" role="group" aria-label="Control de volumen">
+  <button id="btn-sound" class="sound-toggle" type="button" onclick="toggleSound()" aria-pressed="false" aria-label="Silenciar sonido" title="Silenciar sonido">
+    <i class="fa-solid fa-volume-high" aria-hidden="true"></i>
+  </button>
+  <input id="volume-slider" class="volume-slider" type="range" min="0" max="100" value="70"
+         oninput="onVolumeChange(this.value)"
+         aria-label="Volumen" title="Volumen">
+</div>
 
 <button id="btn-notif" class="notif-toggle" type="button" onclick="openNotificationModal()" aria-label="Activar notificaciones de turno" title="Activar notificaciones" style="display:none">
   <i class="fa-regular fa-bell" aria-hidden="true"></i>
