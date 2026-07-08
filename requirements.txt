@@ -1,6 +1,6 @@
-fastapi
-uvicorn[standard]
-asyncpg
-python-dotenv
-scikit-learn
-numpy
+fastapi==0.136.3
+uvicorn[standard]==0.38.0
+asyncpg==0.30.0
+python-dotenv==1.2.2
+numpy==2.3.4
+scikit-learn==1.7.2
