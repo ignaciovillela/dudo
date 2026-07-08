@@ -3592,7 +3592,8 @@ function updateBidProb() {
   // Format: 2 decimals if <1% or exactly 0, 1 decimal if <10%, otherwise integer
   const pctStr = pct < 1 ? pct.toFixed(2) : pct < 10 ? pct.toFixed(1) : String(pctRound);
   el.className = 'bid-prob ' + (pctRound >= 60 ? 'bid-prob-high' : pctRound >= 30 ? 'bid-prob-mid' : 'bid-prob-low');
-  el.textContent = `~${pctStr}%`;
+  el.textContent = `${pctStr}%`;
+  el.dataset.tooltip = 'Probabilidad estimada basada en tus dados y el total en juego. Es única para cada jugador pues depende de tu mano actual.';
   el.style.display = 'inline-block';
 }
 
@@ -3609,7 +3610,8 @@ function updateCurrentBidProb() {
   const pctRound = Math.round(prob * 100);
   const pct = prob * 100;
   const pctStr = pct < 1 ? pct.toFixed(2) : pct < 10 ? pct.toFixed(1) : String(pctRound);
-  el.textContent = `~${pctStr}%`;
+  el.textContent = `${pctStr}%`;
+  el.dataset.tooltip = 'Probabilidad estimada basada en tus dados y el total en juego. Es única para cada jugador pues depende de tu mano actual.';
   el.className = 'current-bid-prob ' + (pctRound >= 60 ? 'bid-prob-high' : pctRound >= 30 ? 'bid-prob-mid' : 'bid-prob-low');
 }
 

@@ -2495,6 +2495,57 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .bid-prob-mid  { background: rgba(220,180,40,0.15); color: #d4b84a; border: 1px solid rgba(220,180,40,0.3); }
 .bid-prob-low  { background: rgba(210,60,60,0.15);  color: #e07070; border: 1px solid rgba(210,60,60,0.3); }
 
+.bid-prob,
+.current-bid-prob {
+  position: relative;
+  cursor: help;
+}
+.bid-prob::after,
+.current-bid-prob::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  white-space: normal;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+  line-height: 1.4;
+  text-align: center;
+}
+.bid-prob::before,
+.current-bid-prob::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #1a1a2e;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+}
+.bid-prob:hover::after,
+.bid-prob:hover::before,
+.current-bid-prob:hover::after,
+.current-bid-prob:hover::before {
+  opacity: 1;
+}
+
 #btn-bid.bid-invalid {
   opacity: 0.45;
   cursor: default;
