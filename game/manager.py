@@ -963,6 +963,13 @@ class GameManager:
             await self._broadcast(room_id, reveal_payload)
 
         bot_engine.notify_reveal(game, reveal_payload)
+
+        # Bot chat: enviar inmediatamente (sin delay) mientras el frontend aún
+        # muestra la fase reveal, no esperar a que _new_round avance a la
+        # siguiente ronda.
+        if game.players.get(player_id, None) and game.players[player_id].is_bot:
+            await self._bot_chat_immediate(room_id, player_id, "dudo")
+
         await self._apply_loss(room_id, game, result.loser_id)
 
     async def _h_calzo(self, room_id, player_id, game, msg):
@@ -1014,6 +1021,10 @@ class GameManager:
         }
         await self._broadcast(room_id, calzo_payload)
         bot_engine.notify_reveal(game, calzo_payload)
+
+        # Bot chat inmediato (misma razón que en _h_dudo)
+        if game.players.get(player_id, None) and game.players[player_id].is_bot:
+            await self._bot_chat_immediate(room_id, player_id, "calzo")
 
         if result.exact:
             await self._new_round(room_id, game, result.challenger_id)
@@ -2099,6 +2110,35 @@ class GameManager:
             "phrase": phrase,
         })
 
+    async def _bot_chat_immediate(self, room_id: str, bot_id: str, action: str):
+        """Como _maybe_bot_chat pero sin sleep ni verificación de fase —
+        para usar dentro de _h_dudo / _h_calzo justo después del reveal
+        y antes de _apply_loss / _new_round."""
+        game = self.games.get(room_id)
+        if not game or not game.rules.bot_chat_enabled:
+            return
+        player = game.players.get(bot_id)
+        if not player:
+            return
+        difficulty = player.bot_difficulty
+        action_cfg = self._BOT_CHAT_CONFIG.get(difficulty, {}).get(action)
+        if not action_cfg:
+            return
+        prob, categories = action_cfg
+        if random.random() > prob:
+            return
+        phrases = self._BOT_PHRASES.get(random.choice(categories), [])
+        if not phrases:
+            return
+        phrase = random.choice(phrases)
+        await self._broadcast(room_id, {
+            "type": "quick_chat",
+            "from_id": bot_id,
+            "from_name": player.name,
+            "from_avatar": player.avatar,
+            "phrase": phrase,
+        })
+
     async def _run_bot_action(self, room_id: str, game: Game, bot_id: str):
         if room_id in self.paused_rooms:
             return  # sala pausada, el bot no actúa
@@ -2128,7 +2168,6 @@ class GameManager:
             else:
                 self._cancel_turn_timeout(room_id)
                 await self._h_dudo(room_id, bot_id, game, {})
-                await self._maybe_bot_chat(room_id, bot_id, "dudo")
                 return
 
         if action == "calzo":
@@ -2137,7 +2176,6 @@ class GameManager:
             else:
                 self._cancel_turn_timeout(room_id)
                 await self._h_calzo(room_id, bot_id, game, {})
-                await self._maybe_bot_chat(room_id, bot_id, "calzo")
                 return
 
         if action == "paso":
