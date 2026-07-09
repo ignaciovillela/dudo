@@ -1,0 +1,15 @@
+[
+  { "text": "¡Dudo!",          "categories": ["truth_dudo"] },
+  { "text": "¿Seguro?",        "categories": ["confusion", "taunt"] },
+  { "text": "No te creo",      "categories": ["truth_dudo", "bluff"] },
+  { "text": "Buen bluff",      "categories": ["bluff", "taunt"] },
+  { "text": "No compro",       "categories": ["truth_dudo", "confusion"] },
+  { "text": "Qué cara",        "categories": ["taunt"] },
+  { "text": "Bien jugado",     "categories": ["truth_bid", "taunt"] },
+  { "text": "Era obvio",       "categories": ["taunt"] },
+  { "text": "Todo calculado",  "categories": ["taunt", "bluff"] },
+  { "text": "Interesante...",  "categories": ["confusion"] },
+  { "text": "Qué confianza",   "categories": ["taunt"] },
+  { "text": "Te salió buena",  "categories": ["taunt", "confusion"] },
+  { "text": "GG",              "categories": ["truth_bid"] }
+]

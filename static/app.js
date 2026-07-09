@@ -2295,11 +2295,31 @@ function throwEmoji(targetPid, emoji) {
 
 // ══════════════════════════════  QUICK CHAT  ═══════════════════════════════════
 
-const QUICK_PHRASES = [
-  '¡Mentira!', '¡Suerte!', 'Buen bluff', 'No te creo',
-  '¡Calzo!', 'Vamos', '😅', '🤔', 'Eso era mentira',
-  '¡Bien jugado!', 'Mala suerte', 'Ups',
+// Fuente de verdad: /static/quick_phrases.json (compartido con el backend, game/manager.py _BOT_PHRASES / ALLOWED_QUICK_PHRASES)
+// Frases rápidas. El frontend solo usa `text`; `categories` es para los bots.
+let QUICK_PHRASES = [
+  { text: '¡Dudo!',          categories: ['truth_dudo'] },
+  { text: '¿Seguro?',        categories: ['confusion', 'taunt'] },
+  { text: 'No te creo',      categories: ['truth_dudo', 'bluff'] },
+  { text: 'Buen bluff',      categories: ['bluff', 'taunt'] },
+  { text: 'No compro',       categories: ['truth_dudo', 'confusion'] },
+  { text: 'Qué cara',        categories: ['taunt'] },
+  { text: 'Bien jugado',     categories: ['truth_bid', 'taunt'] },
+  { text: 'Era obvio',       categories: ['taunt'] },
+  { text: 'Todo calculado',  categories: ['taunt', 'bluff'] },
+  { text: 'Interesante...',  categories: ['confusion'] },
+  { text: 'Qué confianza',   categories: ['taunt'] },
+  { text: 'Te salió buena',  categories: ['taunt', 'confusion'] },
+  { text: 'GG',              categories: ['truth_bid'] },
 ];
+
+fetch('/static/quick_phrases.json')
+  .then(r => r.json())
+  .then(data => {
+    if (Array.isArray(data) && data.length > 0 && data.every(p => typeof p.text === 'string'))
+      QUICK_PHRASES = data;
+  })
+  .catch(() => { /* se queda con el fallback */ });
 
 let QUICK_AUDIO_CLIPS = [];
 let SYSTEM_AUDIO_CLIPS = [];
@@ -3134,15 +3154,16 @@ function _efBuildPopup() {
 
   const phrases = document.createElement('div');
   phrases.className = 'ef-phrases';
-  QUICK_PHRASES.forEach(phrase => {
+  QUICK_PHRASES.forEach(({ text, meaning }) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'ef-phrase-btn';
-    btn.textContent = phrase;
+    btn.textContent = text;
+    btn.dataset.meaning = meaning;
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      sendQuickChat(phrase);
+      sendQuickChat(text);
       _efScheduleHide();
     });
     phrases.appendChild(btn);
@@ -4052,14 +4073,15 @@ function updateControls() {
       const grid = document.getElementById('spectator-phrases-grid');
       if (grid && !grid.dataset.built) {
         grid.dataset.built = '1';
-        QUICK_PHRASES.forEach(phrase => {
+        QUICK_PHRASES.forEach(({ text, meaning }) => {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'ef-phrase-btn';
-          btn.textContent = phrase;
+          btn.textContent = text;
+          btn.dataset.meaning = meaning;
           btn.addEventListener('click', () => {
-            sendQuickChat(phrase);
-            showSpectatorQcDisplay(phrase);
+            sendQuickChat(text);
+            showSpectatorQcDisplay(text);
           });
           grid.appendChild(btn);
         });
