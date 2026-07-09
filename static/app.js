@@ -185,6 +185,7 @@ const S = {
   playerId:       null,
   playerName:     '',
   playerAvatar:   '🎲',
+  anonId:         null,
   roomId:         '',
   hostId:         null,
   isHost:         false,
@@ -393,20 +394,20 @@ const _avatarsReady = fetch('/static/avatars.json')
     AVATAR_OPTIONS = ['🎲'];
   });
 
-// XP thresholds per level (index = level - 1). Level 1 starts at 0 XP.
-const LEVEL_XP_THRESHOLDS = [
-  0,    // level 1
-  50,   // level 2
-  120,  // level 3
-  210,  // level 4
-  320,  // level 5
-  450,  // level 6
-  600,  // level 7
-  780,  // level 8
-  990,  // level 9
-  1230, // level 10
-];
-const MAX_LEVEL = LEVEL_XP_THRESHOLDS.length;
+// Fuente de verdad: /static/levels.json (compartido con el backend, game/config.py)
+// Umbrales de XP por nivel (índice = nivel - 1). Nivel 1 empieza en 0 XP.
+let LEVEL_XP_THRESHOLDS = [0, 50, 120, 210, 320, 450, 600, 780, 990, 1230]; // fallback mientras carga/si falla
+let MAX_LEVEL = LEVEL_XP_THRESHOLDS.length;
+
+fetch('/static/levels.json')
+  .then(r => r.json())
+  .then(data => {
+    if (Array.isArray(data) && data.length > 0) {
+      LEVEL_XP_THRESHOLDS = data;
+      MAX_LEVEL = LEVEL_XP_THRESHOLDS.length;
+    }
+  })
+  .catch(() => { /* se queda con el fallback */ });
 
 const LEVEL_STORAGE_KEY = 'dudoLevel';
 
@@ -1090,10 +1091,10 @@ const SFX = {
   tick() {
     playTone(1450, 0.03, { type: 'square', volume: 0.025 });
   },
-  emojiHit() {
+  emojiHit(pan = 0) {
     // Sonido al recibir un emoji: "pop" suave con dos tonos cortos
-    playTone(800, 0.04, { type: 'sine', volume: 0.04 });
-    playTone(1100, 0.05, { type: 'sine', delay: 0.04, volume: 0.03 });
+    playTone(800, 0.04, { type: 'sine', volume: 0.04, pan });
+    playTone(1100, 0.05, { type: 'sine', delay: 0.04, volume: 0.03, pan });
   },
 };
 
@@ -1288,6 +1289,8 @@ function handleMsg(msg) {
     error:              onError,
     emoji_thrown:       onEmojiThrown,
     quick_chat:         onQuickChat,
+    audio_clip:         onAudioClip,
+    audio_clips_updated:onAudioClipsUpdated,
     ghost_failed:       onGhostFailed,
   };
   const fn = H[msg.type];
@@ -1314,6 +1317,7 @@ function onConnected(msg) {
   }
   const reconnect_id = (session && session.room === S.roomId) ? session.playerId : null;
   const anon_id = getOrCreateAnonId();
+  S.anonId = anon_id;
   send({ type: 'join', name: S.playerName, avatar: S.playerAvatar, reconnect_id, anon_id });
 }
 
@@ -1353,6 +1357,8 @@ function onJoined(msg) {
   renderLobbyRules();
   applySpectatorMode();
   renderLobbySpectatorControls();
+  renderAudioManagerModal();
+  refreshQuickAudioClips();
   log(`Unido a la sala ${S.roomId}`, 'system');
 }
 
@@ -1377,6 +1383,8 @@ function onJoinedSpectator(msg) {
   updateBidDisplay();
   document.getElementById('disp-round').textContent = S.roundNum;
   document.getElementById('disp-total').textContent = S.totalDice;
+  renderAudioManagerModal();
+  refreshQuickAudioClips();
   log(`${msg.spectator_name || 'Espectador'} está observando la partida`, 'system');
 }
 
@@ -1452,6 +1460,8 @@ function onBecameSpectator(msg) {
   renderLobbyPlayers();
   updateStartButton();
   renderLobbySpectatorControls();
+  renderAudioManagerModal();
+  refreshQuickAudioClips();
   log('Ahora eres espectador', 'system');
 }
 
@@ -1474,6 +1484,8 @@ function onBecamePlayer(msg) {
   renderLobbyRules();
   updateStartButton();
   renderLobbySpectatorControls();
+  renderAudioManagerModal();
+  refreshQuickAudioClips();
   saveSession();
   log('Ahora eres jugador', 'system');
 }
@@ -1488,6 +1500,7 @@ function onKicked(msg) {
   S.roomId = '';
   S.players = {};
   S.playerOrder = [];
+  clearQuickAudioClips();
   showScreen('lobby');
   const form = document.getElementById('lobby-form');
   const room = document.getElementById('lobby-room');
@@ -1529,6 +1542,8 @@ function onReconnected(msg) {
     renderLobbyRules();
     updateStartButton();
     renderLobbySpectatorControls();
+    renderAudioManagerModal();
+    refreshQuickAudioClips();
     playSfx('reconnect');
     log('Reconectado al lobby', 'system');
     return;
@@ -1540,6 +1555,8 @@ function onReconnected(msg) {
   renderStreakBadges();
   maybeInitEmojiHover();
   updateBidDisplay();
+  renderAudioManagerModal();
+  refreshQuickAudioClips();
   playSfx('reconnect');
   // Restaurar historial del log
   const savedLog = _loadLogEntries();
@@ -2284,10 +2301,355 @@ const QUICK_PHRASES = [
   '¡Bien jugado!', 'Mala suerte', 'Ups',
 ];
 
+let QUICK_AUDIO_CLIPS = [];
+let SYSTEM_AUDIO_CLIPS = [];
+let PLAYER_EXTRA_AUDIO_CLIPS = [];
+let OWN_PLAYER_AUDIO_CLIPS = [];
+const QUICK_AUDIO_BY_ID = new Map();
+const QUICK_AUDIO_PLAYERS = new Map();
+const QUICK_AUDIO_PANNERS = new Map();
+let PLAYER_AUDIO_MAX_SLOTS = 3;
+let PLAYER_AUDIO_MAX_SECONDS = 7;
+
+/**
+ * Cantidad de slots de audio desbloqueados para un nivel dado: 0 en el nivel
+ * mínimo, PLAYER_AUDIO_MAX_SLOTS en MAX_LEVEL, proporcional entre medio.
+ * Debe coincidir exactamente con `max_audio_slots_for_level` en game/audio_clips.py.
+ */
+function maxAudioSlotsForLevel(level) {
+  const lvl = Math.max(1, Math.min(level || 1, MAX_LEVEL));
+  return Math.round((lvl / MAX_LEVEL) * PLAYER_AUDIO_MAX_SLOTS);
+}
+
+/** Nivel mínimo necesario para desbloquear un slot (1..PLAYER_AUDIO_MAX_SLOTS). */
+function audioSlotUnlockLevel(slot) {
+  for (let lvl = 1; lvl <= MAX_LEVEL; lvl++) {
+    if (maxAudioSlotsForLevel(lvl) >= slot) return lvl;
+  }
+  return MAX_LEVEL;
+}
+
+function audioClipKey(clip) {
+  if (!clip) return '';
+  return `${clip.kind || 'player'}:${clip.id}`;
+}
+
+function audioClipKeyFromMsg(kind, id) {
+  return `${kind || 'player'}:${id}`;
+}
+
+function rebuildQuickAudioCatalog() {
+  QUICK_AUDIO_CLIPS = [...SYSTEM_AUDIO_CLIPS, ...PLAYER_EXTRA_AUDIO_CLIPS];
+  QUICK_AUDIO_BY_ID.clear();
+  QUICK_AUDIO_CLIPS.forEach(item => QUICK_AUDIO_BY_ID.set(audioClipKey(item), item));
+  QUICK_AUDIO_PLAYERS.clear();
+  _disconnectQuickAudioPanners();
+}
+
+function normalizeAudioEmoji(value) {
+  return (typeof value === 'string' && value.trim()) ? value.trim() : '🎵';
+}
+
+function normalizeAudioColor(value) {
+  if (typeof value !== 'string') return null;
+  const color = value.trim();
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color) ? color.toLowerCase() : null;
+}
+
+function _hexToRgb(hexColor) {
+  const hex = hexColor.replace('#', '');
+  const normalized = hex.length === 3
+    ? hex.split('').map(c => c + c).join('')
+    : hex;
+  const int = parseInt(normalized, 16);
+  return {
+    r: (int >> 16) & 255,
+    g: (int >> 8) & 255,
+    b: int & 255,
+  };
+}
+
+function _rgba(hexColor, alpha) {
+  const { r, g, b } = _hexToRgb(hexColor);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function applyAudioButtonTheme(btn, clip) {
+  const color = normalizeAudioColor(clip?.color);
+  if (!color) return;
+  btn.style.setProperty('--audio-btn-bg', _rgba(color, 0.14));
+  btn.style.setProperty('--audio-btn-border', _rgba(color, 0.5));
+  btn.style.setProperty('--audio-btn-bg-hover', _rgba(color, 0.26));
+  btn.style.setProperty('--audio-btn-border-hover', _rgba(color, 0.75));
+  btn.style.setProperty('--audio-btn-icon', color);
+}
+
+/**
+ * Construye el botón visual de un audio (icono + nombre). La identificación
+ * del dueño (para audios de jugador) NO va dentro del botón: se muestra como
+ * encabezado del grupo al que pertenece (ver `_renderAudioBoard`).
+ */
+function _buildAudioClipButtonEl(clip) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ef-audio-btn';
+  btn.title = 'Escuchar';
+  const icon = document.createElement('span');
+  icon.className = 'ef-audio-icon';
+  icon.textContent = normalizeAudioEmoji(clip.emoji);
+  const label = document.createElement('span');
+  label.className = 'ef-audio-label';
+  label.textContent = clip.label;
+  btn.append(icon, label);
+  applyAudioButtonTheme(btn, clip);
+  return btn;
+}
+
+/**
+ * Renderiza una lista de clips dentro de `container`: los de sistema van
+ * sueltos en una fila (sin encabezado, no tienen dueño); los de jugador se
+ * agrupan por dueño con un encabezado discreto tipo:
+ *
+ *     Ana
+ *     ─────────────
+ *     [audio1] [audio2]
+ *
+ *     Beto
+ *     ─────────────
+ *     [audio3]
+ *
+ * `onClipClick(clip, event)` se llama al hacer click en cualquier botón.
+ */
+function _renderAudioBoard(container, clips, onClipClick) {
+  container.innerHTML = '';
+  if (!clips || clips.length === 0) return;
+
+  const makeRow = (list) => {
+    const row = document.createElement('div');
+    row.className = 'ef-audio-row';
+    list.forEach(clip => {
+      const btn = _buildAudioClipButtonEl(clip);
+      btn.addEventListener('click', (e) => onClipClick(clip, e));
+      row.appendChild(btn);
+    });
+    return row;
+  };
+
+  const systemClips = clips.filter(c => c.kind !== 'player');
+  if (systemClips.length > 0) {
+    container.appendChild(makeRow(systemClips));
+  }
+
+  const playerClips = clips.filter(c => c.kind === 'player');
+  const groups = new Map();
+  const groupOrder = [];
+  playerClips.forEach(clip => {
+    const key = clip.ownerAnonId || `clip-${clip.id}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        isOwn: !!(clip.ownerAnonId && S.anonId && clip.ownerAnonId === S.anonId),
+        ownerName: clip.ownerName || 'Jugador',
+        clips: [],
+      });
+      groupOrder.push(key);
+    }
+    groups.get(key).clips.push(clip);
+  });
+  // El grupo propio ("Tú") va primero; el resto mantiene su orden de aparición.
+  groupOrder.sort((a, b) => (groups.get(b).isOwn ? 1 : 0) - (groups.get(a).isOwn ? 1 : 0));
+
+  groupOrder.forEach(key => {
+    const group = groups.get(key);
+    const wrap = document.createElement('div');
+    wrap.className = 'ef-audio-group';
+    const name = document.createElement('div');
+    name.className = 'ef-audio-group-name';
+    name.textContent = group.isOwn ? 'Tú' : group.ownerName;
+    wrap.append(name, makeRow(group.clips));
+    container.appendChild(wrap);
+  });
+}
+
+function clearQuickAudioClips() {
+  QUICK_AUDIO_CLIPS = [];
+  SYSTEM_AUDIO_CLIPS = [];
+  PLAYER_EXTRA_AUDIO_CLIPS = [];
+  OWN_PLAYER_AUDIO_CLIPS = [];
+  QUICK_AUDIO_BY_ID.clear();
+  QUICK_AUDIO_PLAYERS.clear();
+  _disconnectQuickAudioPanners();
+  if (_efPopup) _efBuildPopup();
+  renderSpectatorAudioButtons();
+  renderAudioManagerModal();
+}
+
+async function refreshQuickAudioClips() {
+  if (!S.roomId) {
+    clearQuickAudioClips();
+    return;
+  }
+
+  const anonId = S.anonId || getOrCreateAnonId();
+  if (!anonId) {
+    clearQuickAudioClips();
+    return;
+  }
+
+  try {
+    const systemRes = await fetch('/api/audio_clips/system');
+    if (!systemRes.ok) throw new Error('system_audio_fetch_failed');
+    const systemPayload = await systemRes.json();
+    SYSTEM_AUDIO_CLIPS = (Array.isArray(systemPayload?.clips) ? systemPayload.clips : [])
+      .map(item => {
+        if (!item || typeof item.id !== 'string' || typeof item.stream_url !== 'string') return null;
+        return {
+          kind: 'system',
+          id: item.id,
+          label: (typeof item.label === 'string' && item.label.trim()) ? item.label.trim() : item.id,
+          emoji: normalizeAudioEmoji(item.emoji),
+          color: normalizeAudioColor(item.color),
+          streamUrl: item.stream_url,
+        };
+      })
+      .filter(Boolean);
+
+    const connectedHumans = Object.values(S.players || {}).filter(p => p && !p.is_bot && p.connected && p.anon_id);
+    const anonToName = new Map(connectedHumans.map(p => [p.anon_id, p.name || 'Jugador']));
+    const presentAnonIds = [...new Set(connectedHumans.map(p => p.anon_id))];
+    if (!presentAnonIds.includes(anonId)) {
+      presentAnonIds.push(anonId);
+      anonToName.set(anonId, S.playerName || 'Tú');
+    }
+
+    const ownClips = [];
+    const extras = [];
+    for (const ownerAnonId of presentAnonIds) {
+      const res = await fetch(`/api/player/${encodeURIComponent(ownerAnonId)}/audio_clips?room_id=${encodeURIComponent(S.roomId)}`);
+      if (!res.ok) continue;
+      const payload = await res.json();
+      if (ownerAnonId === anonId) {
+        PLAYER_AUDIO_MAX_SLOTS = Number.isInteger(payload?.max_slots) ? payload.max_slots : 2;
+        PLAYER_AUDIO_MAX_SECONDS = Number.isFinite(payload?.max_seconds) ? payload.max_seconds : 7;
+      }
+      const rows = Array.isArray(payload?.clips) ? payload.clips : [];
+      rows.forEach(item => {
+        const id = Number(item?.id);
+        if (!Number.isInteger(id) || typeof item.stream_url !== 'string') return;
+        const ownerName = anonToName.get(ownerAnonId) || 'Jugador';
+        const clip = {
+          kind: 'player',
+          id,
+          ownerAnonId,
+          ownerName,
+          slot: Number.isInteger(item.slot) ? item.slot : null,
+          label: (typeof item.label === 'string' && item.label.trim()) ? item.label.trim() : `Audio ${id}`,
+          emoji: normalizeAudioEmoji(item.emoji),
+          color: normalizeAudioColor(item.color),
+          durationSeconds: Number.isFinite(item.duration_seconds) ? item.duration_seconds : null,
+          streamUrl: item.stream_url,
+        };
+        extras.push(clip);
+        if (ownerAnonId === anonId) ownClips.push(clip);
+      });
+    }
+
+    OWN_PLAYER_AUDIO_CLIPS = ownClips.sort((a, b) => (a.slot ?? 99) - (b.slot ?? 99));
+    PLAYER_EXTRA_AUDIO_CLIPS = extras;
+    rebuildQuickAudioCatalog();
+
+    if (_efPopup) _efBuildPopup();
+    renderSpectatorAudioButtons();
+    renderAudioManagerModal();
+  } catch (_) {
+    clearQuickAudioClips();
+  }
+}
+
 function sendQuickChat(phrase) {
   if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
   send({ type: 'quick_chat', phrase });
 }
+
+function sendAudioClip(kind, clipId) {
+  if (!S.ws || S.ws.readyState !== WebSocket.OPEN) return;
+  const normalizedKind = kind === 'system' ? 'system' : 'player';
+  if (!QUICK_AUDIO_BY_ID.has(audioClipKeyFromMsg(normalizedKind, clipId))) return;
+  send({ type: 'audio_clip', clip_kind: normalizedKind, clip_id: clipId });
+}
+
+function getAudioClipMeta(kind, clipId) {
+  return QUICK_AUDIO_BY_ID.get(audioClipKeyFromMsg(kind, clipId)) || null;
+}
+
+/**
+ * Conecta (una sola vez por elemento) un <audio> al grafo de Web Audio a
+ * través de un StereoPannerNode, para poder ubicarlo espacialmente según la
+ * posición del jugador que lo disparó. El volumen se sigue controlando con
+ * `audio.volume` (no se enruta por masterGain, para no atenuar dos veces);
+ * el panner solo agrega el balance izquierda/derecha.
+ */
+function _panForAudioElement(audio, key, pan) {
+  const ctx = ensureAudioCtx();
+  if (!ctx || !ctx.createStereoPanner) return;
+  let panner = QUICK_AUDIO_PANNERS.get(key);
+  if (!panner) {
+    try {
+      const source = ctx.createMediaElementSource(audio);
+      panner = ctx.createStereoPanner();
+      source.connect(panner);
+      panner.connect(ctx.destination);
+      QUICK_AUDIO_PANNERS.set(key, panner);
+    } catch (_) {
+      return; // el elemento ya estaba conectado o el navegador no soporta esto: se reproduce sin pan
+    }
+  }
+  panner.pan.value = Math.max(-1, Math.min(1, pan || 0));
+}
+
+function _disconnectQuickAudioPanners() {
+  QUICK_AUDIO_PANNERS.forEach(panner => { try { panner.disconnect(); } catch (_) {} });
+  QUICK_AUDIO_PANNERS.clear();
+}
+
+function playAudioClipById(kind, clipId, fallbackUrl = null, pid = null) {
+  unlockAudio();
+  const meta = getAudioClipMeta(kind, clipId);
+  const src = meta?.streamUrl || fallbackUrl;
+  if (!src) return;
+  let audio = QUICK_AUDIO_PLAYERS.get(src);
+  if (!audio) {
+    audio = new Audio(src);
+    audio.preload = 'auto';
+    QUICK_AUDIO_PLAYERS.set(src, audio);
+  }
+  audio.currentTime = 0;
+  audio.volume = AudioState.muted ? 0 : AudioState.volume;
+  _panForAudioElement(audio, src, pid ? panForPid(pid) : 0);
+  audio.play().catch(() => {});
+}
+
+function onAudioClip(msg) {
+  const isSelf = msg.from_id === S.playerId;
+  const actorLabel = isSelf ? 'Tú' : msg.from_name;
+  const clipMeta = getAudioClipMeta(msg.clip_kind, msg.clip_id);
+  const clipLabel = msg.clip_label || clipMeta?.label || msg.clip_id;
+  const clipEmoji = normalizeAudioEmoji(msg.clip_emoji || clipMeta?.emoji);
+  const bubbleText = `${clipEmoji} ${clipLabel}`;
+  log(`${msg.from_avatar} ${actorLabel}: ${bubbleText}`, 'chat');
+  playAudioClipById(msg.clip_kind, msg.clip_id, msg.clip_url || null, msg.from_id);
+  const isPlayer = isSelf || !!document.querySelector(`#other-players .player-card[data-pid="${msg.from_id}"]`);
+  if (isPlayer) {
+    _showQuickChatBubble(msg.from_id, bubbleText);
+  } else {
+    showSpectatorQcDisplay(`${msg.from_avatar} ${msg.from_name}: ${bubbleText}`);
+  }
+}
+
+function onAudioClipsUpdated(msg) {
+  void msg;
+  refreshQuickAudioClips();
+}
+
 
 function onQuickChat(msg) {
   const isSelf = msg.from_id === S.playerId;
@@ -2334,6 +2696,312 @@ function showSpectatorQcDisplay(phrase) {
   }, 3000);
 }
 
+function renderSpectatorAudioButtons() {
+  const label = document.getElementById('spectator-audios-label');
+  const grid = document.getElementById('spectator-audios-grid');
+  if (!grid) return;
+
+  if (QUICK_AUDIO_CLIPS.length === 0) {
+    grid.innerHTML = '';
+    grid.style.display = 'none';
+    if (label) label.style.display = 'none';
+    return;
+  }
+
+  if (label) label.style.display = '';
+  grid.style.display = 'flex';
+  _renderAudioBoard(grid, QUICK_AUDIO_CLIPS, (clip) => {
+    sendAudioClip(clip.kind, clip.id);
+    showSpectatorQcDisplay(`${normalizeAudioEmoji(clip.emoji)} ${clip.label}`);
+  });
+}
+
+/**
+ * Construye la tarjeta de un slot de audio del jugador: bloqueada (con el
+ * motivo/nivel requerido), vacía (con formulario de subida) u ocupada (con
+ * datos del clip + reproducir/borrar + formulario para reemplazar).
+ */
+function _buildAudioSlotCard(slot, clip, level) {
+  const unlockedSlots = maxAudioSlotsForLevel(level);
+  const locked = slot > unlockedSlots;
+
+  const card = document.createElement('div');
+  card.className = 'audio-slot-card' + (locked ? ' audio-slot-card--locked' : '');
+
+  const header = document.createElement('div');
+  header.className = 'audio-slot-header';
+  const title = document.createElement('span');
+  title.className = 'audio-slot-title';
+  title.textContent = `Slot ${slot}`;
+  header.appendChild(title);
+
+  const badge = document.createElement('span');
+  if (locked) {
+    badge.className = 'audio-slot-badge audio-slot-badge--locked';
+    badge.innerHTML = '<i class="fa-solid fa-lock" aria-hidden="true"></i> Bloqueado';
+  } else if (clip) {
+    badge.className = 'audio-slot-badge audio-slot-badge--filled';
+    badge.textContent = 'Ocupado';
+  } else {
+    badge.className = 'audio-slot-badge audio-slot-badge--empty';
+    badge.textContent = 'Vacío';
+  }
+  header.appendChild(badge);
+  card.appendChild(header);
+
+  if (locked) {
+    const reason = document.createElement('p');
+    reason.className = 'audio-slot-reason';
+    reason.textContent = `Se desbloquea en el nivel ${audioSlotUnlockLevel(slot)} (tu nivel actual: ${level}).`;
+    card.appendChild(reason);
+    return card;
+  }
+
+  if (clip) {
+    const current = document.createElement('div');
+    current.className = 'audio-slot-current';
+    const info = document.createElement('span');
+    info.className = 'custom-audio-row-info';
+    info.textContent = `${normalizeAudioEmoji(clip.emoji)} ${clip.label}${clip.durationSeconds ? ` · ${clip.durationSeconds.toFixed(1)}s` : ''}`;
+    const actions = document.createElement('span');
+    actions.className = 'custom-audio-row-actions';
+    const playBtn = document.createElement('button');
+    playBtn.type = 'button';
+    playBtn.className = 'audio-manager-row-btn';
+    playBtn.title = 'Escuchar';
+    playBtn.innerHTML = '<i class="fa-solid fa-play" aria-hidden="true"></i>';
+    playBtn.addEventListener('click', () => playAudioClipById('player', clip.id, clip.streamUrl));
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'audio-manager-row-btn audio-manager-row-btn--danger';
+    delBtn.title = 'Borrar este audio';
+    delBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
+    delBtn.addEventListener('click', () => deleteCustomAudioClip(slot));
+    actions.append(playBtn, delBtn);
+    current.append(info, actions);
+    card.appendChild(current);
+  }
+
+  const form = document.createElement('div');
+  form.className = 'audio-slot-form';
+
+  const nameInp = document.createElement('input');
+  nameInp.type = 'text';
+  nameInp.maxLength = 28;
+  nameInp.placeholder = 'Nombre del botón';
+  nameInp.className = 'lp-audio-input';
+  nameInp.value = clip ? clip.label : '';
+
+  const emojiInp = document.createElement('input');
+  emojiInp.type = 'text';
+  emojiInp.maxLength = 8;
+  emojiInp.placeholder = '🎵';
+  emojiInp.className = 'lp-audio-input lp-audio-input-emoji';
+  emojiInp.value = clip ? normalizeAudioEmoji(clip.emoji) : '';
+
+  const colorInp = document.createElement('input');
+  colorInp.type = 'color';
+  colorInp.className = 'lp-audio-input lp-audio-input-color';
+  colorInp.value = (clip && normalizeAudioColor(clip.color)) ? clip.color : '#22c55e';
+
+  const fileInp = document.createElement('input');
+  fileInp.type = 'file';
+  fileInp.accept = 'audio/*';
+  fileInp.className = 'lp-audio-input';
+
+  const uploadBtn = document.createElement('button');
+  uploadBtn.type = 'button';
+  uploadBtn.className = 'btn btn-sm';
+  uploadBtn.innerHTML = `<i class="fa-solid fa-upload" aria-hidden="true"></i> ${clip ? 'Reemplazar' : 'Subir'}`;
+
+  const inputs = { nameInp, emojiInp, colorInp, fileInp, uploadBtn };
+  uploadBtn.addEventListener('click', () => uploadAudioSlot(slot, inputs));
+
+  form.append(nameInp, emojiInp, colorInp, fileInp, uploadBtn);
+  card.appendChild(form);
+
+  return card;
+}
+
+/**
+ * Administrador de audios: modal in-game (accesible desde el botón fijo
+ * junto al control de sonido). Muestra los audios de siempre (sistema,
+ * fijos) y, como extra, hasta PLAYER_AUDIO_MAX_SLOTS audios personalizados
+ * del jugador — cada slot se desbloquea según su nivel (ver
+ * `maxAudioSlotsForLevel`); los bloqueados informan en qué nivel se abren.
+ */
+function renderAudioManagerModal() {
+  const btn = document.getElementById('btn-audio-manager');
+  if (btn) btn.style.display = S.roomId ? 'inline-flex' : 'none';
+
+  if (!S.roomId) {
+    closeAudioManagerModal();
+    const systemList = document.getElementById('audio-manager-system-list');
+    const list = document.getElementById('audio-manager-list');
+    if (systemList) systemList.innerHTML = '';
+    if (list) list.innerHTML = '';
+    return;
+  }
+
+  const systemList = document.getElementById('audio-manager-system-list');
+  const list = document.getElementById('audio-manager-list');
+  const maxEl = document.getElementById('audio-manager-max-seconds');
+  const progressEl = document.getElementById('audio-manager-slots-progress');
+  if (maxEl) maxEl.textContent = `${PLAYER_AUDIO_MAX_SECONDS}`;
+
+  if (systemList) {
+    if (SYSTEM_AUDIO_CLIPS.length === 0) {
+      systemList.innerHTML = '';
+      const hint = document.createElement('p');
+      hint.className = 'audio-manager-empty-hint';
+      hint.textContent = 'No hay audios predeterminados configurados.';
+      systemList.appendChild(hint);
+    } else {
+      _renderAudioBoard(systemList, SYSTEM_AUDIO_CLIPS, (clip) => playAudioClipById(clip.kind, clip.id, clip.streamUrl));
+    }
+  }
+
+  const { level } = loadLevelData();
+  const unlockedSlots = maxAudioSlotsForLevel(level);
+
+  if (progressEl) {
+    progressEl.textContent = `Nivel ${level} · ${unlockedSlots} de ${PLAYER_AUDIO_MAX_SLOTS} audios desbloqueados`;
+  }
+
+  if (list) {
+    list.innerHTML = '';
+    for (let slot = 1; slot <= PLAYER_AUDIO_MAX_SLOTS; slot++) {
+      const clip = OWN_PLAYER_AUDIO_CLIPS.find(c => c.slot === slot);
+      list.appendChild(_buildAudioSlotCard(slot, clip, level));
+    }
+  }
+}
+
+function openAudioManagerModal() {
+  if (!S.roomId) {
+    showToast('Debes estar dentro de una sala para gestionar audios', true);
+    return;
+  }
+  renderAudioManagerModal();
+  const modal = document.getElementById('audio-manager-modal');
+  if (modal) modal.style.display = 'flex';
+  refreshQuickAudioClips();
+}
+
+function closeAudioManagerModal() {
+  const modal = document.getElementById('audio-manager-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function deleteCustomAudioClip(slot) {
+  const anonId = S.anonId || getOrCreateAnonId();
+  if (!anonId || !S.roomId) {
+    showToast('Debes estar dentro de una sala para borrar audios', true);
+    return;
+  }
+  try {
+    const res = await fetch(`/api/player/${encodeURIComponent(anonId)}/audio_clips/${slot}?room_id=${encodeURIComponent(S.roomId)}`, {
+      method: 'DELETE',
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(payload?.detail || 'No se pudo borrar el audio', true);
+      return;
+    }
+    showToast(`Audio ${slot} borrado`);
+    await refreshQuickAudioClips();
+  } catch (_) {
+    showToast('Error de conexión al borrar audio', true);
+  }
+}
+
+async function _readAudioDurationFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const audio = document.createElement('audio');
+    const objectUrl = URL.createObjectURL(file);
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      const duration = Number(audio.duration);
+      URL.revokeObjectURL(objectUrl);
+      resolve(Number.isFinite(duration) ? duration : null);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('audio_metadata_error'));
+    };
+    audio.src = objectUrl;
+  });
+}
+
+async function uploadAudioSlot(slot, { nameInp, emojiInp, colorInp, fileInp, uploadBtn }) {
+  const anonId = S.anonId || getOrCreateAnonId();
+  if (!anonId || !S.roomId) {
+    showToast('Debes estar dentro de una sala para subir audios', true);
+    return;
+  }
+
+  const label = (nameInp?.value || '').trim();
+  const emoji = (emojiInp?.value || '').trim();
+  const color = colorInp?.value || '';
+  const file = fileInp?.files?.[0];
+
+  if (!label) {
+    showToast('Ingresa un nombre para el audio', true);
+    return;
+  }
+  if (!file) {
+    showToast('Selecciona un archivo de audio', true);
+    return;
+  }
+
+  try {
+    const duration = await _readAudioDurationFromFile(file);
+    if (duration == null) {
+      showToast('No se pudo leer la duración del audio', true);
+      return;
+    }
+    if (duration > PLAYER_AUDIO_MAX_SECONDS + 0.05) {
+      showToast(`El audio no puede durar más de ${PLAYER_AUDIO_MAX_SECONDS}s`, true);
+      return;
+    }
+  } catch (_) {
+    showToast('Archivo de audio inválido', true);
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('room_id', S.roomId);
+  formData.append('slot', String(slot));
+  formData.append('label', label);
+  formData.append('emoji', emoji || '🎵');
+  formData.append('color', color || '');
+  formData.append('display_name', S.playerName || '');
+  formData.append('level', String(loadLevelData().level));
+  formData.append('file', file);
+
+  if (uploadBtn) uploadBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/player/${encodeURIComponent(anonId)}/audio_clips`, {
+      method: 'POST',
+      body: formData,
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(payload?.detail || 'No se pudo guardar el audio', true);
+      return;
+    }
+    showToast(`Audio ${slot} guardado`);
+    if (fileInp) fileInp.value = '';
+    await refreshQuickAudioClips();
+  } catch (_) {
+    showToast('Error de conexión al subir audio', true);
+  } finally {
+    if (uploadBtn) uploadBtn.disabled = false;
+  }
+}
+
+
+
 function _showQuickChatBubble(fromId, phrase) {
   // Busca la carta del jugador (propio o oponente) y muestra una burbuja temporal
   const card = document.querySelector(
@@ -2351,7 +3019,7 @@ function _showQuickChatBubble(fromId, phrase) {
 
 function onEmojiThrown(msg) {
   animateEmojiThrow(msg.from_id, msg.target_id, msg.emoji);
-  if (msg.target_id === S.playerId) playSfx('emojiHit');
+  if (msg.target_id === S.playerId) playSfxFor('emojiHit', msg.from_id);
 }
 
 /**
@@ -2481,6 +3149,20 @@ function _efBuildPopup() {
   });
   popup.appendChild(phrases);
 
+  if (QUICK_AUDIO_CLIPS.length > 0) {
+    const audioSep = document.createElement('div');
+    audioSep.className = 'ef-audios-sep';
+    popup.appendChild(audioSep);
+
+    const audios = document.createElement('div');
+    audios.className = 'ef-audios';
+    _renderAudioBoard(audios, QUICK_AUDIO_CLIPS, (clip) => {
+      sendAudioClip(clip.kind, clip.id);
+      _efScheduleHide();
+    });
+    popup.appendChild(audios);
+  }
+
   document.body.appendChild(popup);
   _efPopup = popup;
   return popup;
@@ -2502,6 +3184,7 @@ function _efMakeBtn(item) {
   return btn;
 }
 
+
 // Actualiza el estado bloqueado/desbloqueado de cada botón según el nivel actual
 function _efRefreshPopupLocks() {
   if (!_efPopup) return;
@@ -2512,11 +3195,15 @@ function _efRefreshPopupLocks() {
   const extra = _efPopup.querySelector('.ef-extra');
   const sep = _efPopup.querySelector('.ef-phrases-sep');
   const phrases = _efPopup.querySelector('.ef-phrases');
+  const audioSep = _efPopup.querySelector('.ef-audios-sep');
+  const audios = _efPopup.querySelector('.ef-audios');
   if (row) row.style.display = isSelf ? 'none' : '';
   if (extra) { if (isSelf) { extra.style.display = 'none'; _efPopup.classList.remove('ef-popup--expanded'); } else { extra.style.display = ''; } }
-  // Frases rápidas: solo sobre la propia carta
-  if (sep)     sep.style.display     = isSelf ? '' : 'none';
-  if (phrases) phrases.style.display = isSelf ? '' : 'none';
+  // Frases rápidas + audios: solo sobre la propia carta
+  if (sep)      sep.style.display      = isSelf ? '' : 'none';
+  if (phrases)  phrases.style.display  = isSelf ? '' : 'none';
+  if (audioSep) audioSep.style.display = isSelf ? '' : 'none';
+  if (audios)   audios.style.display   = isSelf ? '' : 'none';
   _efPopup.querySelectorAll('.ef-btn[data-emoji-level]').forEach(btn => {
     const needed = parseInt(btn.dataset.emojiLevel, 10);
     const locked = level < needed;
@@ -3358,7 +4045,7 @@ function updateControls() {
     document.getElementById('bid-panel').style.opacity = '1';
     document.getElementById('wait-msg').style.display = 'block';
     document.getElementById('wait-msg').textContent = 'Modo espectador';
-    // Mostrar panel de frases integrado
+    // Mostrar panel de frases/audios integrado
     const sp = document.getElementById('spectator-phrases');
     if (sp) {
       sp.style.display = (S.phase === 'playing' || S.phase === 'reveal') ? 'block' : 'none';
@@ -3377,6 +4064,7 @@ function updateControls() {
           grid.appendChild(btn);
         });
       }
+      renderSpectatorAudioButtons();
     }
     return;
   }
@@ -3920,6 +4608,7 @@ function leaveRoom() {
   S.roomId = '';
   S.players = {};
   S.playerOrder = [];
+  clearQuickAudioClips();
   showScreen('lobby');
   document.getElementById('lobby-form').style.display = 'block';
   document.getElementById('lobby-room').style.display = 'none';
@@ -4457,6 +5146,8 @@ window.openRenameModal = openRenameModal;
 window.closeRenameModal = closeRenameModal;
 window.toggleRenameAvatarPicker = toggleRenameAvatarPicker;
 window.submitRename = submitRename;
+window.openAudioManagerModal = openAudioManagerModal;
+window.closeAudioManagerModal = closeAudioManagerModal;
 
 // Pre-rellenar formulario con la sesión guardada y guardar nombre en tiempo real
 (async function () {
@@ -4476,6 +5167,8 @@ window.submitRename = submitRename;
   }
   renderAvatarPicker();
   renderLevelBadge();
+  S.anonId = getOrCreateAnonId();
+  renderAudioManagerModal();
 
   // Guardar nombre en tiempo real al escribir
   if (nameEl) {

@@ -29,6 +29,7 @@ class Player:
             "ready": self.ready,
             "is_bot": self.is_bot,
             "bot_difficulty": self.bot_difficulty if self.is_bot else None,
+            "anon_id": self.anon_id if not self.is_bot else None,
         }
 
 

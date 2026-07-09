@@ -103,6 +103,45 @@ MIGRATIONS: list[tuple[int, str]] = [
             ADD COLUMN IF NOT EXISTS bid_time_truth_n    INTEGER NOT NULL DEFAULT 0;
         """,
     ),
+    (
+        4,
+        f"""
+        CREATE TABLE IF NOT EXISTS {_SCHEMA}.player_audio_clips (
+            id               BIGSERIAL PRIMARY KEY,
+            anon_id          TEXT NOT NULL REFERENCES {_SCHEMA}.players(anon_id) ON DELETE CASCADE,
+            slot             SMALLINT NOT NULL CHECK (slot BETWEEN 1 AND 2),
+            label            TEXT NOT NULL,
+            emoji            TEXT NOT NULL DEFAULT '🎵',
+            color            TEXT,
+            file_name        TEXT NOT NULL,
+            file_ext         TEXT NOT NULL,
+            mime_type        TEXT NOT NULL,
+            duration_seconds REAL NOT NULL CHECK (duration_seconds > 0 AND duration_seconds <= 7),
+            audio_data       BYTEA NOT NULL,
+            created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (anon_id, slot),
+            CHECK (char_length(label) <= 28),
+            CHECK (char_length(emoji) <= 8),
+            CHECK (color IS NULL OR color ~ '^#([0-9A-Fa-f]{{3}}|[0-9A-Fa-f]{{6}})$')
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_player_audio_clips_anon
+            ON {_SCHEMA}.player_audio_clips(anon_id);
+        """,
+    ),
+    (
+        5,
+        f"""
+        -- Los slots de audio desbloqueados dependen del nivel del jugador
+        -- (0 en el nivel mínimo, hasta 3 en el nivel máximo). Se amplía el
+        -- techo técnico de la columna de 2 a 3 slots.
+        ALTER TABLE {_SCHEMA}.player_audio_clips
+            DROP CONSTRAINT IF EXISTS player_audio_clips_slot_check;
+        ALTER TABLE {_SCHEMA}.player_audio_clips
+            ADD CONSTRAINT player_audio_clips_slot_check CHECK (slot BETWEEN 1 AND 3);
+        """,
+    ),
 ]
 
 

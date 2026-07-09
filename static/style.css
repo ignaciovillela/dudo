@@ -178,6 +178,31 @@ body {
   line-height: 1.45;
 }
 
+.audio-manager-toggle {
+  position: fixed;
+  left: 100px;
+  bottom: 14px;
+  z-index: 80;
+  border: 1px solid rgba(154,230,180,0.45);
+  background: rgba(0,0,0,0.34);
+  color: #9ae6b4;
+  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  cursor: pointer;
+  opacity: 0.88;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.audio-manager-toggle:hover {
+  background: rgba(154,230,180,0.16);
+}
+
 /* ── Screens ── */
 .screen { display: none; width: 100%; height: 100vh; }
 .screen.active { display: flex; }
@@ -934,6 +959,207 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .rules-summary li { margin-bottom: 4px; }
 .rules-summary li:last-child { margin-bottom: 0; }
 
+.audio-manager-box {
+  min-width: min(560px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.audio-manager-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audio-manager-subtitle {
+  margin: 0;
+  font-size: 0.84rem;
+  color: #9ae6b4;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.audio-manager-subtitle-hint {
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.audio-manager-empty-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.audio-manager-box .ef-audios {
+  max-width: none;
+  padding: 0;
+}
+
+.lp-audio-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.lp-audio-input-emoji {
+  text-align: center;
+}
+
+.lp-audio-input-color {
+  padding: 0;
+  min-height: 34px;
+}
+
+.audio-manager-progress {
+  margin: -2px 0 2px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
+.audio-slot-list {
+  display: grid;
+  gap: 10px;
+}
+
+.audio-slot-card {
+  border: 1px solid rgba(126, 207, 160, 0.22);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(126, 207, 160, 0.06);
+}
+
+.audio-slot-card--locked {
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.02);
+}
+
+.audio-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.audio-slot-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.audio-slot-card--locked .audio-slot-title {
+  color: var(--text-dim);
+}
+
+.audio-slot-badge {
+  font-size: 0.64rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.audio-slot-badge--empty {
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+}
+
+.audio-slot-badge--filled {
+  color: #9ae6b4;
+  background: rgba(72,187,120,0.14);
+  border: 1px solid rgba(72,187,120,0.4);
+}
+
+.audio-slot-badge--locked {
+  color: #e8a79f;
+  background: rgba(192,57,43,0.12);
+  border: 1px solid rgba(192,57,43,0.35);
+}
+
+.audio-slot-reason {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.audio-slot-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #d8ffe7;
+}
+
+.audio-slot-form {
+  display: grid;
+  grid-template-columns: 1.2fr 90px 66px 1.1fr auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.custom-audio-row-info {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-audio-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.audio-manager-row-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.72rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.audio-manager-row-btn:hover {
+  background: rgba(255,255,255,0.16);
+  color: var(--text);
+}
+
+.audio-manager-row-btn--danger {
+  border-color: rgba(192,57,43,0.4);
+  color: #e8a79f;
+}
+
+.audio-manager-row-btn--danger:hover {
+  background: rgba(192,57,43,0.24);
+  border-color: rgba(192,57,43,0.7);
+  color: #ffffff;
+}
+
+@media (max-width: 980px) {
+  .audio-slot-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .audio-slot-form > button {
+    grid-column: span 2;
+  }
+}
+
+
+
 /* ── Action buttons ── */
 .lp-actions {
   display: flex;
@@ -1432,6 +1658,84 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   color: var(--gold);
 }
 
+.ef-audios-sep {
+  width: 100%;
+  height: 1px;
+  background: rgba(232,184,109,0.12);
+  margin: 4px 0 2px;
+}
+
+.ef-audios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 300px;
+  padding: 4px 2px;
+}
+
+.ef-audio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Grupo de audios de un mismo jugador: nombre + barra discreta arriba,
+   sus botones de audio debajo. */
+.ef-audio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.ef-audio-group-name {
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(255,255,255,0.14);
+  width: 100%;
+}
+
+.ef-audio-btn {
+  --audio-btn-bg: rgba(72, 187, 120, 0.1);
+  --audio-btn-border: rgba(72, 187, 120, 0.32);
+  --audio-btn-text: #d8ffe7;
+  --audio-btn-bg-hover: rgba(72, 187, 120, 0.22);
+  --audio-btn-border-hover: rgba(72, 187, 120, 0.56);
+  --audio-btn-text-hover: #f0fff4;
+  --audio-btn-icon: #9ae6b4;
+  background: var(--audio-btn-bg);
+  border: 1px solid var(--audio-btn-border);
+  border-radius: 12px;
+  color: var(--audio-btn-text);
+  font-size: 0.82rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.ef-audio-btn:hover {
+  background: var(--audio-btn-bg-hover);
+  border-color: var(--audio-btn-border-hover);
+  color: var(--audio-btn-text-hover);
+}
+
+.ef-audio-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--audio-btn-icon);
+}
+
+.ef-audio-label {
+  white-space: nowrap;
+}
+
+
 /* ── Quick chat bubble on player card ── */
 .qc-bubble {
   position: absolute;
@@ -1801,7 +2105,8 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.spectator-phrases .ef-phrases {
+.spectator-phrases .ef-phrases,
+.spectator-phrases .ef-audios {
   max-width: 100%;
 }
 
@@ -3350,6 +3655,7 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   .sound-control:hover .volume-slider,
   .sound-control:focus-within .volume-slider { width: 60px; max-width: 60px; }
   .notif-toggle { bottom: auto; top: 12px; left: 48px; }
+  .audio-manager-toggle { bottom: auto; top: 12px; left: 86px; }
 
   /* ── Elementos no esenciales: ocultar para ganar espacio ── */
   #current-bid-prob { display: block; font-size: 0.65rem; }
