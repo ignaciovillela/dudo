@@ -112,6 +112,9 @@ def _db_host() -> str:
 
 @app.on_event("shutdown")
 async def _shutdown():
+    # Persistir todas las salas activas antes de cerrar la DB
+    for room_id in list(manager.games):
+        await manager._persist_room_state(room_id)
     await close_pool()
 
 
