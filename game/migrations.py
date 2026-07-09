@@ -142,6 +142,18 @@ MIGRATIONS: list[tuple[int, str]] = [
             ADD CONSTRAINT player_audio_clips_slot_check CHECK (slot BETWEEN 1 AND 3);
         """,
     ),
+    (
+        6,
+        f"""
+        -- active_rooms: persisted state for in-progress game rooms,
+        -- enabling recovery after server restarts.
+        CREATE TABLE IF NOT EXISTS {_SCHEMA}.active_rooms (
+            room_id     TEXT PRIMARY KEY,
+            state       JSONB NOT NULL,
+            updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """,
+    ),
 ]
 
 

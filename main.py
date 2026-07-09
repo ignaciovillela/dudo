@@ -46,6 +46,18 @@ INDEX_PATH = Path("static/index.html")
 
 _db_ok = False  # se vuelve True si la DB arranca bien
 
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+def _compute_static_version() -> int:
+    version = 0
+    for f in _STATIC_DIR.rglob("*"):
+        if f.is_file():
+            mtime = int(f.stat().st_mtime)
+            version = max(version, mtime)
+    return version
+
+STATIC_VERSION = _compute_static_version()
+
 
 @app.on_event("startup")
 async def _startup():
@@ -53,6 +65,11 @@ async def _startup():
     try:
         pool = await get_pool()
         await run_migrations(pool)
+
+        restored = await manager.restore_all_rooms_from_db()
+        if restored > 0:
+            log.info("[startup] %d sala(s) restaurada(s) desde la DB — jugadores pueden reconectar", restored)
+
         from game.player_model import bluff_model
         await bluff_model.load_and_train(pool)
         _db_ok = True
@@ -161,6 +178,16 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
     html = _replace_meta_tag(html, "name", "twitter:description", description)
     html = _replace_meta_tag(html, "name", "twitter:image", image_url)
     html = _replace_canonical(html, share_url)
+
+    html = html.replace(
+        'src="/static/app.js',
+        f'src="/static/app.js?v={STATIC_VERSION}',
+    )
+    html = html.replace(
+        'href="/static/style.css',
+        f'href="/static/style.css?v={STATIC_VERSION}',
+    )
+
     return html
 
 

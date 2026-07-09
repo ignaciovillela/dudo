@@ -77,6 +77,212 @@ class GameManager:
         # Se cancelan antes de crear uno nuevo para evitar duplicados por bid.
         self.gavilan_tasks: dict[tuple[str, str], asyncio.Task] = {}
 
+    # ------------------------------------------------------------------ state persistence
+
+    def _serialize_bid(self, bid: Bid | None) -> dict | None:
+        if bid is None:
+            return None
+        return {
+            "quantity": bid.quantity,
+            "face": bid.face,
+            "player_id": bid.player_id,
+            "player_name": bid.player_name,
+            "elapsed_seconds": bid.elapsed_seconds,
+        }
+
+    def _deserialize_bid(self, data: dict | None) -> Bid | None:
+        if data is None:
+            return None
+        return Bid(
+            quantity=data["quantity"],
+            face=data["face"],
+            player_id=data["player_id"],
+            player_name=data["player_name"],
+            elapsed_seconds=data.get("elapsed_seconds", 0.0),
+        )
+
+    def _serialize_room_state(self, room_id: str) -> dict | None:
+        game = self.games.get(room_id)
+        if not game:
+            return None
+
+        players_serialized = {}
+        for pid, p in game.players.items():
+            players_serialized[pid] = {
+                "id": p.id,
+                "name": p.name,
+                "avatar": p.avatar,
+                "dice": p.dice,
+                "dice_count": p.dice_count,
+                "connected": p.connected,
+                "ready": p.ready,
+                "selected_bid": self._serialize_bid(p.selected_bid),
+                "is_bot": p.is_bot,
+                "bot_difficulty": p.bot_difficulty,
+                "anon_id": p.anon_id,
+            }
+
+        return {
+            "game": {
+                "room_id": game.room_id,
+                "players": players_serialized,
+                "spectators": dict(game.spectators),
+                "phase": game.phase,
+                "player_order": list(game.player_order),
+                "current_player_idx": game.current_player_idx,
+                "current_bid": self._serialize_bid(game.current_bid),
+                "bid_history": [self._serialize_bid(b) for b in game.bid_history],
+                "round_number": game.round_number,
+                "last_paso": game.last_paso,
+                "passed_players": list(game.passed_players),
+                "direction": game.direction,
+                "round_first_player": game.round_first_player,
+                "rules": game.rules.to_dict(),
+                "elimination_order": list(game.elimination_order),
+                "streaks": dict(game.streaks),
+                "best_streaks": dict(game.best_streaks),
+                "ghost_failures": dict(game.ghost_failures),
+                "ghost_cooldown": dict(game.ghost_cooldown),
+                "initial_total_dice": game.initial_total_dice,
+            },
+            "host": self.hosts.get(room_id),
+            "admin_sessions": list(self.admin_sessions.get(room_id, set())),
+            "paused": room_id in self.paused_rooms,
+            "client_anon_ids": dict(self.client_anon_ids.get(room_id, {})),
+        }
+
+    def _restore_room_from_state(self, room_id: str, data: dict) -> None:
+        gd = data["game"]
+
+        players = {}
+        for pid, pd in gd["players"].items():
+            players[pid] = Player(
+                id=pd["id"],
+                name=pd["name"],
+                avatar=pd["avatar"],
+                dice=list(pd["dice"]),
+                dice_count=pd["dice_count"],
+                connected=pd["connected"],
+                ready=pd["ready"],
+                selected_bid=self._deserialize_bid(pd.get("selected_bid")),
+                is_bot=pd["is_bot"],
+                bot_difficulty=pd.get("bot_difficulty", "medium"),
+                anon_id=pd.get("anon_id"),
+            )
+
+        game = Game(
+            room_id=room_id,
+            players=players,
+            spectators=dict(gd.get("spectators", {})),
+            phase=gd["phase"],
+            player_order=list(gd["player_order"]),
+            current_player_idx=gd["current_player_idx"],
+            current_bid=self._deserialize_bid(gd.get("current_bid")),
+            bid_history=[self._deserialize_bid(b) for b in gd.get("bid_history", [])],
+            round_number=gd["round_number"],
+            last_paso=gd.get("last_paso"),
+            passed_players=set(gd.get("passed_players", [])),
+            direction=gd["direction"],
+            round_first_player=gd.get("round_first_player", ""),
+            rules=RuleConfig.from_payload(gd.get("rules")),
+            elimination_order=list(gd.get("elimination_order", [])),
+            streaks=dict(gd.get("streaks", {})),
+            best_streaks=dict(gd.get("best_streaks", {})),
+            ghost_failures=dict(gd.get("ghost_failures", {})),
+            ghost_cooldown=dict(gd.get("ghost_cooldown", {})),
+            initial_total_dice=gd.get("initial_total_dice", 0),
+        )
+
+        self.games[room_id] = game
+
+        host = data.get("host")
+        if host:
+            self.hosts[room_id] = host
+
+        admin_list = data.get("admin_sessions", [])
+        if admin_list:
+            self.admin_sessions[room_id] = set(admin_list)
+
+        if data.get("paused"):
+            self.paused_rooms.add(room_id)
+
+        anon_map = data.get("client_anon_ids", {})
+        if anon_map:
+            self.client_anon_ids[room_id] = dict(anon_map)
+
+    async def _persist_room_state(self, room_id: str) -> None:
+        state = self._serialize_room_state(room_id)
+        if state is None:
+            return
+        try:
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO active_rooms (room_id, state, updated_at)
+                    VALUES ($1, $2::jsonb, NOW())
+                    ON CONFLICT (room_id) DO UPDATE SET
+                        state = EXCLUDED.state,
+                        updated_at = NOW()
+                    """,
+                    room_id,
+                    json.dumps(state),
+                )
+        except Exception as exc:
+            log.warning("[persist] failed to save room %s: %s", room_id, exc)
+
+    async def _delete_room_state(self, room_id: str) -> None:
+        try:
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "DELETE FROM active_rooms WHERE room_id = $1",
+                    room_id,
+                )
+        except Exception as exc:
+            log.warning("[persist] failed to delete room %s: %s", room_id, exc)
+
+    async def restore_all_rooms_from_db(self) -> int:
+        """Load all persisted rooms from DB into memory. Returns the count restored."""
+        try:
+            pool = await get_pool()
+        except Exception as exc:
+            log.warning("[persist] no DB pool for restoration: %s", exc)
+            return 0
+
+        try:
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT room_id, state FROM active_rooms ORDER BY updated_at DESC"
+                )
+        except Exception as exc:
+            log.warning("[persist] failed to load persisted rooms: %s", exc)
+            return 0
+
+        count = 0
+        for row in rows:
+            try:
+                data = json.loads(row["state"])
+                room_id = row["room_id"]
+                self._restore_room_from_state(room_id, data)
+                game = self.games.get(room_id)
+                if game and game.phase == "playing":
+                    self._cancel_turn_timeout(room_id)
+                    for pid in list(game.players.keys()):
+                        self._cancel_disconnect_resolution(room_id, pid)
+                count += 1
+                log.info("[persist] restored room %s (phase=%s, players=%d)",
+                         room_id, game.phase if game else "?", len(game.players) if game else 0)
+            except Exception as exc:
+                log.warning("[persist] failed to restore room %s: %s", row["room_id"], exc)
+                self.games.pop(row["room_id"], None)
+                self.connections.pop(row["room_id"], None)
+                self.hosts.pop(row["room_id"], None)
+
+        if count > 0:
+            log.info("[persist] restored %d room(s) from DB", count)
+        return count
+
     # ------------------------------------------------------------------ connect
 
     async def connect(self, websocket: WebSocket, room_id: str, player_id: str):
@@ -156,6 +362,8 @@ class GameManager:
 
         if game.phase == "playing":
             self._schedule_disconnect_resolution(room_id, player_id)
+
+        await self._persist_room_state(room_id)
 
     # ------------------------------------------------------------------ dispatch
 
@@ -295,6 +503,7 @@ class GameManager:
                 "spectator_name": old_name,
                 **self._spectator_state_payload(game),
             })
+            await self._persist_room_state(room_id)
             return
 
         if reconnect_id and reconnect_id in game.players and game.phase in {"playing", "lobby", "reveal"}:
@@ -360,6 +569,7 @@ class GameManager:
                     "has_passed": reconnect_id in game.passed_players,
                 })
                 await self._announce_turn(room_id, game)
+            await self._persist_room_state(room_id)
             return
 
         if game.phase == "lobby" and player_id in game.spectators:
@@ -383,6 +593,7 @@ class GameManager:
                 "spectator_name": spectator_name,
                 "spectator_count": len(game.spectators),
             })
+            await self._persist_room_state(room_id)
             return
         # Sin límite de jugadores en el join del lobby: el límite se aplica al iniciar partida.
         # Permite que espectadores pasen a jugadores libremente hasta que empiece el juego.
@@ -411,6 +622,7 @@ class GameManager:
             "type": "player_joined",
             "player": player.to_public_dict(),
         })
+        await self._persist_room_state(room_id)
 
     async def _h_ready(self, room_id, player_id, game, msg):
         if player_id not in game.players:
@@ -425,6 +637,7 @@ class GameManager:
             await self._broadcast(room_id, {
                 "type": "all_ready",
             })
+        await self._persist_room_state(room_id)
 
     async def _h_rename(self, room_id, player_id, game, msg):
         if player_id not in game.players or game.phase != "lobby":
@@ -440,6 +653,7 @@ class GameManager:
             "name": new_name,
             "avatar": new_avatar,
         })
+        await self._persist_room_state(room_id)
 
     async def _h_start(self, room_id, player_id, game, msg):
         if self._host_id(room_id, game) != player_id:
@@ -479,6 +693,7 @@ class GameManager:
             "rules": game.rules.to_dict(),
             "players": {pid: p.to_public_dict() for pid, p in game.players.items()},
         })
+        await self._persist_room_state(room_id)
 
     async def _h_kick_player(self, room_id, player_id, game, msg):
         is_host = self._host_id(room_id, game) == player_id
@@ -531,6 +746,8 @@ class GameManager:
             "kicked_by_name": (game.players[player_id].name if player_id in game.players
                                else game.spectators.get(player_id, "Anfitrión")),
         })
+
+        await self._persist_room_state(room_id)
 
         if game.phase == "playing":
             outcome = self._rules_engine(game).resolve_outcome(game, target_id)
@@ -595,6 +812,7 @@ class GameManager:
         })
         if game.all_ready():
             await self._broadcast(room_id, {"type": "all_ready"})
+        await self._persist_room_state(room_id)
 
     async def _h_remove_bot(self, room_id, player_id, game, msg):
         if game.phase != "lobby":
@@ -622,6 +840,7 @@ class GameManager:
             "kicked_by_name": (game.players[player_id].name if player_id in game.players
                                else game.spectators.get(player_id, "Anfitrión")),
         })
+        await self._persist_room_state(room_id)
 
     async def _h_become_spectator(self, room_id, player_id, game, msg):
         """Un jugador en el lobby decide pasarse a espectador.
@@ -667,6 +886,7 @@ class GameManager:
             "spectator_name": spectator_name,
             "spectator_count": len(game.spectators),
         })
+        await self._persist_room_state(room_id)
 
     async def _h_become_player(self, room_id, player_id, game, msg):
         """Un espectador en el lobby decide unirse como jugador."""
@@ -709,6 +929,7 @@ class GameManager:
             "spectator_name": spectator_name,
             "spectator_count": len(game.spectators),
         })
+        await self._persist_room_state(room_id)
 
     async def _h_leave(self, room_id, player_id, game, msg):
         """El jugador abandona la sala voluntariamente (solo en lobby)."""
@@ -790,6 +1011,7 @@ class GameManager:
             "type": "reordered",
             "player_order": game.player_order,
         })
+        await self._persist_room_state(room_id)
 
     async def _h_direction(self, room_id, player_id, game, msg):
         """Solo el primer jugador de la ronda puede cambiar sentido, y solo antes de su primera acción."""
@@ -809,6 +1031,7 @@ class GameManager:
             "player_id": player_id,
             "player_name": game.players[player_id].name,
         })
+        await self._persist_room_state(room_id)
 
     async def _h_bid(self, room_id, player_id, game, msg):
         if game.phase != "playing":
@@ -842,6 +1065,7 @@ class GameManager:
 
         await self._broadcast(room_id, {"type": "bid_made", "bid": bid.to_dict()})
         await self._announce_turn(room_id, game)
+        await self._persist_room_state(room_id)
 
     async def _h_select_bid(self, room_id, player_id, game, msg):
         if game.phase != "playing":
@@ -886,6 +1110,7 @@ class GameManager:
         })
         bot_engine.notify_paso(game, player_id)
         await self._announce_turn(room_id, game)
+        await self._persist_room_state(room_id)
 
     async def _h_dudo(self, room_id, player_id, game, msg):
         if game.phase != "playing":
@@ -1168,6 +1393,7 @@ class GameManager:
         })
         await self._send_dice(room_id, game)
         await self._announce_turn(room_id, game)
+        await self._persist_room_state(room_id)
 
     async def _apply_loss(self, room_id: str, game: Game, loser_id: str):
         game.players[loser_id].dice_count -= 1
@@ -1189,6 +1415,7 @@ class GameManager:
                 "player_name": p.name,
             })
 
+        await self._persist_room_state(room_id)
         outcome = self._rules_engine(game).resolve_outcome(game, loser_id)
         if outcome:
             return await self._end_game(room_id, game, outcome)
@@ -1221,6 +1448,7 @@ class GameManager:
         })
         await self._send_dice(room_id, game)
         await self._announce_turn(room_id, game)
+        await self._persist_room_state(room_id)
 
     async def _end_game(self, room_id: str, game: Game, outcome):
         game.phase = "lobby"
@@ -1271,6 +1499,7 @@ class GameManager:
         game.best_streaks = {}
         game.ghost_failures = {}
         game.ghost_cooldown = {}
+        await self._delete_room_state(room_id)
 
     async def _persist_game_result(
         self, room_id: str, game: Game, outcome, standings: list[dict]
@@ -1685,6 +1914,7 @@ class GameManager:
                 self.admin_sessions.pop(room_id, None)
                 self.client_anon_ids.pop(room_id, None)
                 self.paused_rooms.discard(room_id)
+                asyncio.create_task(self._delete_room_state(room_id))
                 log.info("[room] %s limpiada tras gracia de desconexión", room_id)
             except asyncio.CancelledError:
                 return
@@ -2246,6 +2476,7 @@ class GameManager:
             await self._broadcast(room_id, {"type": "debug_paused", "paused": paused})
             for aid in list(self.admin_sessions.get(room_id, set())):
                 await self._send_debug_full_state(room_id, aid)
+            await self._persist_room_state(room_id)
             return
 
         if cmd == "clear_bid":
@@ -2255,6 +2486,7 @@ class GameManager:
             await self._announce_turn(room_id, game)
             for aid in list(self.admin_sessions.get(room_id, set())):
                 await self._send_debug_full_state(room_id, aid)
+            await self._persist_room_state(room_id)
             return
 
         if cmd == "set_bid":
@@ -2266,6 +2498,7 @@ class GameManager:
                 await self._announce_turn(room_id, game)
                 for aid in list(self.admin_sessions.get(room_id, set())):
                     await self._send_debug_full_state(room_id, aid)
+                await self._persist_room_state(room_id)
             return
 
         # ── Comandos que requieren target_id ──
@@ -2285,6 +2518,7 @@ class GameManager:
             await self._announce_turn(room_id, game)
             for aid in list(self.admin_sessions.get(room_id, set())):
                 await self._send_debug_full_state(room_id, aid)
+            await self._persist_room_state(room_id)
             return
 
         if cmd == "set_dice_count":
@@ -2321,6 +2555,8 @@ class GameManager:
         # Send updated full state to all connected admins
         for aid in list(self.admin_sessions.get(room_id, set())):
             await self._send_debug_full_state(room_id, aid)
+
+        await self._persist_room_state(room_id)
 
     # ------------------------------------------------------------------ transport
 
