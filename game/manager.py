@@ -243,7 +243,11 @@ class GameManager:
             log.warning("[persist] failed to delete room %s: %s", room_id, exc)
 
     async def restore_all_rooms_from_db(self) -> int:
-        """Load all persisted rooms from DB into memory. Returns the count restored."""
+        """Load all persisted rooms from DB into memory. Returns the count restored.
+        Rooms older than DISCONNECT_GRACE_SECONDS + 60s are considered dead and deleted.
+        """
+        ROOM_TTL = DISCONNECT_GRACE_SECONDS + 60
+
         try:
             pool = await get_pool()
         except Exception as exc:
@@ -252,6 +256,14 @@ class GameManager:
 
         try:
             async with pool.acquire() as conn:
+                # Eliminar rooms viejas que ya no deberían restaurarse
+                deleted = await conn.execute(
+                    "DELETE FROM active_rooms WHERE updated_at < NOW() - make_interval(secs => $1)",
+                    ROOM_TTL,
+                )
+                if deleted != "DELETE 0":
+                    log.info("[persist] cleaned %s stale room(s)", deleted.replace("DELETE ", ""))
+
                 rows = await conn.fetch(
                     "SELECT room_id, state FROM active_rooms ORDER BY updated_at DESC"
                 )
