@@ -6,14 +6,35 @@ from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from game.manager import GameManager
 from game.db import get_pool, close_pool
 from game.migrations import run_migrations
-from game.config import DEBUG_MODE
+from game.config import DEBUG_MODE, MAX_LEVEL
+from game.audio_clips import (
+    MAX_AUDIO_FILE_BYTES,
+    MAX_AUDIO_SECONDS,
+    MAX_PLAYER_AUDIO_SLOTS,
+    audio_slot_unlock_level,
+    delete_player_audio_clip,
+    detect_audio_duration_seconds,
+    ensure_player_exists,
+    fetch_audio_clip_binary,
+    fetch_player_audio_clips,
+    get_system_audio_clips,
+    infer_extension,
+    max_audio_slots_for_level,
+    normalize_anon_id,
+    normalize_audio_color,
+    normalize_audio_emoji,
+    normalize_audio_label,
+    normalize_level,
+    serialize_clip_row,
+    upsert_player_audio_clip,
+)
 
 log = logging.getLogger(__name__)
 
@@ -147,6 +168,159 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
 async def root(request: Request, sala: str | None = None):
     room_id = sala.strip()[:20] if sala else None
     return HTMLResponse(_build_index_with_dynamic_meta(request, room_id))
+
+
+
+@app.get("/api/audio_clips/system")
+async def get_system_audio_clips_api():
+    return JSONResponse({"clips": get_system_audio_clips()})
+
+
+@app.get("/api/player/{anon_id}/audio_clips")
+async def get_player_audio_clips_api(anon_id: str, room_id: str):
+    normalized_anon_id = normalize_anon_id(anon_id)
+    if not normalized_anon_id:
+        raise HTTPException(status_code=400, detail="anon_id inválido")
+
+    if not manager.is_anon_present(room_id, normalized_anon_id):
+        return JSONResponse({"clips": []})
+
+    try:
+        pool = await get_pool()
+        rows = await fetch_player_audio_clips(pool, normalized_anon_id)
+    except Exception as exc:
+        log.warning("No se pudieron cargar audios de %s: %s", normalized_anon_id, exc)
+        return JSONResponse({"clips": []}, status_code=503)
+
+    return JSONResponse({
+        "clips": [serialize_clip_row(row, room_id=room_id) for row in rows],
+        "max_slots": MAX_PLAYER_AUDIO_SLOTS,
+        "max_seconds": MAX_AUDIO_SECONDS,
+        "max_level": MAX_LEVEL,
+    })
+
+
+@app.post("/api/player/{anon_id}/audio_clips")
+async def upload_player_audio_clip_api(
+    anon_id: str,
+    room_id: str = Form(...),
+    slot: int = Form(...),
+    label: str = Form(...),
+    emoji: str = Form("🎵"),
+    color: str | None = Form(None),
+    display_name: str = Form(""),
+    level: int = Form(1),
+    file: UploadFile = File(...),
+):
+    normalized_anon_id = normalize_anon_id(anon_id)
+    if not normalized_anon_id:
+        raise HTTPException(status_code=400, detail="anon_id inválido")
+
+    if not manager.is_anon_present(room_id, normalized_anon_id):
+        raise HTTPException(status_code=403, detail="Jugador no presente en la sala")
+
+    if slot < 1 or slot > MAX_PLAYER_AUDIO_SLOTS:
+        raise HTTPException(status_code=400, detail=f"slot debe ser 1..{MAX_PLAYER_AUDIO_SLOTS}")
+
+    normalized_level = normalize_level(level)
+    unlocked_slots = max_audio_slots_for_level(normalized_level)
+    if slot > unlocked_slots:
+        required_level = audio_slot_unlock_level(slot)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Necesitas nivel {required_level} para desbloquear el slot {slot} (tu nivel: {normalized_level})",
+        )
+
+    file_ext = infer_extension(file.filename)
+    if not file_ext:
+        raise HTTPException(status_code=400, detail="Formato no soportado")
+
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Archivo vacío")
+    if len(payload) > MAX_AUDIO_FILE_BYTES:
+        raise HTTPException(status_code=400, detail="Archivo demasiado grande")
+
+    duration_seconds = detect_audio_duration_seconds(payload, filename=file.filename)
+    if duration_seconds is None:
+        raise HTTPException(status_code=400, detail="No se pudo leer la duración del audio")
+    if duration_seconds > MAX_AUDIO_SECONDS:
+        raise HTTPException(status_code=400, detail=f"El audio no puede durar más de {MAX_AUDIO_SECONDS:.0f}s")
+
+    clip_label = normalize_audio_label(label)
+    clip_emoji = normalize_audio_emoji(emoji)
+    clip_color = normalize_audio_color(color)
+
+    mime_type = file.content_type or "application/octet-stream"
+    safe_file_name = (file.filename or f"audio{file_ext}").strip()[:120]
+
+    try:
+        pool = await get_pool()
+        await ensure_player_exists(pool, normalized_anon_id, display_name)
+        row = await upsert_player_audio_clip(
+            pool,
+            anon_id=normalized_anon_id,
+            slot=slot,
+            label=clip_label,
+            emoji=clip_emoji,
+            color=clip_color,
+            file_name=safe_file_name,
+            file_ext=file_ext,
+            mime_type=mime_type,
+            duration_seconds=duration_seconds,
+            audio_data=payload,
+        )
+        await manager.notify_audio_clips_updated(room_id, normalized_anon_id)
+    except Exception as exc:
+        log.warning("Error guardando audio de %s: %s", normalized_anon_id, exc)
+        raise HTTPException(status_code=503, detail="No se pudo guardar el audio")
+
+    return JSONResponse({
+        "ok": True,
+        "clip": serialize_clip_row(row, room_id=room_id),
+    })
+
+
+@app.delete("/api/player/{anon_id}/audio_clips/{slot}")
+async def delete_player_audio_clip_api(anon_id: str, slot: int, room_id: str):
+    normalized_anon_id = normalize_anon_id(anon_id)
+    if not normalized_anon_id:
+        raise HTTPException(status_code=400, detail="anon_id inválido")
+
+    if not manager.is_anon_present(room_id, normalized_anon_id):
+        raise HTTPException(status_code=403, detail="Jugador no presente en la sala")
+
+    if slot < 1 or slot > MAX_PLAYER_AUDIO_SLOTS:
+        raise HTTPException(status_code=400, detail=f"slot debe ser 1..{MAX_PLAYER_AUDIO_SLOTS}")
+
+    try:
+        pool = await get_pool()
+        deleted = await delete_player_audio_clip(pool, anon_id=normalized_anon_id, slot=slot)
+        if deleted:
+            await manager.notify_audio_clips_updated(room_id, normalized_anon_id)
+    except Exception as exc:
+        log.warning("Error borrando audio de %s: %s", normalized_anon_id, exc)
+        raise HTTPException(status_code=503, detail="No se pudo borrar el audio")
+
+    return JSONResponse({"ok": True, "deleted": deleted})
+
+
+@app.get("/api/audio_clips/{clip_id}/stream")
+async def stream_audio_clip_api(clip_id: int, room_id: str):
+    try:
+        pool = await get_pool()
+        row = await fetch_audio_clip_binary(pool, clip_id)
+    except Exception as exc:
+        log.warning("No se pudo leer audio %s: %s", clip_id, exc)
+        raise HTTPException(status_code=503, detail="No se pudo leer el audio")
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Audio no encontrado")
+
+    if not manager.is_anon_present(room_id, row["anon_id"]):
+        raise HTTPException(status_code=404, detail="Audio no disponible")
+
+    return Response(content=bytes(row["audio_data"]), media_type=row["mime_type"])
 
 
 # ---------------------------------------------------------------------------

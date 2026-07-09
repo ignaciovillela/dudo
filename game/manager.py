@@ -14,6 +14,12 @@ from game.rules import RuleEngine
 from game.actions import CalzoAction, DudoAction, DudoBidResult, DudoPasoResult
 import game.bot as bot_engine
 from game.db import get_pool
+from game.audio_clips import (
+    build_player_clip_stream_url,
+    fetch_player_audio_clip_by_id,
+    get_system_audio_clip_by_id,
+    normalize_anon_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +66,7 @@ class GameManager:
         self.turn_started_at: dict[str, float] = {}   # room_id → monotonic timestamp
         self.admin_sessions: dict[str, set[str]] = {}  # room_id → {player_id, ...} sesiones admin
         self.paused_rooms: set[str] = set()  # salas pausadas por admin
+        self.client_anon_ids: dict[str, dict[str, str]] = {}  # room_id -> {connection_id: anon_id}
         # Tasks de gavilán fuera de turno: (room_id, bot_id) → Task
         # Se cancelan antes de crear uno nuevo para evitar duplicados por bid.
         self.gavilan_tasks: dict[tuple[str, str], asyncio.Task] = {}
@@ -100,6 +107,7 @@ class GameManager:
 
         if player_id in game.spectators:
             spectator_name = game.spectators.pop(player_id, "Espectador")
+            self.client_anon_ids.get(room_id, {}).pop(player_id, None)
             await self._broadcast(room_id, {
                 "type": "spectator_left",
                 "spectator_id": player_id,
@@ -166,7 +174,7 @@ class GameManager:
             if player and player.is_bot:
                 return
 
-        _spectator_allowed = {"join", "emoji", "quick_chat", "become_player"}
+        _spectator_allowed = {"join", "emoji", "quick_chat", "audio_clip", "become_player"}
         if player_id in game.spectators and game.phase == "lobby" and self._host_id(room_id, game) == player_id:
             _spectator_allowed |= {"set_rules", "kick_player", "add_bot", "remove_bot", "start"}
         if player_id in game.spectators and msg_type not in _spectator_allowed:
@@ -196,6 +204,7 @@ class GameManager:
             "calzo":     self._h_calzo,
             "emoji":     self._h_emoji,
             "quick_chat": self._h_quick_chat,
+            "audio_clip": self._h_audio_clip,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -218,16 +227,61 @@ class GameManager:
             return value
         return "🎲"
 
+
+    def _track_anon_id(self, room_id: str, player_id: str, anon_id: str | None) -> None:
+        normalized = normalize_anon_id(anon_id)
+        if not normalized:
+            return
+        self.client_anon_ids.setdefault(room_id, {})[player_id] = normalized
+
+    def _anon_for(self, room_id: str, player_id: str, game: Game | None = None) -> str | None:
+        if game:
+            player = game.players.get(player_id)
+            if player and player.anon_id:
+                return player.anon_id
+        return self.client_anon_ids.get(room_id, {}).get(player_id)
+
+    def is_anon_present(self, room_id: str, anon_id: str | None) -> bool:
+        normalized = normalize_anon_id(anon_id)
+        if not normalized:
+            return False
+        game = self.games.get(room_id)
+        if not game:
+            return False
+
+        for player in game.players.values():
+            if player.connected and player.anon_id == normalized:
+                return True
+
+        room_anon = self.client_anon_ids.get(room_id, {})
+        for spectator_id in game.spectators:
+            if room_anon.get(spectator_id) == normalized:
+                return True
+        return False
+
+    async def notify_audio_clips_updated(self, room_id: str, anon_id: str) -> None:
+        if room_id not in self.games:
+            return
+        await self._broadcast(room_id, {
+            "type": "audio_clips_updated",
+            "anon_id": anon_id,
+        })
+
     # ------------------------------------------------------------------ handlers
 
     async def _h_join(self, room_id, player_id, game, msg):
         # ── Intento de reconexión ─────────────────────────────────────────────
+        anon_id = normalize_anon_id(msg.get("anon_id"))
+        self._track_anon_id(room_id, player_id, anon_id)
         reconnect_id = msg.get("reconnect_id")
         if reconnect_id and reconnect_id in game.spectators:
             old_name = game.spectators[reconnect_id]
             ws = self.connections[room_id].pop(player_id, None)
             if ws:
                 self.connections[room_id][reconnect_id] = ws
+            if anon_id:
+                self._track_anon_id(room_id, reconnect_id, anon_id)
+            self.client_anon_ids.get(room_id, {}).pop(player_id, None)
             game.spectators[reconnect_id] = old_name
             await self._send(room_id, reconnect_id, {
                 "type": "joined_spectator",
@@ -243,6 +297,10 @@ class GameManager:
             ws = self.connections[room_id].pop(player_id, None)
             if ws:
                 self.connections[room_id][reconnect_id] = ws
+            if anon_id:
+                old.anon_id = anon_id
+                self._track_anon_id(room_id, reconnect_id, anon_id)
+            self.client_anon_ids.get(room_id, {}).pop(player_id, None)
             old.connected = True
             self._cancel_disconnect_resolution(room_id, reconnect_id)
 
@@ -304,6 +362,8 @@ class GameManager:
         # ── Unirse nuevo ──────────────────────────────────────────────────────
         if game.phase != "lobby":
             spectator_name = (msg.get("name") or "Espectador").strip()[:20] or "Espectador"
+            if anon_id:
+                self._track_anon_id(room_id, player_id, anon_id)
             game.spectators[player_id] = spectator_name
             await self._send(room_id, player_id, {
                 "type": "joined_spectator",
@@ -323,7 +383,6 @@ class GameManager:
 
         name = (msg.get("name") or f"Jugador {len(game.players) + 1}").strip()[:20]
         avatar = self._normalize_avatar(msg.get("avatar"))
-        anon_id = msg.get("anon_id") or None
         player = Player(id=player_id, name=name, avatar=avatar, anon_id=anon_id)
         game.players[player_id] = player
         game.player_order.append(player_id)
@@ -569,6 +628,7 @@ class GameManager:
 
         player = game.players[player_id]
         spectator_name = player.name
+        self._track_anon_id(room_id, player_id, player.anon_id)
 
         # Eliminar de jugadores sin tocar self.hosts: el host conserva el liderazgo
         del game.players[player_id]
@@ -611,7 +671,12 @@ class GameManager:
             return
 
         spectator_name = game.spectators.pop(player_id)
-        player = Player(id=player_id, name=spectator_name, avatar=self._normalize_avatar(msg.get("avatar")))
+        player = Player(
+            id=player_id,
+            name=spectator_name,
+            avatar=self._normalize_avatar(msg.get("avatar")),
+            anon_id=self._anon_for(room_id, player_id, game),
+        )
         game.players[player_id] = player
         game.player_order.append(player_id)
 
@@ -652,6 +717,7 @@ class GameManager:
         # Limpiar conexión y datos del jugador
         ws = self.connections.get(room_id, {}).pop(player_id, None)
         del game.players[player_id]
+        self.client_anon_ids.get(room_id, {}).pop(player_id, None)
         if player_id in game.player_order:
             game.player_order.remove(player_id)
 
@@ -989,6 +1055,74 @@ class GameManager:
             "from_avatar": sender_avatar,
             "phrase": phrase,
         })
+
+    async def _h_audio_clip(self, room_id, player_id, game, msg):
+        clip_kind = msg.get("clip_kind")
+        if clip_kind not in {"system", "player"}:
+            clip_kind = "player"
+
+        sender = game.players.get(player_id)
+        sender_name = sender.name if sender else game.spectators.get(player_id, "?")
+        sender_avatar = sender.avatar if sender else "👁"
+
+        if clip_kind == "system":
+            clip_id = msg.get("clip_id")
+            if not isinstance(clip_id, str):
+                return
+            clip = get_system_audio_clip_by_id(clip_id)
+            if not clip:
+                return
+            payload = {
+                "type": "audio_clip",
+                "from_id": player_id,
+                "from_name": sender_name,
+                "from_avatar": sender_avatar,
+                "clip_kind": "system",
+                "clip_id": clip["id"],
+                "clip_label": clip.get("label") or "Audio",
+                "clip_emoji": clip.get("emoji") or "🎵",
+                "clip_url": clip.get("stream_url"),
+            }
+            clip_color = clip.get("color")
+            if isinstance(clip_color, str):
+                payload["clip_color"] = clip_color
+            await self._broadcast(room_id, payload)
+            return
+
+        clip_id = msg.get("clip_id")
+        if not isinstance(clip_id, int):
+            return
+
+        try:
+            pool = await get_pool()
+            clip = await fetch_player_audio_clip_by_id(pool, clip_id)
+        except Exception as exc:
+            log.warning("No se pudo cargar audio %s: %s", clip_id, exc)
+            return
+        if not clip:
+            return
+
+        # El audio solo se puede disparar mientras el dueño del clip sigue presente
+        # en la sala (igual que el endpoint de streaming). Cualquier jugador o
+        # espectador presente puede disparar el audio de cualquier otro presente.
+        if not self.is_anon_present(room_id, clip["anon_id"]):
+            return
+
+        payload = {
+            "type": "audio_clip",
+            "from_id": player_id,
+            "from_name": sender_name,
+            "from_avatar": sender_avatar,
+            "clip_kind": "player",
+            "clip_id": clip_id,
+            "clip_label": clip.get("label") or "Audio",
+            "clip_emoji": clip.get("emoji") or "🎵",
+            "clip_url": build_player_clip_stream_url(clip_id, clip["updated_at"], room_id),
+        }
+        clip_color = clip.get("color")
+        if isinstance(clip_color, str):
+            payload["clip_color"] = clip_color
+        await self._broadcast(room_id, payload)
 
     # ------------------------------------------------------------------ game flow
 
@@ -1536,6 +1670,7 @@ class GameManager:
                 self.connections.pop(room_id, None)
                 self.hosts.pop(room_id, None)
                 self.admin_sessions.pop(room_id, None)
+                self.client_anon_ids.pop(room_id, None)
                 self.paused_rooms.discard(room_id)
                 log.info("[room] %s limpiada tras gracia de desconexión", room_id)
             except asyncio.CancelledError:

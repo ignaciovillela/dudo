@@ -27,3 +27,10 @@ def face_name(face: int, plural: bool = False) -> str:
     """Retorna el nombre de una cara (1-6). plural=True para la forma plural."""
     names = FACE_NAMES_PLURAL if plural else FACE_NAMES_SINGULAR
     return names[face - 1] if 1 <= face <= 6 else str(face)
+
+
+# Fuente de verdad: /static/levels.json (compartido con el front, static/app.js LEVEL_XP_THRESHOLDS)
+# Umbrales de XP por nivel (índice 0 = nivel 1). El nivel máximo es la cantidad de umbrales.
+LEVEL_XP_THRESHOLDS: list[int] = json.loads((_ROOT / "static" / "levels.json").read_text(encoding="utf-8"))
+MAX_LEVEL: int = len(LEVEL_XP_THRESHOLDS)
+

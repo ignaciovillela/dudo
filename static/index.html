@@ -42,6 +42,10 @@
   <i class="fa-regular fa-bell" aria-hidden="true"></i>
 </button>
 
+<button id="btn-audio-manager" class="audio-manager-toggle" type="button" onclick="openAudioManagerModal()" aria-label="Administrador de audios" title="Mis audios" style="display:none">
+  <i class="fa-solid fa-music" aria-hidden="true"></i>
+</button>
+
 <!-- ═══════════════════════════════  LOBBY  ══════════════════════════════ -->
 <div id="lobby-screen" class="screen active">
 
@@ -338,6 +342,8 @@
         <div id="spectator-phrases" class="spectator-phrases" style="display:none">
           <p class="spectator-phrases-label"><i class="fa-regular fa-comment" aria-hidden="true"></i> Chat rápido</p>
           <div class="ef-phrases" id="spectator-phrases-grid"></div>
+          <p id="spectator-audios-label" class="spectator-phrases-label" style="display:none"><i class="fa-solid fa-music" aria-hidden="true"></i> Audios cortos</p>
+          <div class="ef-audios" id="spectator-audios-grid" style="display:none"></div>
         </div>
       </div>
 
@@ -484,6 +490,27 @@
       <button class="btn btn-gold" type="button" onclick="acceptNotificationPrompt()">Activar</button>
       <button class="btn btn-sm" type="button" onclick="rejectNotificationPrompt()">Ahora no</button>
     </div>
+  </div>
+</div>
+
+<div id="audio-manager-modal" class="stats-modal" style="display:none">
+  <div class="stats-box audio-manager-box">
+    <h2><i class="fa-solid fa-music" aria-hidden="true"></i> Administrador de audios</h2>
+
+    <div class="audio-manager-section">
+      <p class="audio-manager-subtitle">Audios de siempre</p>
+      <div id="audio-manager-system-list" class="ef-audios"></div>
+    </div>
+
+    <div class="audio-manager-section">
+      <p class="audio-manager-subtitle">Tus audios
+        <span class="audio-manager-subtitle-hint">— hasta <span id="audio-manager-max-seconds">7</span>s cada uno</span>
+      </p>
+      <p id="audio-manager-slots-progress" class="audio-manager-progress"></p>
+      <div id="audio-manager-list" class="audio-slot-list"></div>
+    </div>
+
+    <button class="btn btn-gold" type="button" onclick="closeAudioManagerModal()">Cerrar</button>
   </div>
 </div>
 

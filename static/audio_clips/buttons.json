@@ -1,0 +1,22 @@
+{
+  "avengers": {
+    "label": "Avengers",
+    "emoji": "🦸",
+    "color": "#667eea"
+  },
+  "callate": {
+    "label": "Cállate",
+    "emoji": "🤫",
+    "color": "#805ad5"
+  },
+  "la_cage": {
+    "label": "La cage",
+    "emoji": "🎭",
+    "color": "#319795"
+  },
+  "queri_pelear": {
+    "label": "¿Querí pelear?",
+    "emoji": "🥊",
+    "color": "#dd6b20"
+  }
+}
