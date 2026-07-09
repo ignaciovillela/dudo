@@ -23,6 +23,12 @@ from game.audio_clips import (
 
 log = logging.getLogger(__name__)
 
+# Fuente de verdad: /static/quick_phrases.json (compartido con el front)
+# Se usa para ALLOWED_QUICK_PHRASES y _BOT_PHRASES.
+_QUICK_PHRASES_DATA = json.loads(
+    (pathlib.Path(__file__).resolve().parents[1] / "static" / "quick_phrases.json").read_text(encoding="utf-8")
+)
+
 # ---------------------------------------------------------------------------
 # XP constants
 # ---------------------------------------------------------------------------
@@ -1035,11 +1041,7 @@ class GameManager:
             "emoji": emoji,
         })
 
-    ALLOWED_QUICK_PHRASES = {
-        "¡Mentira!", "¡Suerte!", "Buen bluff", "No te creo",
-        "¡Calzo!", "Vamos", "😅", "🤔", "Eso era mentira",
-        "¡Bien jugado!", "Mala suerte", "Ups",
-    }
+    ALLOWED_QUICK_PHRASES = {entry["text"] for entry in _QUICK_PHRASES_DATA}
 
     async def _h_quick_chat(self, room_id, player_id, game, msg):
         phrase = msg.get("phrase")
@@ -1831,15 +1833,13 @@ class GameManager:
     # por probabilidad baja de apuesta (urgency).
     _BOT_LEVEL_RANK = {"easy": 0, "medium": 1, "hard": 2, "very_hard": 3, "expert": 4}
 
-    # Frases por categoría para el chat de bots (usan las mismas frases que los humanos)
-    _BOT_PHRASES = {
-        "taunt":       ["😅", "🤔", "¡Suerte!", "Mala suerte", "Ups"],
-        "confusion":   ["🤔", "Ups", "😅", "Mala suerte"],
-        "truth_bid":   ["Vamos", "¡Bien jugado!"],
-        "truth_dudo":  ["¡Mentira!", "Eso era mentira"],
-        "calzo_msg":   ["¡Calzo!"],
-        "bluff":       ["😅", "🤔", "Buen bluff", "No te creo"],
-    }
+    # Frases por categoría para el chat de bots (se deriva de quick_phrases.json)
+    _BOT_PHRASES: dict = {}
+    for _entry in _QUICK_PHRASES_DATA:
+        for _cat in _entry.get("categories", []):
+            _BOT_PHRASES.setdefault(_cat, []).append(_entry["text"])
+    del _entry, _cat  # no contaminar el namespace de la clase
+
     # Por dificultad y acción: (probabilidad, [categorías de frases disponibles])
     _BOT_CHAT_CONFIG: dict = {
         "easy":      {"bid":  (0.55, ["taunt", "confusion"]),
