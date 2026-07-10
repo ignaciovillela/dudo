@@ -1001,15 +1001,58 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .lp-audio-input {
   width: 100%;
   min-width: 0;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.lp-audio-input:focus {
+  border-color: rgba(232,184,109,0.5);
+  background: rgba(255,255,255,0.07);
+}
+
+.lp-audio-input::placeholder {
+  color: rgba(138,155,176,0.5);
 }
 
 .lp-audio-input-emoji {
   text-align: center;
+  min-width: 50px;
 }
 
 .lp-audio-input-color {
   padding: 0;
   min-height: 34px;
+  cursor: pointer;
+}
+
+/* file input */
+.audio-slot-form input[type="file"] {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding: 5px 0;
+}
+
+.audio-slot-form input[type="file"]::file-selector-button {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-right: 6px;
+}
+
+.audio-slot-form input[type="file"]::file-selector-button:hover {
+  background: rgba(255,255,255,0.16);
 }
 
 .audio-manager-progress {
@@ -1026,7 +1069,7 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 .audio-slot-card {
   border: 1px solid rgba(126, 207, 160, 0.22);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: rgba(126, 207, 160, 0.06);
 }
 
@@ -1098,10 +1141,16 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 
 .audio-slot-form {
   display: grid;
-  grid-template-columns: 1.2fr 90px 66px 1.1fr auto;
+  grid-template-columns: 1fr 56px 64px 1fr auto;
   gap: 6px;
   align-items: center;
-  margin-top: 8px;
+  margin-top: 10px;
+}
+
+.audio-slot-form > button {
+  white-space: nowrap;
+  min-width: 80px;
+  justify-content: center;
 }
 
 .custom-audio-row-info {
@@ -1696,6 +1745,29 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   padding-bottom: 3px;
   border-bottom: 1px solid rgba(255,255,255,0.14);
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ef-audio-group-edit {
+  background: rgba(154,230,180,0.12);
+  border: 1px solid rgba(154,230,180,0.35);
+  color: #9ae6b4;
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  opacity: 0.85;
+  line-height: 1.4;
+  transition: background 0.15s, opacity 0.15s;
+  margin-left: auto;
+}
+
+.ef-audio-group-edit:hover {
+  opacity: 1;
+  background: rgba(154,230,180,0.25);
+  border-color: rgba(154,230,180,0.6);
 }
 
 .ef-audio-btn {
