@@ -2484,7 +2484,18 @@ function _renderAudioBoard(container, clips, onClipClick) {
     wrap.className = 'ef-audio-group';
     const name = document.createElement('div');
     name.className = 'ef-audio-group-name';
-    name.textContent = group.isOwn ? 'Tú' : group.ownerName;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = group.isOwn ? 'Tú' : group.ownerName;
+    name.appendChild(nameSpan);
+    if (group.isOwn) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'ef-audio-group-edit';
+      editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      editBtn.title = 'Gestionar tus audios';
+      editBtn.addEventListener('click', (e) => { e.stopPropagation(); openAudioManagerModal(); });
+      name.appendChild(editBtn);
+    }
     wrap.append(name, makeRow(group.clips));
     container.appendChild(wrap);
   });
@@ -2851,9 +2862,6 @@ function _buildAudioSlotCard(slot, clip, level) {
  * `maxAudioSlotsForLevel`); los bloqueados informan en qué nivel se abren.
  */
 function renderAudioManagerModal() {
-  const btn = document.getElementById('btn-audio-manager');
-  if (btn) btn.style.display = S.roomId ? 'inline-flex' : 'none';
-
   if (!S.roomId) {
     closeAudioManagerModal();
     const systemList = document.getElementById('audio-manager-system-list');
@@ -2904,13 +2912,34 @@ function openAudioManagerModal() {
   }
   renderAudioManagerModal();
   const modal = document.getElementById('audio-manager-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.addEventListener('click', _onAudioManagerOverlayClick);
+  }
   refreshQuickAudioClips();
 }
 
-function closeAudioManagerModal() {
+function _onAudioManagerOverlayClick(e) {
   const modal = document.getElementById('audio-manager-modal');
-  if (modal) modal.style.display = 'none';
+  if (e.target === modal) closeAudioManagerModal();
+}
+
+function _audioManagerHasUnsavedFiles() {
+  const list = document.getElementById('audio-manager-list');
+  if (!list) return false;
+  const fileInputs = list.querySelectorAll('.audio-slot-form input[type="file"]');
+  return Array.from(fileInputs).some(inp => inp.files.length > 0);
+}
+
+function closeAudioManagerModal() {
+  if (_audioManagerHasUnsavedFiles()) {
+    if (!confirm('Tienes archivos de audio seleccionados sin subir. ¿Seguro que quieres cerrar?')) return;
+  }
+  const modal = document.getElementById('audio-manager-modal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.removeEventListener('click', _onAudioManagerOverlayClick);
+  }
 }
 
 async function deleteCustomAudioClip(slot) {
