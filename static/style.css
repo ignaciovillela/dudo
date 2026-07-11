@@ -1750,6 +1750,13 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   gap: 6px;
 }
 
+.ef-audio-empty-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  padding: 6px 0 2px;
+  font-style: italic;
+}
+
 .ef-audio-group-edit {
   background: rgba(154,230,180,0.12);
   border: 1px solid rgba(154,230,180,0.35);
