@@ -3107,7 +3107,7 @@ function _efHide() {
 }
 
 function _efScheduleHide() {
-  clearTimeout(_efHideTimer);
+  if (_efHideTimer) return;
   _efHideTimer = setTimeout(_efHide, 400);
 }
 
