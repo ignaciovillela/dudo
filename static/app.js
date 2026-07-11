@@ -2442,9 +2442,9 @@ function _buildAudioClipButtonEl(clip) {
  */
 function _renderAudioBoard(container, clips, onClipClick) {
   container.innerHTML = '';
-  if (!clips || clips.length === 0) return;
 
   const makeRow = (list) => {
+    if (list.length === 0) return null;
     const row = document.createElement('div');
     row.className = 'ef-audio-row';
     list.forEach(clip => {
@@ -2455,14 +2455,15 @@ function _renderAudioBoard(container, clips, onClipClick) {
     return row;
   };
 
-  const systemClips = clips.filter(c => c.kind !== 'player');
+  const allClips = clips || [];
+  const systemClips = allClips.filter(c => c.kind !== 'player');
   if (systemClips.length > 0) {
     container.appendChild(makeRow(systemClips));
   }
 
-  const playerClips = clips.filter(c => c.kind === 'player');
   const groups = new Map();
   const groupOrder = [];
+  const playerClips = allClips.filter(c => c.kind === 'player');
   playerClips.forEach(clip => {
     const key = clip.ownerAnonId || `clip-${clip.id}`;
     if (!groups.has(key)) {
@@ -2475,7 +2476,16 @@ function _renderAudioBoard(container, clips, onClipClick) {
     }
     groups.get(key).clips.push(clip);
   });
-  // El grupo propio ("Tú") va primero; el resto mantiene su orden de aparición.
+
+  // Ensure own group exists when in a room, even without clips
+  if (S.roomId && S.anonId) {
+    const ownKey = S.anonId;
+    if (!groups.has(ownKey)) {
+      groups.set(ownKey, { isOwn: true, ownerName: 'Tú', clips: [] });
+      groupOrder.push(ownKey);
+    }
+  }
+
   groupOrder.sort((a, b) => (groups.get(b).isOwn ? 1 : 0) - (groups.get(a).isOwn ? 1 : 0));
 
   groupOrder.forEach(key => {
@@ -2496,7 +2506,15 @@ function _renderAudioBoard(container, clips, onClipClick) {
       editBtn.addEventListener('click', (e) => { e.stopPropagation(); openAudioManagerModal(); });
       name.appendChild(editBtn);
     }
-    wrap.append(name, makeRow(group.clips));
+    const row = makeRow(group.clips);
+    if (row) {
+      wrap.append(name, row);
+    } else {
+      const emptyHint = document.createElement('div');
+      emptyHint.className = 'ef-audio-empty-hint';
+      emptyHint.textContent = group.isOwn ? 'Aún no tienes audios. Usa el lápiz para subir uno.' : 'Sin audios';
+      wrap.append(name, emptyHint);
+    }
     container.appendChild(wrap);
   });
 }
@@ -2731,13 +2749,6 @@ function renderSpectatorAudioButtons() {
   const label = document.getElementById('spectator-audios-label');
   const grid = document.getElementById('spectator-audios-grid');
   if (!grid) return;
-
-  if (QUICK_AUDIO_CLIPS.length === 0) {
-    grid.innerHTML = '';
-    grid.style.display = 'none';
-    if (label) label.style.display = 'none';
-    return;
-  }
 
   if (label) label.style.display = '';
   grid.style.display = 'flex';
@@ -3199,7 +3210,7 @@ function _efBuildPopup() {
   });
   popup.appendChild(phrases);
 
-  if (QUICK_AUDIO_CLIPS.length > 0) {
+  {
     const audioSep = document.createElement('div');
     audioSep.className = 'ef-audios-sep';
     popup.appendChild(audioSep);
