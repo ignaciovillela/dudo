@@ -2664,7 +2664,7 @@ function playAudioClipById(kind, clipId, fallbackUrl = null, pid = null) {
   unlockAudio();
   const meta = getAudioClipMeta(kind, clipId);
   const src = meta?.streamUrl || fallbackUrl;
-  if (!src) return;
+  if (!src) return null;
   let audio = QUICK_AUDIO_PLAYERS.get(src);
   if (!audio) {
     audio = new Audio(src);
@@ -2675,6 +2675,7 @@ function playAudioClipById(kind, clipId, fallbackUrl = null, pid = null) {
   audio.volume = AudioState.muted ? 0 : AudioState.volume;
   _panForAudioElement(audio, src, pid ? panForPid(pid) : 0);
   audio.play().catch(() => {});
+  return audio;
 }
 
 function onAudioClip(msg) {
@@ -2685,10 +2686,10 @@ function onAudioClip(msg) {
   const clipEmoji = normalizeAudioEmoji(msg.clip_emoji || clipMeta?.emoji);
   const bubbleText = `${clipEmoji} ${clipLabel}`;
   log(`${msg.from_avatar} ${actorLabel}: ${bubbleText}`, 'chat');
-  playAudioClipById(msg.clip_kind, msg.clip_id, msg.clip_url || null, msg.from_id);
+  const audioEl = playAudioClipById(msg.clip_kind, msg.clip_id, msg.clip_url || null, msg.from_id);
   const isPlayer = isSelf || !!document.querySelector(`#other-players .player-card[data-pid="${msg.from_id}"]`);
   if (isPlayer) {
-    _showQuickChatBubble(msg.from_id, bubbleText);
+    _showQuickChatBubble(msg.from_id, bubbleText, audioEl);
   } else {
     showSpectatorQcDisplay(`${msg.from_avatar} ${msg.from_name}: ${bubbleText}`);
   }
@@ -2713,8 +2714,7 @@ function onQuickChat(msg) {
   }
 }
 
-function _showQuickChatBubble(fromId, phrase) {
-  // Busca la carta exacta del jugador: oponente o self-card propia
+function _showQuickChatBubble(fromId, phrase, audioEl = null) {
   const card = fromId === S.playerId
     ? document.getElementById('self-card')
     : document.querySelector(`#other-players .player-card[data-pid="${fromId}"]`);
@@ -2725,7 +2725,25 @@ function _showQuickChatBubble(fromId, phrase) {
   bubble.className = 'qc-bubble';
   bubble.textContent = phrase;
   card.appendChild(bubble);
-  setTimeout(() => bubble.remove(), 3000);
+  if (audioEl) {
+    const startedAt = Date.now();
+    const removeBubble = () => { if (bubble.parentNode) bubble.remove(); };
+    const MIN_MS = 3000;
+    audioEl.addEventListener('ended', () => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= MIN_MS) {
+        removeBubble();
+      } else {
+        setTimeout(removeBubble, MIN_MS - elapsed);
+      }
+    }, { once: true });
+    audioEl.addEventListener('error', removeBubble, { once: true });
+    const d = audioEl.duration;
+    const safeMs = (d && isFinite(d) && d > 0) ? Math.max(Math.round(d * 1000) + 1000, MIN_MS) : 10000;
+    setTimeout(removeBubble, safeMs);
+  } else {
+    setTimeout(() => bubble.remove(), 3000);
+  }
 }
 
 let _spectatorQcTimer = null;
@@ -3204,7 +3222,7 @@ function _efBuildPopup() {
       e.preventDefault();
       e.stopPropagation();
       sendQuickChat(text);
-      _efScheduleHide();
+      _efHide();
     });
     phrases.appendChild(btn);
   });
@@ -3219,7 +3237,7 @@ function _efBuildPopup() {
     audios.className = 'ef-audios';
     _renderAudioBoard(audios, QUICK_AUDIO_CLIPS, (clip) => {
       sendAudioClip(clip.kind, clip.id);
-      _efScheduleHide();
+      _efHide();
     });
     popup.appendChild(audios);
   }
