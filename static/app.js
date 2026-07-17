@@ -925,6 +925,83 @@ const AudioState = {
   volume: parseFloat(localStorage.getItem(AUDIO_VOLUME_KEY) ?? '0.7'),
 };
 
+const VOICE_CMDS = {
+  dudo: ['dudo', 'digo', 'judi', 'gudo'], // fuzzy 1 cubre duro/juro/judo
+  calzo: ['calzo'],                       // fuzzy 1 cubre calso/calce/kalso
+  paso: ['paso'],                         // fuzzy 1 cubre pazo/baso
+};
+
+const VOICE_NUMS = {
+  'un': 1, 'una': 1, 'uno': 1,
+  'unas': 1, 'unos': 1, 'muy': 1,
+  'dos': 2, 'do': 2,
+  'tres': 3, 'tre': 3,
+  'cuatro': 4, 'cuatr': 4, 'cuato': 4,
+  'cinco': 5, 'sinc': 5, 'cinq': 5, 'zinco': 5,
+  'seis': 6, 'sei': 6, 'sey': 6, 'seix': 6,
+  'siete': 7, 'siet': 7,
+  'ocho': 8, 'och': 8,
+  'nueve': 9, 'nuev': 9,
+  'diez': 10, 'dies': 10,
+};
+
+const VOICE_FACES = {
+  1: [
+    'as', 'ases', 'has', 'hases', 'aces',
+    'ase', 'ace', 'az',
+    'uno', 'unos',
+    'taza', 'tazas',
+  ],
+  2: [
+    'tonto', 'tontos', 'tonta', 'tontas', 'tanto', 'tantos',
+    'dos', 'do',
+  ],
+  3: [
+    'tren', 'trenes', 'trens',
+    'tres', 'tre',
+  ],
+  4: [
+    'cuadra', 'cuadras', 'cuadro', 'cuadros',
+    'cuadrada', 'cuadradas',
+    'cuarta', 'cuartas', 'cuarto', 'cuartos',
+    'cuata', 'cuatro', 'cuato',
+  ],
+  5: [
+    'quina', 'quinas', 'kina', 'kinas', 'quino', 'quinos',
+    'quinta', 'quintas', 'quinto', 'quintos',
+    'kinta',
+    'kg', 'kilos', 'esquina', 'esquinas',
+  ],
+  6: [
+    'cena', 'cenas', 'sena', 'senas', 'scena', 'siena', 'zena',
+    'sexta', 'sextas', 'sexto', 'sextos',
+    'sesta', 'sestas', 'cesta', 'cestas', 'sei',
+  ],
+};
+
+const _SPEECH_SUPPORTED = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+const VOICE_STORAGE_KEY = 'dudoVoice';
+
+function loadVoicePref() {
+  try {
+    const v = localStorage.getItem(VOICE_STORAGE_KEY);
+    return v === '1';
+  } catch (_) { return false; }
+}
+
+function saveVoicePref(val) {
+  try { localStorage.setItem(VOICE_STORAGE_KEY, val ? '1' : '0'); } catch (_) {}
+}
+
+const VoiceState = {
+  recognition: null,
+  active: loadVoicePref(),
+  isListening: false,
+  _micGranted: false,
+  _finalTimeout: null,
+};
+
 function ensureAudioCtx() {
   if (AudioState.ctx) return AudioState.ctx;
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -1158,6 +1235,360 @@ function updateSoundButton() {
     AudioState.masterGain.gain.value = effectiveMuted ? 0 : AudioState.volume;
   }
   updateNotificationButton();
+  updateVoiceButton();
+}
+
+function updateVoiceButton() {
+  const btn = document.getElementById('btn-voice');
+  if (!btn) return;
+  if (!_SPEECH_SUPPORTED) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = 'inline-flex';
+  const on = VoiceState.active;
+  btn.classList.toggle('active', on);
+  btn.innerHTML = on
+    ? '<i class="fa-solid fa-microphone" aria-hidden="true"></i>'
+    : '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>';
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  const label = on ? 'Desactivar control por voz' : 'Activar control por voz';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+
+  const indicator = document.getElementById('voice-indicator');
+  if (indicator) {
+    if (on && !S.isSpectator && S.phase === 'playing') {
+      indicator.style.display = 'flex';
+    } else {
+      indicator.style.display = 'none';
+    }
+  }
+}
+
+function _initVoiceRecognition() {
+  if (!_SPEECH_SUPPORTED || VoiceState.recognition) return;
+  const STT = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new STT();
+  rec.lang = 'es-ES';
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+
+  rec.onresult = (e) => {
+    let finalText = '';
+    let interimText = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) {
+        finalText += r[0].transcript;
+      } else {
+        interimText += r[0].transcript;
+      }
+    }
+    const txtEl = document.getElementById('voice-indicator-text');
+    if (txtEl) {
+      txtEl.textContent = finalText + interimText;
+    }
+    if (finalText) {
+      console.log('[voz] oído:', finalText.trim());
+      _scheduleVoiceCommand(finalText.trim());
+    }
+  };
+
+  rec.onerror = () => {
+    // Silently recover - restart if still active
+    if (VoiceState.isListening) {
+      try { rec.stop(); } catch (_) {}
+      setTimeout(() => { if (VoiceState.isListening) _startVoiceRaw(); }, 300);
+    }
+  };
+
+  rec.onend = () => {
+    VoiceState.isListening = false;
+    if (VoiceState.active) {
+      const isMe = S.currentPid === S.playerId && !S.isSpectator && S.phase === 'playing';
+      if (isMe) {
+        setTimeout(() => { if (VoiceState.active && !VoiceState.isListening) _startVoiceRaw(); }, 100);
+      }
+    }
+  };
+
+  VoiceState.recognition = rec;
+}
+
+async function _requestMicPermission() {
+  if (VoiceState._micGranted) return true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop());
+    VoiceState._micGranted = true;
+    return true;
+  } catch {
+    VoiceState._micGranted = false;
+    VoiceState.active = false;
+    saveVoicePref(false);
+    updateVoiceButton();
+    showToast('Permiso de micrófono denegado', true);
+    return false;
+  }
+}
+
+function _startVoiceRaw() {
+  if (!VoiceState.recognition) _initVoiceRecognition();
+  if (!VoiceState.recognition) return;
+  try {
+    VoiceState.recognition.start();
+    VoiceState.isListening = true;
+  } catch (_) {}
+}
+
+function startVoice() {
+  if (!VoiceState._micGranted) return;
+  _initVoiceRecognition();
+  if (!VoiceState.recognition) return;
+  if (VoiceState.isListening) return;
+  _startVoiceRaw();
+  const icon = document.getElementById('voice-indicator-icon');
+  if (icon) icon.textContent = '🎤';
+  const indicator = document.getElementById('voice-indicator');
+  if (indicator) indicator.style.display = 'flex';
+  const txtEl = document.getElementById('voice-indicator-text');
+  if (txtEl) txtEl.textContent = 'Escuchando...';
+}
+
+function stopVoice() {
+  if (VoiceState.recognition) {
+    try { VoiceState.recognition.stop(); } catch (_) {}
+  }
+  VoiceState.isListening = false;
+  if (VoiceState._finalTimeout) {
+    clearTimeout(VoiceState._finalTimeout);
+    VoiceState._finalTimeout = null;
+  }
+  const indicator = document.getElementById('voice-indicator');
+  if (indicator) indicator.style.display = 'none';
+}
+
+function _scheduleVoiceCommand(text) {
+  if (!text) return;
+  const isMe = S.currentPid === S.playerId && !S.isSpectator && S.phase === 'playing';
+  if (!isMe) return;
+  if (_challengeOnCooldown()) return;
+  if (processVoiceCommand(text)) {
+    const icon = document.getElementById('voice-indicator-icon');
+    if (icon) icon.textContent = '✅';
+  }
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]) + 1;
+    }
+  }
+  return dp[m][n];
+}
+
+function fuzzyMatch(word, candidates, maxDist = 1) {
+  if (word.length <= 3) return null;
+  let best = null, bestDist = Infinity;
+  for (const c of candidates) {
+    const d = levenshtein(word, c);
+    if (d < bestDist || (d === bestDist && c.length < (best ? best.length : Infinity))) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return bestDist <= maxDist ? { value: best, distance: bestDist } : null;
+}
+
+function _buildFaceMap() {
+  const m = {};
+  for (const [face, aliases] of Object.entries(VOICE_FACES))
+    for (const a of aliases)
+      m[a] = parseInt(face, 10);
+  return m;
+}
+
+function _normalizeText(s) {
+  return s.toLowerCase().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function _matchNumber(word) {
+  if (word in VOICE_NUMS) return VOICE_NUMS[word];
+  if (word.length <= 2) {
+    const digit = parseInt(word, 10);
+    if (!isNaN(digit) && digit >= 1 && digit <= 99) return digit;
+    return null;
+  }
+  const digit = parseInt(word, 10);
+  if (!isNaN(digit) && digit >= 1 && digit <= 99) return digit;
+  return null;
+}
+
+function parseVoiceBid(tokens) {
+  let qty = null, face = null, faceFuzzy = null;
+  const faceMap = _buildFaceMap();
+  const faceCandidates = Object.keys(faceMap);
+
+  // Pass 1: exact matches
+  for (const tok of tokens) {
+    if (qty === null) {
+      const n = _matchNumber(tok);
+      if (n !== null) { qty = n; continue; }
+    }
+    if (face === null && tok in faceMap) {
+      face = faceMap[tok];
+    }
+  }
+  if (qty !== null && face !== null) return { quantity: qty, face };
+
+  // Handle "una" / "unas" -> quantity 1, rest is face
+  if (qty === null) {
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t === 'una' || t === 'unas' || t === 'unos') {
+        qty = 1;
+        // Check if remaining tokens contain a face
+        for (let j = i + 1; j < tokens.length; j++) {
+          if (tokens[j] in faceMap) {
+            face = faceMap[tokens[j]];
+            return { quantity: 1, face };
+          }
+        }
+        // Check if "as" is implicitly merged: try fuzzy on "una"/"unas"/"unos"
+        // e.g. "una" could be "un" + "as" - we already covered this by having "as" in faceMap
+        // But "unas" as a whole trigger: check if there's any other token that fuzzy-matches a face
+        for (let j = i + 1; j < tokens.length; j++) {
+          if (tokens[j].length > 3) {
+            const fm = fuzzyMatch(tokens[j], faceCandidates, 1);
+            if (fm) { face = faceMap[fm.value]; return { quantity: 1, face }; }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // Pass 2: fuzzy on faces (>3 chars) if we have a quantity
+  if (qty !== null && face === null) {
+    for (const tok of tokens) {
+      const fm = fuzzyMatch(tok, faceCandidates, 1);
+      if (fm) { face = faceMap[fm.value]; break; }
+    }
+  }
+
+  if (qty !== null && face !== null) return { quantity: qty, face };
+
+  // Pass 3: merged tokens (e.g. "cuatrotrenes" -> "cuatro"+"trenes")
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === 'una' || t === 'unas' || t === 'unos') {
+      // Already handled above, but in case of single token "unas" with no following tokens
+      // It could be "un as" merged. Since "as" is in faceMap...
+      if (face === null && qty === null) {
+        qty = 1;
+        face = faceMap['as'];
+        return { quantity: 1, face };
+      }
+    }
+    // Check merged num+face (no space)
+    for (const [numStr, numVal] of Object.entries(VOICE_NUMS)) {
+      if (t.startsWith(numStr) && t.length > numStr.length) {
+        const rest = t.slice(numStr.length);
+        if (rest in faceMap) return { quantity: numVal, face: faceMap[rest] };
+      }
+    }
+  }
+
+  return null;
+}
+
+function processVoiceCommand(text) {
+  const t = _normalizeText(text);
+  if (!t) return false;
+
+  const isMe = S.currentPid === S.playerId && !S.isSpectator && S.phase === 'playing';
+  if (!isMe) return false;
+
+  const tokens = t.split(/[\s,;.:!?]+/).filter(w => w.length > 0);
+
+  // --- Try bid first ---
+  const bid = parseVoiceBid(tokens);
+  if (bid && bid.quantity > 0 && bid.face >= 1 && bid.face <= 6) {
+    const min = minQtyForFace(bid.face);
+    if (bid.quantity >= min && bid.quantity <= (S.totalDice || 99)) {
+      console.log('[jugada]: %d %s', bid.quantity, FACE_NAMES[bid.face - 1]?.plural || bid.face);
+      S.bidQty = bid.quantity;
+      S.bidFace = bid.face;
+      sendBid();
+      return true;
+    }
+    const pluralFace = FACE_NAMES[bid.face - 1]?.plural || String(bid.face);
+    showToast(`Apuesta inválida: mínimo ${min} ${pluralFace}`, true);
+    return false;
+  }
+
+  // --- Try commands ---
+  for (const tok of tokens) {
+    // Exact match
+    let action = null;
+    if (VOICE_CMDS.dudo.includes(tok)) action = 'dudo';
+    else if (VOICE_CMDS.calzo.includes(tok)) action = 'calzo';
+    else if (VOICE_CMDS.paso.includes(tok)) action = 'paso';
+
+    // Fuzzy match (>3 chars only)
+    if (!action) {
+      for (const [act, list] of Object.entries(VOICE_CMDS)) {
+        const fm = fuzzyMatch(tok, list, 1);
+        if (fm) { action = act; break; }
+      }
+    }
+
+    if (!action) continue;
+
+    if (action === 'dudo' && (S.currentBid || S.activePaso)) {
+      console.log('[jugada]: dudo');
+      sendDudo();
+      return true;
+    }
+    if (action === 'calzo' && S.currentBid) {
+      console.log('[jugada]: calzo');
+      sendCalzo();
+      return true;
+    }
+    if (action === 'paso' && !S.hasPassed) {
+      console.log('[jugada]: paso');
+      sendPaso();
+      return true;
+    }
+    return false; // command recognized but not valid now — don't check further tokens
+  }
+
+  return false;
+}
+
+async function toggleVoice() {
+  VoiceState.active = !VoiceState.active;
+  saveVoicePref(VoiceState.active);
+  if (VoiceState.active) {
+    const ok = await _requestMicPermission();
+    if (!ok) return;
+    const isMe = S.currentPid === S.playerId && !S.isSpectator && S.phase === 'playing';
+    if (isMe) startVoice();
+  } else {
+    stopVoice();
+  }
+  updateVoiceButton();
+  if (VoiceState.active) playSfx('click');
 }
 
 function toggleSound() {
@@ -1462,6 +1893,7 @@ function onBecameSpectator(msg) {
   renderLobbySpectatorControls();
   renderAudioManagerModal();
   refreshQuickAudioClips();
+  stopVoice();
   log('Ahora eres espectador', 'system');
 }
 
@@ -1795,8 +2227,10 @@ function onTurn(msg) {
     if ('vibrate' in navigator) navigator.vibrate([150, 80, 150]);
     resetBidInputs();
     notifyTurnIfHidden();
+    if (VoiceState.active) { startVoice(); }
   } else {
     stopTurnTitleBlink();
+    stopVoice();
   }
 }
 
@@ -2243,6 +2677,7 @@ function onGameOver(msg) {
     playSfx(endSfx);
     overlay.style.display = 'flex';
   }, Math.max(0, revealSeconds) * 1000);
+  stopVoice();
 }
 
 function closeGameOver() {
