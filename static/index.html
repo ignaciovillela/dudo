@@ -42,6 +42,10 @@
   <i class="fa-regular fa-bell" aria-hidden="true"></i>
 </button>
 
+<button id="btn-voice" class="voice-toggle" type="button" onclick="toggleVoice()" aria-label="Activar control por voz" title="Control por voz" style="display:none">
+  <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+</button>
+
 <!-- ═══════════════════════════════  LOBBY  ══════════════════════════════ -->
 <div id="lobby-screen" class="screen active">
 
@@ -297,6 +301,12 @@
 
       <!-- My lost dice: entre my-area y el centro de la mesa -->
       <div id="my-lost-dice" class="player-lost-dice my-lost-dice"></div>
+
+      <!-- Voice transcription indicator -->
+      <div id="voice-indicator" class="voice-indicator" style="display:none">
+        <span id="voice-indicator-icon" class="voice-indicator-icon">🎤</span>
+        <span id="voice-indicator-text" class="voice-indicator-text"></span>
+      </div>
     </div>
 
     <!-- ── Sidebar ── -->
