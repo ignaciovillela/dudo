@@ -3371,12 +3371,15 @@ select:focus { border-color: rgba(232,184,109,0.5); }
   background: linear-gradient(160deg, #102a1a 0%, #0b1f12 50%, #081509 100%);
   border: 1px solid rgba(232,184,109,0.4);
   border-radius: 26px;
-  padding: 44px 56px;
+  padding: 36px 44px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  max-width: min(96vw, 960px);
+  width: 100%;
+  box-sizing: border-box;
   box-shadow:
     0 0 0 1px rgba(232,184,109,0.08) inset,
     0 0 100px rgba(232,184,109,0.14),
@@ -3417,44 +3420,144 @@ select:focus { border-color: rgba(232,184,109,0.5); }
 }
 .go-btn { padding: 12px 36px; font-size: 1rem; }
 
-/* Standings list */
-.go-standings {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* Standings table */
+.go-table-wrap {
   width: 100%;
-  max-width: 320px;
+  overflow-x: auto;
+}
+.go-standings {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 500px;
+  margin: 0 auto;
+}
+.go-standings .calzo-col { display: none; }
+.go-standings.show-calzo .calzo-col { display: table-cell; }
+.go-standings thead th {
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.go-standings tbody tr {
+  transition: background 0.15s;
 }
 .go-standing-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.04);
-  font-size: 0.92rem;
+  font-size: 0.85rem;
   color: var(--cream);
 }
+.go-standing-row td {
+  padding: 5px 6px;
+  text-align: center;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.go-standing-row td.go-player {
+  text-align: left;
+}
 .go-standing-row--self {
-  background: rgba(232,184,109,0.12);
-  border: 1px solid rgba(232,184,109,0.35);
   color: var(--gold);
   font-weight: 600;
 }
+.go-standing-row--self td {
+  color: var(--gold);
+  background: rgba(232,184,109,0.12);
+  outline: 1px solid rgba(232,184,109,0.35);
+  outline-offset: -1px;
+}
+.go-standing-row--self td:first-child {
+  border-radius: 8px 0 0 8px;
+}
+.go-standing-row--self td:last-child {
+  border-radius: 0 8px 8px 0;
+}
+.go-th-num {
+  width: 24px;
+}
+.go-th-player {
+  text-align: left;
+  width: auto;
+}
 .go-pos {
-  width: 20px;
+  width: 24px;
   text-align: center;
   font-weight: 700;
   color: var(--text-dim);
   font-size: 0.8rem;
 }
 .go-standing-row--self .go-pos { color: var(--gold); }
-.go-avatar { font-size: 1.1rem; }
-.go-sname  { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.go-streak { font-size: 0.8rem; opacity: 0.85; margin-left: auto; flex-shrink: 0; }
+.go-player {
+  text-align: left;
+  white-space: nowrap;
+}
+.go-player .go-avatar { font-size: 1.1rem; margin-right: 6px; vertical-align: middle; }
+.go-player .go-sname  { vertical-align: middle; }
+
+/* Stat cells with tooltip */
+.stat-cell {
+  position: relative;
+  cursor: help;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+}
+.stat-cell::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(6,14,9,0.97);
+  color: var(--cream);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  white-space: normal;
+  width: max-content;
+  max-width: 220px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(232,184,109,0.3);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.55);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+  line-height: 1.4;
+  text-align: center;
+}
+.stat-cell::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(6,14,9,0.97);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 100;
+}
+.stat-cell:hover::after,
+.stat-cell:hover::before {
+  opacity: 1;
+}
+
+/* Header th also gets tooltip */
+.go-standings thead th.stat-cell::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+.go-standings thead th.stat-cell::before {
+  bottom: auto;
+  top: calc(100% + 3px);
+  border-top-color: transparent;
+  border-bottom-color: rgba(6,14,9,0.97);
+}
 
 /* Streak badge on player cards */
 .streak-badge {

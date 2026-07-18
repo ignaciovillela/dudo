@@ -139,6 +139,20 @@ class Game:
     ghost_cooldown: dict = field(default_factory=dict)   # pid → rondas restantes de espera fantasma
     initial_total_dice: int = 0  # suma de dados al empezar la partida (para ratio fantasma)
 
+    # Estadísticas divertidas de fin de partida
+    pasos_count: dict = field(default_factory=dict)       # pid → pasos realizados
+    dudos_count: dict = field(default_factory=dict)       # pid → dudos llamados
+    dudos_won: dict = field(default_factory=dict)         # pid → dudos acertados
+    calzos_count: dict = field(default_factory=dict)      # pid → calzos llamados
+    calzos_hit: dict = field(default_factory=dict)        # pid → calzos exactos
+    gavilanes_won: dict = field(default_factory=dict)     # pid → gavilanes ganados
+    gavilanes_lost: dict = field(default_factory=dict)    # pid → gavilanes perdidos
+    ghost_revivals: dict = field(default_factory=dict)    # pid → veces que revivió como fantasma
+    calzo_gains: dict = field(default_factory=dict)       # pid → dados recuperados por calzo en turno
+    dice_lost: dict = field(default_factory=dict)         # pid → dados perdidos
+    dice_taken: dict = field(default_factory=dict)        # pid → dados quitados a otros
+    hardest_dudo: dict = field(default_factory=dict)      # pid → {"qty":int,"face":int,"diff":int}
+
     def ghost_cooldown_for(self, pid: str) -> int:
         return self.ghost_cooldown.get(pid, 0)
 

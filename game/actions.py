@@ -203,10 +203,20 @@ class DudoAction:
             game.last_paso = None
             if result.challenger_gained:
                 game.players[result.challenger_id].dice_count += 1
+                if result.is_ghost:
+                    game.elimination_order = [
+                        e for e in game.elimination_order
+                        if e["id"] != result.challenger_id
+                    ]
         else:
             game.current_bid = None
             if result.challenger_gained:
                 game.players[result.challenger_id].dice_count += 1
+                if result.is_ghost:
+                    game.elimination_order = [
+                        e for e in game.elimination_order
+                        if e["id"] != result.challenger_id
+                    ]
 
 
 # ---------------------------------------------------------------------------
@@ -301,3 +311,8 @@ class CalzoAction:
 
         if result.challenger_gained:
             game.players[result.challenger_id].dice_count += 1
+            if result.is_ghost:
+                game.elimination_order = [
+                    e for e in game.elimination_order
+                    if e["id"] != result.challenger_id
+                ]
