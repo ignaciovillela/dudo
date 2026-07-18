@@ -926,8 +926,8 @@ const AudioState = {
 };
 
 const VOICE_CMDS = {
-  dudo: ['dudo', 'digo', 'judi', 'gudo'], // fuzzy 1 cubre duro/juro/judo
-  calzo: ['calzo'],                       // fuzzy 1 cubre calso/calce/kalso
+  dudo: ['dudo', 'digo', 'judi', 'gudo', 'boda', 'duo'], // fuzzy 1 cubre duro/juro/judo
+  calzo: ['calzo', 'falso'],                       // fuzzy 1 cubre calso/calce/kalso
   paso: ['paso'],                         // fuzzy 1 cubre pazo/baso
 };
 
@@ -2584,6 +2584,7 @@ function onEliminated(msg) {  if (S.players[msg.player_id])
   if (msg.player_id === S.playerId) applyEliminatedMode(true);
 }
 
+// ── GAME-OVER: standings / stats / achievements ──
 function onGameOver(msg) {
   stopTurnCountdown();
   S.phase = 'game_over';
@@ -2649,24 +2650,41 @@ function onGameOver(msg) {
   const goXp = document.getElementById('go-xp');
   if (goXp) goXp.textContent = xpLines;
 
-  // Build standings table
-  const goStandings = document.getElementById('go-standings');
-  if (goStandings && Array.isArray(msg.standings) && msg.standings.length > 1) {
-    goStandings.innerHTML = '';
+  // Build standings table with stats
+  const goTbody = document.querySelector('#go-standings tbody');
+  if (goTbody && Array.isArray(msg.standings) && msg.standings.length > 1) {
+    goTbody.innerHTML = '';
     msg.standings.forEach((entry, i) => {
       const pos = i + 1;
-      const li = document.createElement('li');
-      li.className = 'go-standing-row';
+      const tr = document.createElement('tr');
+      tr.className = 'go-standing-row';
       const isSelf = entry.id === S.playerId;
-      if (isSelf) li.classList.add('go-standing-row--self');
-      const best = S.bestStreaks[entry.id] || 0;
-      const streakStr = best >= 2 ? ` <span class="go-streak">🔥${best}</span>` : '';
-      li.innerHTML = `<span class="go-pos">${pos}</span><span class="go-avatar">${entry.avatar}</span><span class="go-sname">${entry.name}</span>${streakStr}`;
-      goStandings.appendChild(li);
+      if (isSelf) tr.classList.add('go-standing-row--self');
+
+      const ps = msg.player_stats?.[entry.id] || {};
+      const streak = ps.streak || 0;
+      const hd = ps.hardest_dudo || null;
+      const gav = ps.gavilanes || null;
+      const gho = ps.ghost || null;
+
+      tr.innerHTML =
+        `<td class="go-pos">${pos}</td>` +
+        `<td class="go-player"><span class="go-avatar">${entry.avatar}</span><span class="go-sname">${entry.name}</span></td>` +
+        `<td class="stat-cell">${streak >= 2 ? streak : '—'}</td>` +
+        `<td class="stat-cell">${ps.pasos || '—'}</td>` +
+        `<td class="stat-cell"${gav ? ` data-tooltip="Gavilanes ${gav}"` : ''}>${gav || '—'}</td>` +
+        `<td class="stat-cell"${gho ? ` data-tooltip="Fantasma ${gho}"` : ''}>${gho || '—'}</td>` +
+        `<td class="stat-cell"${hd ? ` data-tooltip="Dudo a ${hd}"` : ''}>${hd || '—'}</td>` +
+        `<td class="stat-cell">${ps.dice_lost || '—'}</td>` +
+        `<td class="stat-cell calzo-col">${ps.calzo_gains || '—'}</td>` +
+        `<td class="stat-cell">${ps.dice_taken || '—'}</td>`;
+      goTbody.appendChild(tr);
     });
-    goStandings.style.display = 'flex';
-  } else if (goStandings) {
-    goStandings.style.display = 'none';
+    const showCalzo = !!(msg.rules?.calzo_recovers_on_turn);
+    document.getElementById('go-standings').classList.toggle('show-calzo', showCalzo);
+    document.getElementById('go-standings').style.display = '';
+  } else if (goTbody) {
+    document.getElementById('go-standings').style.display = 'none';
   }
 
   const revealSeconds = Number(msg.reveal_seconds || 7);

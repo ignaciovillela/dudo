@@ -388,6 +388,7 @@
 </div>
 
 <!-- Game Over Overlay -->
+<!-- ▸ GAME-OVER OVERLAY – resultados / posiciones / stats ← buscar acá -->
 <div id="game-over-overlay" class="game-over-overlay" style="display:none">
   <div class="game-over-box">
     <div class="go-dice-row">
@@ -398,7 +399,25 @@
     <h2 id="go-title" class="go-title"></h2>
     <p id="go-winner" class="go-winner"></p>
     <p id="go-xp" class="go-xp"></p>
-    <ol id="go-standings" class="go-standings"></ol>
+    <div class="go-table-wrap">
+      <table id="go-standings" class="go-standings">
+        <thead>
+          <tr>
+            <th class="go-th-num">#</th>
+            <th class="go-th-player"></th>
+            <th class="stat-cell" data-tooltip="Racha máxima: Mayor racha consecutiva de dudos/calzos acertados">🔥</th>
+            <th class="stat-cell" data-tooltip="Pasos: Veces que cediste el turno">👣</th>
+            <th class="stat-cell" data-tooltip="Gavilanes: Dudos/calzos fuera de turno acertados">🦅</th>
+            <th class="stat-cell" data-tooltip="Revivir fantasma: Veces que reviviste como fantasma">👻</th>
+            <th class="stat-cell" data-tooltip="Dudo más difícil: Mayor diferencia entre lo apostado y lo real">💎</th>
+            <th class="stat-cell" data-tooltip="Dados perdidos: Dados que perdiste durante la partida">💀</th>
+            <th class="stat-cell calzo-col" data-tooltip="Calzo recuperado: Dados que recuperaste con calzo exacto en tu turno">♻️</th>
+            <th class="stat-cell" data-tooltip="Dados quitados: Dados que hiciste perder a otros">⚔️</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
     <div class="go-actions">
       <button class="btn btn-sm" type="button" onclick="openAchievementsModal()">🏆 Logros</button>
       <button class="btn btn-gold go-btn" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i>Volver al lobby</button>

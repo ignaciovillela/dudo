@@ -610,6 +610,18 @@ class GameManager:
         # Sin límite de jugadores en el join del lobby: el límite se aplica al iniciar partida.
         # Permite que espectadores pasen a jugadores libremente hasta que empiece el juego.
 
+        # Limpiar zombies del mismo anon_id antes de crear nueva entrada
+        if anon_id:
+            zombies = [
+                pid for pid, p in game.players.items()
+                if p.anon_id == anon_id and not p.connected
+            ]
+            for zid in zombies:
+                game.player_order[:] = [pid for pid in game.player_order if pid != zid]
+                game.players.pop(zid, None)
+                self.admin_sessions.get(room_id, set()).discard(zid)
+                self.client_anon_ids.get(room_id, {}).pop(zid, None)
+
         name = (msg.get("name") or f"Jugador {len(game.players) + 1}").strip()[:20]
         avatar = self._normalize_avatar(msg.get("avatar"))
         player = Player(id=player_id, name=name, avatar=avatar, anon_id=anon_id)
@@ -1121,6 +1133,7 @@ class GameManager:
             "passer_name": game.players[player_id].name,
         })
         bot_engine.notify_paso(game, player_id)
+        game.pasos_count[player_id] = game.pasos_count.get(player_id, 0) + 1
         await self._announce_turn(room_id, game)
         await self._persist_room_state(room_id)
 
@@ -1163,6 +1176,27 @@ class GameManager:
         self._update_streak(game, result.challenger_id, challenger_won)
         if challenger_won and result.loser_id != result.challenger_id:
             game.streaks[result.loser_id] = 0
+
+        # Estadísticas
+        game.dudos_count[player_id] = game.dudos_count.get(player_id, 0) + 1
+        if challenger_won:
+            game.dudos_won[player_id] = game.dudos_won.get(player_id, 0) + 1
+        if result.loser_id:
+            game.dice_lost[result.loser_id] = game.dice_lost.get(result.loser_id, 0) + 1
+        if challenger_won and result.loser_id and result.loser_id != result.challenger_id:
+            game.dice_taken[result.challenger_id] = game.dice_taken.get(result.challenger_id, 0) + 1
+        if result.is_gavilan:
+            if challenger_won:
+                game.gavilanes_won[player_id] = game.gavilanes_won.get(player_id, 0) + 1
+            else:
+                game.gavilanes_lost[player_id] = game.gavilanes_lost.get(player_id, 0) + 1
+        if result.is_ghost and challenger_won:
+            game.ghost_revivals[player_id] = game.ghost_revivals.get(player_id, 0) + 1
+        if challenger_won and not isinstance(result, DudoPasoResult):
+            diff = result.bid.quantity - result.actual_count
+            prev = game.hardest_dudo.get(player_id, {"diff": -1})
+            if diff > prev["diff"]:
+                game.hardest_dudo[player_id] = {"qty": result.bid.quantity, "face": result.bid.face, "diff": diff}
 
         if isinstance(result, DudoPasoResult):
             reveal_payload = {
@@ -1239,6 +1273,24 @@ class GameManager:
 
         # Actualizar racha del retador
         self._update_streak(game, result.challenger_id, result.exact)
+
+        # Estadísticas
+        game.calzos_count[player_id] = game.calzos_count.get(player_id, 0) + 1
+        if result.exact:
+            game.calzos_hit[player_id] = game.calzos_hit.get(player_id, 0) + 1
+        if result.loser_id:
+            game.dice_lost[result.loser_id] = game.dice_lost.get(result.loser_id, 0) + 1
+        if result.is_gavilan:
+            if result.exact:
+                game.gavilanes_won[player_id] = game.gavilanes_won.get(player_id, 0) + 1
+            else:
+                game.gavilanes_lost[player_id] = game.gavilanes_lost.get(player_id, 0) + 1
+        if result.is_ghost and result.exact:
+            game.ghost_revivals[player_id] = game.ghost_revivals.get(player_id, 0) + 1
+        if result.exact and result.loser_id and result.loser_id != result.challenger_id:
+            game.dice_taken[result.challenger_id] = game.dice_taken.get(result.challenger_id, 0) + 1
+        if result.challenger_gained:
+            game.calzo_gains[result.challenger_id] = game.calzo_gains.get(result.challenger_id, 0) + 1
 
         calzo_payload = {
             "type": "reveal",
@@ -1470,7 +1522,7 @@ class GameManager:
         survivors = []
         for pid in game.player_order:
             p = game.players.get(pid)
-            if p and p.dice_count > 0:
+            if p and p.connected and p.dice_count > 0:
                 survivors.append({
                     "id": pid,
                     "name": p.name,
@@ -1480,12 +1532,32 @@ class GameManager:
         # survivors first (winner = pos 1), then eliminated in reverse order (last eliminated = pos 2, etc.)
         standings = survivors + list(reversed(game.elimination_order))
 
+        # Estadísticas divertidas por jugador
+        player_stats = {}
+        for pid, p in game.players.items():
+            hd = game.hardest_dudo.get(pid)
+            gav_won = game.gavilanes_won.get(pid, 0)
+            gav_lost = game.gavilanes_lost.get(pid, 0)
+            gho_won = game.ghost_revivals.get(pid, 0)
+            gho_fail = game.ghost_failures.get(pid, 0)
+            player_stats[pid] = {
+                "streak":       game.best_streaks.get(pid, 0),
+                "pasos":        game.pasos_count.get(pid, 0),
+                "gavilanes":    f"{gav_won}/{gav_won+gav_lost}" if (gav_won+gav_lost) > 0 else None,
+                "ghost":        f"{gho_won}/{gho_won+gho_fail}" if (gho_won+gho_fail) > 0 else None,
+                "hardest_dudo": f"{hd['qty']}x{hd['face']}" if hd else None,
+                "dice_lost":    game.dice_lost.get(pid, 0),
+                "dice_taken":   game.dice_taken.get(pid, 0),
+                "calzo_gains":  game.calzo_gains.get(pid, 0),
+            }
+
         payload = {
             "type": "game_over",
             "result_mode": outcome.kind,
             "rules": game.rules.to_dict(),
             "reveal_seconds": REVEAL_SECONDS,
             "standings": standings,
+            "player_stats": player_stats,
         }
         if outcome.kind == "winner":
             payload.update({"winner_id": outcome.player_id, "winner_name": outcome.player_name})
@@ -1511,6 +1583,17 @@ class GameManager:
         game.best_streaks = {}
         game.ghost_failures = {}
         game.ghost_cooldown = {}
+        game.pasos_count = {}
+        game.dudos_count = {}
+        game.dudos_won = {}
+        game.calzos_count = {}
+        game.calzos_hit = {}
+        game.gavilanes_won = {}
+        game.gavilanes_lost = {}
+        game.ghost_revivals = {}
+        game.dice_lost = {}
+        game.dice_taken = {}
+        game.hardest_dudo = {}
         await self._delete_room_state(room_id)
 
     async def _persist_game_result(
