@@ -938,7 +938,7 @@ const VOICE_NUMS = {
   'tres': 3, 'tre': 3,
   'cuatro': 4, 'cuatr': 4, 'cuato': 4,
   'cinco': 5, 'sinc': 5, 'cinq': 5, 'zinco': 5,
-  'seis': 6, 'sei': 6, 'sey': 6, 'seix': 6,
+  'seis': 6, 'sei': 6, 'sey': 6, 'seix': 6, 'soy': 6,
   'siete': 7, 'siet': 7,
   'ocho': 8, 'och': 8,
   'nueve': 9, 'nuev': 9,
@@ -949,22 +949,19 @@ const VOICE_FACES = {
   1: [
     'as', 'ases', 'has', 'hases', 'aces',
     'ase', 'ace', 'az',
-    'uno', 'unos',
     'taza', 'tazas',
   ],
   2: [
     'tonto', 'tontos', 'tonta', 'tontas', 'tanto', 'tantos',
-    'dos', 'do',
   ],
   3: [
     'tren', 'trenes', 'trens',
-    'tres', 'tre',
   ],
   4: [
     'cuadra', 'cuadras', 'cuadro', 'cuadros',
     'cuadrada', 'cuadradas',
     'cuarta', 'cuartas', 'cuarto', 'cuartos',
-    'cuata', 'cuatro', 'cuato',
+    'cuata',
   ],
   5: [
     'quina', 'quinas', 'kina', 'kinas', 'quino', 'quinos',
@@ -975,7 +972,7 @@ const VOICE_FACES = {
   6: [
     'cena', 'cenas', 'sena', 'senas', 'scena', 'siena', 'zena',
     'sexta', 'sextas', 'sexto', 'sextos',
-    'sesta', 'sestas', 'cesta', 'cestas', 'sei',
+    'sesta', 'sestas', 'cesta', 'cestas', 'escena', 'escenas',
   ],
 };
 
@@ -1435,77 +1432,55 @@ function _matchNumber(word) {
 }
 
 function parseVoiceBid(tokens) {
-  let qty = null, face = null, faceFuzzy = null;
   const faceMap = _buildFaceMap();
   const faceCandidates = Object.keys(faceMap);
 
-  // Pass 1: exact matches
-  for (const tok of tokens) {
-    if (qty === null) {
-      const n = _matchNumber(tok);
-      if (n !== null) { qty = n; continue; }
-    }
-    if (face === null && tok in faceMap) {
-      face = faceMap[tok];
-    }
-  }
-  if (qty !== null && face !== null) return { quantity: qty, face };
+  // Scan right-to-left: find face first (last mention wins)
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const tok = tokens[i];
 
-  // Handle "una" / "unas" -> quantity 1, rest is face
-  if (qty === null) {
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i];
-      if (t === 'una' || t === 'unas' || t === 'unos') {
-        qty = 1;
-        // Check if remaining tokens contain a face
-        for (let j = i + 1; j < tokens.length; j++) {
-          if (tokens[j] in faceMap) {
-            face = faceMap[tokens[j]];
-            return { quantity: 1, face };
-          }
-        }
-        // Check if "as" is implicitly merged: try fuzzy on "una"/"unas"/"unos"
-        // e.g. "una" could be "un" + "as" - we already covered this by having "as" in faceMap
-        // But "unas" as a whole trigger: check if there's any other token that fuzzy-matches a face
-        for (let j = i + 1; j < tokens.length; j++) {
-          if (tokens[j].length > 3) {
-            const fm = fuzzyMatch(tokens[j], faceCandidates, 1);
-            if (fm) { face = faceMap[fm.value]; return { quantity: 1, face }; }
-          }
-        }
-        break;
+    // Exact face match
+    if (tok in faceMap) {
+      const face = faceMap[tok];
+      // Look left for quantity
+      for (let j = i - 1; j >= 0; j--) {
+        const n = _matchNumber(tokens[j]);
+        if (n !== null) return { quantity: n, face };
+        if (tokens[j] === 'una' || tokens[j] === 'unas' || tokens[j] === 'unos')
+          return { quantity: 1, face };
       }
+      return { quantity: 1, face };
     }
-  }
 
-  // Pass 2: fuzzy on faces (>3 chars) if we have a quantity
-  if (qty !== null && face === null) {
-    for (const tok of tokens) {
-      const fm = fuzzyMatch(tok, faceCandidates, 1);
-      if (fm) { face = faceMap[fm.value]; break; }
-    }
-  }
-
-  if (qty !== null && face !== null) return { quantity: qty, face };
-
-  // Pass 3: merged tokens (e.g. "cuatrotrenes" -> "cuatro"+"trenes")
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t === 'una' || t === 'unas' || t === 'unos') {
-      // Already handled above, but in case of single token "unas" with no following tokens
-      // It could be "un as" merged. Since "as" is in faceMap...
-      if (face === null && qty === null) {
-        qty = 1;
-        face = faceMap['as'];
-        return { quantity: 1, face };
-      }
-    }
-    // Check merged num+face (no space)
+    // Merged num+face (e.g. "dostrenes" -> "dos"+"trenes")
     for (const [numStr, numVal] of Object.entries(VOICE_NUMS)) {
-      if (t.startsWith(numStr) && t.length > numStr.length) {
-        const rest = t.slice(numStr.length);
+      if (tok.startsWith(numStr) && tok.length > numStr.length) {
+        const rest = tok.slice(numStr.length);
         if (rest in faceMap) return { quantity: numVal, face: faceMap[rest] };
       }
+    }
+  }
+
+  // No exact face: try fuzzy from the right (>3 chars)
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const tok = tokens[i];
+    const fm = fuzzyMatch(tok, faceCandidates, 1);
+    if (fm) {
+      const face = faceMap[fm.value];
+      for (let j = i - 1; j >= 0; j--) {
+        const n = _matchNumber(tokens[j]);
+        if (n !== null) return { quantity: n, face };
+        if (tokens[j] === 'una' || tokens[j] === 'unas' || tokens[j] === 'unos')
+          return { quantity: 1, face };
+      }
+      return { quantity: 1, face };
+    }
+  }
+
+  // Standalone "una"/"unas"/"unos" -> 1 As (legacy)
+  for (const tok of tokens) {
+    if (tok === 'una' || tok === 'unas' || tok === 'unos') {
+      return { quantity: 1, face: faceMap['as'] };
     }
   }
 
@@ -2296,6 +2271,9 @@ function onReveal(msg) {
   playSfxFor('reveal', msg.challenger_id);
   stopTurnCountdown();
   S.phase = 'reveal';
+  S._lastChallengeAt = 0;
+  S._lastDudoAt = 0;
+  if (_challengeCooldownTimer) { clearTimeout(_challengeCooldownTimer); _challengeCooldownTimer = null; }
   S.lastLossPlayerId = msg.loser_id || null;
   if (msg.action === 'dudo' || msg.action === 'calzo') {
     S.lastActionPlayerId = msg.challenger_id || null;
@@ -2445,6 +2423,9 @@ function onNewRound(msg) {
   S.roundNum      = msg.round_number;
   S.currentBid       = null;
   S.activePaso       = null;
+  S._lastChallengeAt = 0;
+  S._lastDudoAt = 0;
+  if (_challengeCooldownTimer) { clearTimeout(_challengeCooldownTimer); _challengeCooldownTimer = null; }
   S.hasPassed        = false;
   S.revealDice       = {};
   S.revealBidFace    = null;
@@ -5013,6 +4994,8 @@ function _applyChallengeCooldown() {
   if (_challengeCooldownTimer) clearTimeout(_challengeCooldownTimer);
   _challengeCooldownTimer = setTimeout(() => {
     _challengeCooldownTimer = null;
+    S._lastChallengeAt = 0;
+    S._lastDudoAt = 0;
     if (S.phase === 'playing') updateControls();
   }, S.challengeGuardMs);
 }
@@ -5025,6 +5008,8 @@ function _applyDudoCooldown() {
   if (_challengeCooldownTimer) clearTimeout(_challengeCooldownTimer);
   _challengeCooldownTimer = setTimeout(() => {
     _challengeCooldownTimer = null;
+    S._lastChallengeAt = 0;
+    S._lastDudoAt = 0;
     if (S.phase === 'playing') updateControls();
   }, S.challengeConsecutiveMs);
 }
