@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build and Deploy Go Docker Image
 
 on:
   push:
@@ -12,6 +12,9 @@ permissions:
 jobs:
   docker:
     runs-on: ubuntu-latest
+
+    outputs:
+      service: ${{ steps.deploy.outputs.service }}
 
     steps:
       - name: Checkout
@@ -27,13 +30,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Define deployment
+        id: deploy
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "service=dudo" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and Push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ steps.deploy.outputs.tag }}
             ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+
+  deploy:
+    needs: docker
+    runs-on: [self-hosted, docker]
+
+    steps:
+      - name: Deploy container
+        run: deploy-compose games ${{ needs.docker.outputs.service }}
