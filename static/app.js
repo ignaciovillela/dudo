@@ -1442,14 +1442,13 @@ function parseVoiceBid(tokens) {
     // Exact face match
     if (tok in faceMap) {
       const face = faceMap[tok];
-      // Look left for quantity
+      // Look left for quantity (must find one)
       for (let j = i - 1; j >= 0; j--) {
         const n = _matchNumber(tokens[j]);
         if (n !== null) return { quantity: n, face };
         if (tokens[j] === 'una' || tokens[j] === 'unas' || tokens[j] === 'unos')
           return { quantity: 1, face };
       }
-      return { quantity: 1, face };
     }
 
     // Merged num+face (e.g. "dostrenes" -> "dos"+"trenes")
@@ -1473,14 +1472,6 @@ function parseVoiceBid(tokens) {
         if (tokens[j] === 'una' || tokens[j] === 'unas' || tokens[j] === 'unos')
           return { quantity: 1, face };
       }
-      return { quantity: 1, face };
-    }
-  }
-
-  // Standalone "una"/"unas"/"unos" -> 1 As (legacy)
-  for (const tok of tokens) {
-    if (tok === 'una' || tok === 'unas' || tok === 'unos') {
-      return { quantity: 1, face: faceMap['as'] };
     }
   }
 
