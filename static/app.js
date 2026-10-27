@@ -2641,12 +2641,12 @@ function onGameOver(msg) {
 
       tr.innerHTML =
         `<td class="go-pos">${pos}</td>` +
-        `<td class="go-player"><span class="go-avatar">${entry.avatar}</span><span class="go-sname">${entry.name}</span></td>` +
+        `<td class="go-player"><span class="go-avatar">${entry.avatar}</span><span class="go-sname">${escapeHtml(entry.name)}</span></td>` +
         `<td class="stat-cell">${streak >= 2 ? streak : '—'}</td>` +
         `<td class="stat-cell">${ps.pasos || '—'}</td>` +
         `<td class="stat-cell"${gav ? ` data-tooltip="Gavilanes ${gav}"` : ''}>${gav || '—'}</td>` +
         `<td class="stat-cell"${gho ? ` data-tooltip="Fantasma ${gho}"` : ''}>${gho || '—'}</td>` +
-        `<td class="stat-cell"${hd ? ` data-tooltip="Dudo a ${hd}"` : ''}>${hd || '—'}</td>` +
+        `<td class="stat-cell"${hd ? ` data-tooltip="Dudo a ${escapeHtml(hd)}"` : ''}>${hd ? escapeHtml(hd) : '—'}</td>` +
         `<td class="stat-cell">${ps.dice_lost || '—'}</td>` +
         `<td class="stat-cell calzo-col">${ps.calzo_gains || '—'}</td>` +
         `<td class="stat-cell">${ps.dice_taken || '—'}</td>`;
@@ -4478,6 +4478,12 @@ function renderMyDice(animate = false) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 function updateBidDisplay() {
   const noMsg    = document.getElementById('no-bid-msg');
   const visual   = document.getElementById('bid-visual');
@@ -4486,7 +4492,7 @@ function updateBidDisplay() {
   // Paso indicator
   if (S.activePaso) {
     const name = S.players[S.activePaso.player_id]?.name || S.activePaso.player_name;
-    pasoEl.innerHTML = `<i class="fa-solid fa-forward" aria-hidden="true"></i> PASO de ${name}`;
+    pasoEl.innerHTML = `<i class="fa-solid fa-forward" aria-hidden="true"></i> PASO de ${escapeHtml(name)}`;
     pasoEl.style.display = 'block';
   } else {
     pasoEl.style.display = 'none';
