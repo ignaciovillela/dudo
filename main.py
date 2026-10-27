@@ -41,6 +41,11 @@ log = logging.getLogger(__name__)
 app = FastAPI(title="Dudo")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+def normalize_room_id(room_id: str) -> str:
+    """Los códigos de sala no distinguen mayúsculas de minúsculas."""
+    return room_id.strip().casefold()
+
+
 manager = GameManager()
 INDEX_PATH = Path("static/index.html")
 
@@ -196,7 +201,7 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
 
 @app.get("/")
 async def root(request: Request, sala: str | None = None):
-    room_id = sala.strip()[:20] if sala else None
+    room_id = normalize_room_id(sala)[:20] if sala else None
     return HTMLResponse(_build_index_with_dynamic_meta(request, room_id))
 
 
@@ -212,6 +217,7 @@ async def get_player_audio_clips_api(anon_id: str, room_id: str):
     if not normalized_anon_id:
         raise HTTPException(status_code=400, detail="anon_id inválido")
 
+    room_id = normalize_room_id(room_id)
     if not manager.is_anon_present(room_id, normalized_anon_id):
         return JSONResponse({"clips": []})
 
@@ -246,6 +252,7 @@ async def upload_player_audio_clip_api(
     if not normalized_anon_id:
         raise HTTPException(status_code=400, detail="anon_id inválido")
 
+    room_id = normalize_room_id(room_id)
     if not manager.is_anon_present(room_id, normalized_anon_id):
         raise HTTPException(status_code=403, detail="Jugador no presente en la sala")
 
@@ -317,6 +324,7 @@ async def delete_player_audio_clip_api(anon_id: str, slot: int, room_id: str):
     if not normalized_anon_id:
         raise HTTPException(status_code=400, detail="anon_id inválido")
 
+    room_id = normalize_room_id(room_id)
     if not manager.is_anon_present(room_id, normalized_anon_id):
         raise HTTPException(status_code=403, detail="Jugador no presente en la sala")
 
@@ -347,6 +355,7 @@ async def stream_audio_clip_api(clip_id: int, room_id: str):
     if row is None:
         raise HTTPException(status_code=404, detail="Audio no encontrado")
 
+    room_id = normalize_room_id(room_id)
     if not manager.is_anon_present(room_id, row["anon_id"]):
         raise HTTPException(status_code=404, detail="Audio no disponible")
 
@@ -380,6 +389,7 @@ async def admin_page():
 
 @app.websocket("/ws/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
+    room_id = normalize_room_id(room_id)
     session_player_id = str(uuid.uuid4())[:8]
     await manager.connect(websocket, room_id, session_player_id)
     try:
