@@ -3,6 +3,7 @@ import json
 import logging
 import pathlib
 import random
+import re
 import time
 import uuid
 
@@ -58,6 +59,12 @@ ALLOWED_EMOJIS: frozenset[str] = frozenset(
 ALLOWED_AVATARS: frozenset[str] = frozenset(
     item["emoji"] for item in json.loads((_STATIC / "avatars.json").read_text(encoding="utf-8"))
 )
+
+
+def _clean_name(value, default: str = "") -> str:
+    """Quita caracteres de marcado HTML y recorta a 20 caracteres."""
+    cleaned = re.sub(r"[<>&\"'`]", "", str(value or "")).strip()[:20]
+    return cleaned or default
 
 
 class GameManager:
@@ -589,7 +596,7 @@ class GameManager:
 
         # ── Unirse nuevo ──────────────────────────────────────────────────────
         if game.phase != "lobby":
-            spectator_name = (msg.get("name") or "Espectador").strip()[:20] or "Espectador"
+            spectator_name = _clean_name(msg.get("name"), "Espectador")
             if anon_id:
                 self._track_anon_id(room_id, player_id, anon_id)
             game.spectators[player_id] = spectator_name
@@ -622,7 +629,7 @@ class GameManager:
                 self.admin_sessions.get(room_id, set()).discard(zid)
                 self.client_anon_ids.get(room_id, {}).pop(zid, None)
 
-        name = (msg.get("name") or f"Jugador {len(game.players) + 1}").strip()[:20]
+        name = _clean_name(msg.get("name"), f"Jugador {len(game.players) + 1}")
         avatar = self._normalize_avatar(msg.get("avatar"))
         player = Player(id=player_id, name=name, avatar=avatar, anon_id=anon_id)
         game.players[player_id] = player
@@ -667,7 +674,7 @@ class GameManager:
         if player_id not in game.players or game.phase != "lobby":
             return
         player = game.players[player_id]
-        new_name = (msg.get("name") or player.name).strip()[:20] or player.name
+        new_name = _clean_name(msg.get("name"), player.name)
         new_avatar = self._normalize_avatar(msg.get("avatar")) if msg.get("avatar") else player.avatar
         player.name = new_name
         player.avatar = new_avatar
