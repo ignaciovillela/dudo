@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import uuid
+from contextlib import asynccontextmanager
 from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
@@ -64,7 +65,6 @@ def _compute_static_version() -> int:
 STATIC_VERSION = _compute_static_version()
 
 
-@app.on_event("startup")
 async def _startup():
     global _db_ok
     try:
@@ -115,12 +115,23 @@ def _db_host() -> str:
     return f"{host}:{port}"
 
 
-@app.on_event("shutdown")
 async def _shutdown():
     # Persistir todas las salas activas antes de cerrar la DB
     for room_id in list(manager.games):
         await manager._persist_room_state(room_id)
     await close_pool()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _startup()
+    try:
+        yield
+    finally:
+        await _shutdown()
+
+
+app.router.lifespan_context = lifespan
 
 
 def _replace_meta_tag(html: str, attr_name: str, attr_value: str, content: str) -> str:
