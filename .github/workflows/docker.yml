@@ -4,13 +4,47 @@ on:
   push:
     branches:
       - main
+  # PRs (including Dependabot's) only run the tests; build and deploy are push-only.
+  pull_request:
 
 permissions:
   contents: read
   packages: write
 
 jobs:
+  # Tests first: a broken build never reaches production.
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Python syntax
+        run: python -m compileall -q main.py game
+
+      - name: Tests
+        run: python -m pytest
+
+      - name: Frontend syntax
+        run: |
+          for f in static/app.js static/tutorial.js; do
+            node -e "new Function(require('fs').readFileSync('$f','utf8'))" || exit 1
+          done
+
   docker:
+    needs: test
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     outputs:
