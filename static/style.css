@@ -2268,6 +2268,9 @@ input.input-error {
   box-shadow: 0 1px 4px rgba(232,184,109,0.3);
 }
 
+/* Botón de sentido para móvil vertical (ver media query) */
+.direction-indicator.dir-mobile { display: none; padding: 0; font-size: 1.1rem; }
+
 @keyframes goldShimmer {
   0%   { transform: translateX(-80%) translateY(-80%) rotate(35deg); }
   100% { transform: translateX(80%) translateY(80%) rotate(35deg); }
@@ -2701,6 +2704,22 @@ input.input-error {
 .reveal-result.win  { color: #2ecc71; }
 .reveal-result.lose { color: var(--danger); }
 .reveal-result.neutral { color: var(--gold); }
+
+/* Resumen del conteo en el reveal (Backlog #18) */
+.reveal-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.rc-main { display: flex; align-items: center; gap: 8px; }
+.rc-label { font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+.rc-num { font-family: 'Cinzel', serif; font-size: 2.4rem; line-height: 1; font-weight: 700; color: var(--gold); }
+.rc-x { font-size: 1.1rem; color: var(--text-dim); }
+.rc-sub { font-size: 0.8rem; color: var(--text-dim); }
+.reveal-count.rc-under .rc-num { color: var(--danger); }
+.reveal-count.rc-exact .rc-num { color: #2ecc71; }
 
 .reveal-countdown {
   font-size: 0.8rem;
@@ -3413,6 +3432,19 @@ input.input-error {
   gap: 4px;
 }
 .stat-lbl i { color: rgba(232,184,109,0.5); }
+/* Botón "Reglas" en la barra de stats (Backlog #25) */
+.stat-help {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.stat-help:hover { background: rgba(232,184,109,0.08); border-color: rgba(232,184,109,0.25); }
+.stat-help:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.stat-help-icon { font-size: 1.15rem; }
 .stat-val {
   font-family: 'Cinzel', serif;
   font-size: 1.5rem;
@@ -3920,6 +3952,12 @@ input.input-error {
   flex-wrap: wrap;
   justify-content: center;
 }
+.go-rematch-hint {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-align: center;
+}
 
 /* ═══════════════════════════  RESPONSIVE — MOBILE  ═══════════════════════════ */
 
@@ -4070,7 +4108,9 @@ input.input-error {
   /* Face-row en móvil: pintas a la izquierda, botón de dirección a la derecha */
   .face-row { flex-direction: row; align-items: center; gap: 6px; }
   .face-row .face-picker { flex: 1; min-width: 0; }
-
+  .direction-indicator.dir-mobile { display: inline-flex; width: 38px; height: 38px; }
+  .rc-num { font-size: 1.7rem; }
+  .reveal-count { margin-bottom: 6px; }
 
   /* Face-picker: limitar tamaño de dado a ~40 px */
   .face-picker { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
@@ -4440,6 +4480,8 @@ input.input-error {
 .tut-hand-out:not(:empty) { margin-bottom: 6px; }
 
 .tut-final { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 10px 0; }
+.tut-practice { padding: 12px 22px; font-size: 0.95rem; }
+.tut-practice i { margin-right: 6px; }
 
 .tut-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 6px; border-top: 1px solid rgba(232,184,109,0.12); }
 .tut-foot .btn { padding: 9px 16px; }

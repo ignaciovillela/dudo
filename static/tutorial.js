@@ -339,10 +339,32 @@
         h('div', { class: 'tut-final' },
           diceRow([6, 6, 1]),
           h('p', { html: '<strong>Resumen:</strong> apuesta sobre todos los dados de la mesa, recuerda que los ases son comodines, y duda cuando algo no te cuadre.' }),
-          h('p', { class: 'tut-note' }, 'Consejo: practica en una sala con bots fáciles antes de jugar con amigos.')),
+          ...practiceCta()),
       ],
     },
   ];
+
+  // Botón "Practicar contra bots": solo desde la pantalla inicial (sin sala aún).
+  function practiceCta() {
+    const form = document.getElementById('lobby-form');
+    const canPractice = typeof window.startPracticeGame === 'function'
+      && form && form.style.display !== 'none'
+      && document.getElementById('lobby-screen')?.classList.contains('active');
+    if (!canPractice) {
+      return [h('p', { class: 'tut-note' }, 'Consejo: practica en una sala con bots fáciles antes de jugar con amigos.')];
+    }
+    return [
+      h('button', {
+        class: 'btn btn-gold tut-practice', type: 'button',
+        html: '<i class="fa-solid fa-robot" aria-hidden="true"></i> Practicar contra 2 bots fáciles',
+        onclick: () => {
+          closeTutorial();
+          window.startPracticeGame(2);
+        },
+      }),
+      h('p', { class: 'tut-note' }, 'Crea una sala privada solo para ti y empieza la partida al tiro.'),
+    ];
+  }
 
   // ── Modal ──────────────────────────────────────────────────────────────────
   function renderStep() {
