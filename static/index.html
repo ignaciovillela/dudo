@@ -78,6 +78,9 @@
           <li><i class="fa-solid fa-robot"></i> Bots con IA adaptativa</li>
           <li><i class="fa-solid fa-bolt"></i> Sin registro — entra y juega</li>
         </ul>
+        <button class="btn btn-learn" type="button" onclick="openTutorial()" data-tutorial-badge>
+          <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i> Aprende a jugar
+        </button>
       </div>
     </div>
 
@@ -88,6 +91,9 @@
       <div class="lp-card lp-card--form" id="lobby-form">
         <div class="lp-card-header">
           <h2 class="lp-card-title">Entrar a partida</h2>
+          <button class="lp-learn-link" type="button" onclick="openTutorial()" data-tutorial-badge>
+            <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i> ¿Primera vez? Aprende a jugar en 3 minutos
+          </button>
         </div>
 
         <div class="field-group">
@@ -150,6 +156,9 @@
             <span class="lp-share-hint">Invita a tus amigos con el enlace o dándoles el código.</span>
           </div>
           <div class="lp-room-header-actions">
+            <button class="btn btn-sm btn-subaction" type="button" onclick="openTutorial()" title="Cómo se juega" aria-label="Cómo se juega">
+              <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+            </button>
             <button class="btn btn-sm btn-subaction" type="button" onclick="openStatsModal()" title="Mis estadísticas">
               <i class="fa-solid fa-chart-bar" aria-hidden="true"></i>
             </button>
@@ -450,6 +459,27 @@
   </div>
 </div>
 
+<div id="tutorial-modal" class="stats-modal tut-modal" style="display:none">
+  <div class="tut-box" role="dialog" aria-modal="true" aria-labelledby="tut-title">
+    <div class="tut-head">
+      <span class="tut-eyebrow"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i> Cómo se juega · <span id="tut-count"></span></span>
+      <button class="tut-close" type="button" onclick="closeTutorial()" aria-label="Cerrar manual">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+    </div>
+    <h2 id="tut-title" class="tut-title"></h2>
+    <div class="tut-progress" aria-hidden="true"><div id="tut-progress-bar" class="tut-progress-bar"></div></div>
+    <div id="tut-body" class="tut-body"></div>
+    <div class="tut-foot">
+      <button id="tut-prev" class="btn btn-subaction" type="button" onclick="tutorialGo(-1)">
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Anterior
+      </button>
+      <div id="tut-dots" class="tut-dots"></div>
+      <button id="tut-next" class="btn btn-gold" type="button" onclick="tutorialGo(1)"></button>
+    </div>
+  </div>
+</div>
+
 <div id="stats-modal" class="stats-modal" style="display:none">
   <div class="stats-box">
     <h2>📊 Mis stats</h2>
@@ -582,5 +612,6 @@
 </div>
 
 <script src="/static/app.js"></script>
+<script src="/static/tutorial.js"></script>
 </body>
 </html>

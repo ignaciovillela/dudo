@@ -203,6 +203,10 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
         f'src="/static/app.js?v={STATIC_VERSION}',
     )
     html = html.replace(
+        'src="/static/tutorial.js',
+        f'src="/static/tutorial.js?v={STATIC_VERSION}',
+    )
+    html = html.replace(
         'href="/static/style.css',
         f'href="/static/style.css?v={STATIC_VERSION}',
     )
