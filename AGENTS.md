@@ -5,6 +5,7 @@
 - Archivos estáticos servidos desde `/static`.
 
 ## Verificación rápida
+- Tests: `pip install -r requirements-dev.txt` y luego `python -m pytest` (también corren en CI antes del deploy).
 - Sintaxis Python: `python -m compileall main.py game`
 - Sintaxis frontend: `node -e "const fs=require('fs'); new Function(fs.readFileSync('static/app.js','utf8'));"`
 
