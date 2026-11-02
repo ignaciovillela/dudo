@@ -9,7 +9,7 @@ import uuid
 
 from fastapi import WebSocket
 
-from game.config import CHALLENGE_CONSECUTIVE_MS, CHALLENGE_GUARD_MS, DEBUG_MODE, DISCONNECT_GRACE_SECONDS, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
+from game.config import CHALLENGE_CONSECUTIVE_MS, CHALLENGE_GUARD_MS, DEBUG_MODE, DISCONNECT_GRACE_SECONDS, MAX_BID_QUANTITY, MAX_PLAYERS, RATE_LIMIT_MS, REVEAL_SECONDS
 from game.models import Bid, Game, Player, RuleConfig
 from game.rules import RuleEngine
 from game.actions import CalzoAction, DudoAction, DudoBidResult, DudoPasoResult
@@ -354,7 +354,7 @@ class GameManager:
             return
 
         player = game.players[player_id]
-        player.connected = False
+        turn_changed = game.set_player_connected(player_id, False)
         previous_host_id = self._host_id(room_id, game)
 
         host_changed_msg = None
@@ -381,6 +381,9 @@ class GameManager:
 
         if game.phase == "playing":
             self._schedule_disconnect_resolution(room_id, player_id)
+            # Backlog #4: if the player on turn left, the next one must be told right away.
+            if turn_changed:
+                await self._announce_turn(room_id, game)
 
         await self._persist_room_state(room_id)
 
@@ -535,7 +538,7 @@ class GameManager:
                 old.anon_id = anon_id
                 self._track_anon_id(room_id, reconnect_id, anon_id)
             self.client_anon_ids.get(room_id, {}).pop(player_id, None)
-            old.connected = True
+            game.set_player_connected(reconnect_id, True)
             self._cancel_disconnect_resolution(room_id, reconnect_id)
 
             host_changed_msg = None
@@ -1084,6 +1087,11 @@ class GameManager:
             return await self._send(room_id, player_id,
                                     {"type": "error", "message": "Apuesta inválida"})
 
+        if bid.quantity > MAX_BID_QUANTITY:
+            return await self._send(room_id, player_id,
+                                    {"type": "error",
+                                     "message": f"La cantidad máxima es {MAX_BID_QUANTITY}"})
+
         if not game.is_valid_bid(bid):
             return await self._send(room_id, player_id,
                                     {"type": "error",
@@ -1113,7 +1121,7 @@ class GameManager:
         except (KeyError, ValueError, TypeError):
             return
 
-        if not game.is_valid_bid(bid):
+        if bid.quantity > MAX_BID_QUANTITY or not game.is_valid_bid(bid):
             return
 
         # Guardar la apuesta seleccionada sin ejecutarla

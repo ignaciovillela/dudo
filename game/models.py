@@ -206,6 +206,28 @@ class Game:
         elif active:
             self.current_player_idx = 0
 
+    def set_player_connected(self, player_id: str, connected: bool) -> bool:
+        """Change a player's connection state without losing track of whose turn it is.
+
+        The turn index points into active_players(), which only includes connected
+        players, so connecting/disconnecting someone shifts the index. This keeps the
+        same player on turn, or, if the player on turn leaves, passes the turn to the
+        next one in the current direction. Returns True if the turn holder changed.
+        """
+        player = self.players.get(player_id)
+        if not player:
+            return False
+        before = self.current_player_id()
+        target = before
+        if not connected and before == player_id:
+            active = self.active_players()
+            others = len(active) > 1
+            target = active[(active.index(player_id) + self.direction) % len(active)] if others else ""
+        player.connected = connected
+        if target:
+            self.set_current_player(target)
+        return self.current_player_id() != before
+
     def advance_turn(self):
         active = self.active_players()
         if not active:
