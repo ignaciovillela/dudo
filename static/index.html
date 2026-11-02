@@ -105,15 +105,27 @@
         </div>
 
         <div class="lp-room-join">
+          <button class="btn btn-join-main" type="button" onclick="createRoom()">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            <span>Crear sala nueva</span>
+          </button>
+          <p class="lp-join-hint">Te damos un código para que invites a tus amigos.</p>
+
+          <div class="lp-divider" role="separator"><span>o únete a una sala</span></div>
+
           <div class="field-group">
             <label for="inp-room"><i class="fa-solid fa-hashtag" aria-hidden="true"></i> Código de sala</label>
-            <input id="inp-room" type="text" placeholder="ej: mesa1" maxlength="20"
-                   onkeydown="if(event.key==='Enter') joinRoom()" autocomplete="off" />
+            <div class="lp-join-row">
+              <input id="inp-room" type="text" placeholder="ej: mesa-7k2" maxlength="20"
+                     onkeydown="if(event.key==='Enter') joinRoom()" autocomplete="off"
+                     autocapitalize="none" spellcheck="false" aria-describedby="inp-room-hint" />
+              <button class="btn btn-join-secondary" type="button" onclick="joinRoom()">
+                <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+                <span>Unirse</span>
+              </button>
+            </div>
+            <p id="inp-room-hint" class="lp-join-hint">Escribe el código que te pasaron. No importan las mayúsculas.</p>
           </div>
-          <button class="btn btn-join-main" onclick="joinRoom()">
-            <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
-            <span>Unirse</span>
-          </button>
         </div>
       </div>
 
@@ -126,10 +138,16 @@
             <span class="lp-room-eyebrow"><i class="fa-solid fa-door-open" aria-hidden="true"></i> Sala activa</span>
             <div class="lp-room-code-row">
               <strong id="disp-room-code" class="lp-room-code"></strong>
-              <button id="btn-copy-room" class="btn btn-icon-sm" onclick="copyRoomCode()" title="Copiar código">
-                <i class="fa-regular fa-copy" aria-hidden="true"></i>
+            </div>
+            <div class="lp-share-row">
+              <button id="btn-copy-room" class="btn btn-sm btn-share" type="button" onclick="copyRoomCode()" title="Copiar enlace de invitación">
+                <i class="fa-regular fa-copy" aria-hidden="true"></i><span>Copiar enlace</span>
+              </button>
+              <button id="btn-share-room" class="btn btn-sm btn-share" type="button" onclick="shareRoom()" title="Compartir invitación" style="display:none">
+                <i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span>Compartir</span>
               </button>
             </div>
+            <span class="lp-share-hint">Invita a tus amigos con el enlace o dándoles el código.</span>
           </div>
           <div class="lp-room-header-actions">
             <button class="btn btn-sm btn-subaction" type="button" onclick="openStatsModal()" title="Mis estadísticas">

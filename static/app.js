@@ -1586,7 +1586,7 @@ function connect(roomId) {
     clearTimeout(S.reconnectTimer);
     S.reconnectTimer = null;
   }
-  S.ws = new WebSocket(`${proto}://${location.host}/ws/${roomId}`);
+  S.ws = new WebSocket(`${proto}://${location.host}/ws/${encodeURIComponent(roomId)}`);
 
   S.ws.onopen = () => {
     if (S.reconnectAttempt > 0) {
@@ -5129,11 +5129,37 @@ function leaveRoom() {
   document.getElementById('lobby-room').style.display = 'none';
 }
 
+// Los códigos de sala no distinguen mayúsculas (el servidor también normaliza).
+function normalizeRoomCode(code) {
+  return (code || '').trim().toLowerCase().replace(/\s+/g, '-').slice(0, 20);
+}
+
+const ROOM_CODE_WORDS = ['mesa', 'cacho', 'dado', 'calzo', 'pinta', 'tiro'];
+const ROOM_CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789'; // sin 0/o, 1/l/i
+
+function generateRoomCode() {
+  const word = ROOM_CODE_WORDS[Math.floor(Math.random() * ROOM_CODE_WORDS.length)];
+  let suffix = '';
+  for (let i = 0; i < 3; i++) {
+    suffix += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  }
+  return `${word}-${suffix}`;
+}
+
+function createRoom() {
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) { showToast('Ingresa tu nombre', true); return; }
+  document.getElementById('inp-room').value = generateRoomCode();
+  joinRoom();
+}
+
 function joinRoom() {
   const name = document.getElementById('inp-name').value.trim();
-  const room = document.getElementById('inp-room').value.trim();
+  const roomEl = document.getElementById('inp-room');
+  const room = normalizeRoomCode(roomEl.value);
   if (!name) { showToast('Ingresa tu nombre', true); return; }
-  if (!room) { showToast('Ingresa el código de sala', true); return; }
+  if (!room) { showToast('Ingresa el código de sala o crea una sala nueva', true); return; }
+  roomEl.value = room;
   S.playerName = name;
   S.playerAvatar = AVATAR_OPTIONS.includes(S.playerAvatar) ? S.playerAvatar : '🎲';
   S.roomId = room;
@@ -5345,21 +5371,36 @@ function onHostRulesChanged() {
   send({ type: 'set_rules', rules: S.rules });
 }
 
+function roomShareUrl() {
+  return `${location.origin}/?sala=${encodeURIComponent(S.roomId)}`;
+}
+
 function copyRoomCode() {
   playSfx('click');
-  const shareUrl = `${location.origin}/?sala=${encodeURIComponent(S.roomId)}`;
+  const shareUrl = roomShareUrl();
   const btn = document.getElementById('btn-copy-room');
   const doCheck = () => {
     if (btn) {
-      btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>Copiado';
+      btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span>¡Copiado!</span>';
       setTimeout(() => {
-        btn.innerHTML = '<i class="fa-regular fa-copy" aria-hidden="true"></i>Copiar';
+        btn.innerHTML = '<i class="fa-regular fa-copy" aria-hidden="true"></i><span>Copiar enlace</span>';
       }, 1500);
     }
   };
+  if (!navigator.clipboard) { showToast(shareUrl); return; }
   navigator.clipboard.writeText(shareUrl)
-    .then(() => { showToast('Enlace de sala copiado'); doCheck(); })
+    .then(() => { showToast('Enlace de invitación copiado'); doCheck(); })
     .catch(() => showToast(shareUrl));
+}
+
+function shareRoom() {
+  playSfx('click');
+  if (!navigator.share) { copyRoomCode(); return; }
+  navigator.share({
+    title: 'Dudo',
+    text: `¡Juguemos Dudo! Sala: ${S.roomId}`,
+    url: roomShareUrl(),
+  }).catch(() => { /* el usuario canceló */ });
 }
 
 // ══════════════════════════════════  UTILS  ══════════════════════════════════
@@ -5674,8 +5715,10 @@ window.closeAudioManagerModal = closeAudioManagerModal;
   const roomEl = document.getElementById('inp-room');
   if (nameEl && session?.name) nameEl.value = session.name;
   if (roomEl) {
-    roomEl.value = roomFromUrl || session?.room || '';
+    roomEl.value = normalizeRoomCode(roomFromUrl || session?.room || '');
   }
+  const shareBtn = document.getElementById('btn-share-room');
+  if (shareBtn && navigator.share) shareBtn.style.display = '';
   if (session?.avatar && AVATAR_OPTIONS.includes(session.avatar)) {
     // Ensure saved avatar is still unlocked; if not, reset to 🎲
     S.playerAvatar = isAvatarUnlocked(session.avatar) ? session.avatar : '🎲';
