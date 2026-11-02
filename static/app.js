@@ -4179,6 +4179,16 @@ function renderLobbyPlayers() {
   const hostId = S.hostId || S.playerOrder[0];
   const canDrag = S.phase === 'lobby' && !S.isSpectator;
 
+  const countEl = document.getElementById('lobby-player-count');
+  if (countEl) {
+    const ps = S.playerOrder.map(pid => S.players[pid]).filter(Boolean);
+    const humans = ps.filter(p => !p.is_bot && p.connected);
+    const ready = humans.filter(p => p.ready).length;
+    countEl.textContent = ps.length
+      ? `${ps.length} en mesa · ${ready}/${humans.length} listos`
+      : '';
+  }
+
   // Guard: if DOM order already matches S.playerOrder, update badges in-place.
   // This prevents server confirmations from clearing the DOM mid-animation.
   const domRows = [...list.querySelectorAll('.lobby-player-row[data-pid]')];
@@ -5146,9 +5156,22 @@ function generateRoomCode() {
   return `${word}-${suffix}`;
 }
 
+function flagMissingField(id, message) {
+  const el = document.getElementById(id);
+  showToast(message, true);
+  if (!el) return;
+  el.classList.add('input-error');
+  el.setAttribute('aria-invalid', 'true');
+  el.focus();
+  el.addEventListener('input', () => {
+    el.classList.remove('input-error');
+    el.removeAttribute('aria-invalid');
+  }, { once: true });
+}
+
 function createRoom() {
   const name = document.getElementById('inp-name').value.trim();
-  if (!name) { showToast('Ingresa tu nombre', true); return; }
+  if (!name) { flagMissingField('inp-name', 'Primero escribe tu nombre'); return; }
   document.getElementById('inp-room').value = generateRoomCode();
   joinRoom();
 }
@@ -5157,8 +5180,8 @@ function joinRoom() {
   const name = document.getElementById('inp-name').value.trim();
   const roomEl = document.getElementById('inp-room');
   const room = normalizeRoomCode(roomEl.value);
-  if (!name) { showToast('Ingresa tu nombre', true); return; }
-  if (!room) { showToast('Ingresa el código de sala o crea una sala nueva', true); return; }
+  if (!name) { flagMissingField('inp-name', 'Primero escribe tu nombre'); return; }
+  if (!room) { flagMissingField('inp-room', 'Escribe el código de sala o crea una sala nueva'); return; }
   roomEl.value = room;
   S.playerName = name;
   S.playerAvatar = AVATAR_OPTIONS.includes(S.playerAvatar) ? S.playerAvatar : '🎲';
@@ -5236,8 +5259,44 @@ function updateStartButton() {
   const connectedHumans = Object.values(S.players).filter(p => p.connected && !p.is_bot);
   const bots = Object.values(S.players).filter(p => p.is_bot);
   const active = connectedHumans.length + bots.length;
-  const allReady = active >= 2 && connectedHumans.every(p => p.ready);
+  const waiting = connectedHumans.filter(p => !p.ready);
+  const allReady = active >= 2 && waiting.length === 0;
   btn.disabled = !allReady;
+
+  // Explicar qué falta para empezar
+  let tone = 'wait';
+  let html;
+  const names = list => list.map(p => `<strong>${escapeHtml(p.name)}</strong>`).join(', ');
+  if (active < 2) {
+    html = S.isHost
+      ? '<i class="fa-solid fa-user-plus" aria-hidden="true"></i> Necesitas al menos 2 jugadores: comparte el enlace o agrega un bot.'
+      : '<i class="fa-solid fa-user-plus" aria-hidden="true"></i> Necesitan al menos 2 jugadores: comparte el enlace con tus amigos.';
+  } else if (waiting.length > 0) {
+    const meWaiting = !S.isSpectator && waiting.some(p => p === S.players[S.playerId]);
+    const others = waiting.filter(p => p !== S.players[S.playerId]);
+    if (meWaiting && others.length === 0) {
+      tone = 'you';
+      html = '<i class="fa-solid fa-hand-point-down" aria-hidden="true"></i> Solo faltas tú: presiona <strong>¡Listo!</strong>';
+    } else if (meWaiting) {
+      tone = 'you';
+      html = `<i class="fa-solid fa-hand-point-down" aria-hidden="true"></i> Presiona <strong>¡Listo!</strong> cuando estés preparado. También faltan: ${names(others)}`;
+    } else {
+      html = `<i class="fa-regular fa-clock" aria-hidden="true"></i> Esperando a que estén listos: ${names(waiting)}`;
+    }
+  } else {
+    tone = 'ready';
+    const host = S.players[S.hostId || S.playerOrder[0]];
+    html = S.isHost
+      ? '<i class="fa-solid fa-circle-check" aria-hidden="true"></i> ¡Todos listos! Ya puedes iniciar la partida.'
+      : `<i class="fa-solid fa-circle-check" aria-hidden="true"></i> ¡Todos listos! Esperando que ${host ? `<strong>${escapeHtml(host.name)}</strong>` : 'el anfitrión'} inicie.`;
+  }
+  btn.title = allReady ? 'Iniciar la partida' : 'Aún no se puede iniciar: revisa el mensaje de arriba';
+
+  const status = document.getElementById('lobby-status');
+  if (status) {
+    status.className = `lp-status lp-status--${tone}`;
+    status.innerHTML = html;
+  }
 }
 
 function startGame() {
@@ -5266,38 +5325,38 @@ function rulesSummaryItems() {
   return [
     {
       label: `Modo de partida: ${rules.elimination_mode === 'loser' ? 'Perdedor' : 'Ganador'}`,
-      detail: 'Modo perdedor: termina cuando alguien pierde todos sus dados.\nModo ganador: gana el ultimo jugador con dados.',
+      detail: 'Modo perdedor: termina cuando alguien pierde todos sus dados.\nModo ganador: gana el último jugador con dados.',
     },
     {
-      label: `Permitir Gavilan: ${rules.allow_gavilan ? 'Si' : 'No'}`,
+      label: `Permitir Gavilán: ${rules.allow_gavilan ? 'Sí' : 'No'}`,
       detail: rules.allow_gavilan
         ? 'Permite dudar o calzar fuera de turno.'
         : 'Solo puedes dudar o calzar en tu turno.',
     },
     {
-      label: `Calzo recupera en mi turno: ${rules.calzo_recovers_on_turn ? 'Si' : 'No'}`,
+      label: `Calzo recupera en mi turno: ${rules.calzo_recovers_on_turn ? 'Sí' : 'No'}`,
       detail: rules.calzo_recovers_on_turn
         ? 'Un calzo correcto recupera dado incluso en tu turno.'
         : 'Un calzo correcto solo recupera dado fuera de turno.',
     },
     {
-      label: `Tiempo por turno: ${rules.turn_timeout_seconds > 0 ? `${rules.turn_timeout_seconds}s` : 'Sin limite'}`,
-      detail: 'Al expirar el tiempo, el servidor ejecuta una accion automatica conservadora.',
+      label: `Tiempo por turno: ${rules.turn_timeout_seconds > 0 ? `${rules.turn_timeout_seconds}s` : 'Sin límite'}`,
+      detail: 'Al expirar el tiempo, el servidor ejecuta una acción automática conservadora.',
     },
     {
-      label: `Emojis lanzables: ${rules.allow_throwable_emojis ? 'Si' : 'No'}`,
+      label: `Emojis lanzables: ${rules.allow_throwable_emojis ? 'Sí' : 'No'}`,
       detail: rules.allow_throwable_emojis
         ? 'Los jugadores pueden lanzar emojis a otros durante la partida.'
-        : 'Los emojis lanzables estan desactivados en esta sala.',
+        : 'Los emojis lanzables están desactivados en esta sala.',
     },
     {
-      label: `Mensajes de bots: ${rules.bot_chat_enabled ? 'Si' : 'No'}`,
+      label: `Mensajes de bots: ${rules.bot_chat_enabled ? 'Sí' : 'No'}`,
       detail: rules.bot_chat_enabled
-        ? 'Los bots envian mensajes durante la partida (burlas, verdades o bluffs segun su dificultad).'
-        : 'Los bots no enviaran mensajes en el chat.',
+        ? 'Los bots envían mensajes durante la partida (burlas, verdades o bluffs según su dificultad).'
+        : 'Los bots no enviarán mensajes en el chat.',
     },
     {
-      label: `Gavilán fantasma: ${rules.allow_ghost_gavilan ? 'Si' : 'No'}`,
+      label: `Gavilán fantasma: ${rules.allow_ghost_gavilan ? 'Sí' : 'No'}`,
       detail: rules.allow_ghost_gavilan
         ? 'Los jugadores eliminados pueden intentar dudo/calzo fantasma para revivir con cooldown progresivo.'
         : 'Los eliminados no pueden hacer gavilán.',
@@ -5336,6 +5395,10 @@ function renderLobbyRules() {
   // Opacidad reducida cuando el anfitrión no puede editar
   hostControls.style.opacity = hostCanEdit ? '1' : '0.45';
   hostControls.style.pointerEvents = hostCanEdit ? '' : 'none';
+  const lockedHint = document.getElementById('rules-locked-hint');
+  if (lockedHint) lockedHint.style.display = (S.isHost && S.isReady) ? '' : 'none';
+  // El anfitrión ya ve los controles; el resumen es para el resto
+  summary.style.display = S.isHost ? 'none' : '';
 
   summary.innerHTML = '';
   for (const item of rulesSummaryItems()) {

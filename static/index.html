@@ -74,7 +74,7 @@
         <div class="brand-divider"></div>
         <ul class="brand-features">
           <li><i class="fa-solid fa-dice"></i> Apuesta, duda y calza</li>
-          <li><i class="fa-solid fa-users"></i> Hasta 8 jugadores online</li>
+          <li><i class="fa-solid fa-users"></i> Juega online con tus amigos</li>
           <li><i class="fa-solid fa-robot"></i> Bots con IA adaptativa</li>
           <li><i class="fa-solid fa-bolt"></i> Sin registro — entra y juega</li>
         </ul>
@@ -163,6 +163,10 @@
         </div>
 
         <!-- Player list -->
+        <div class="lp-section-head">
+          <span class="lp-section-title"><i class="fa-solid fa-users" aria-hidden="true"></i> Jugadores</span>
+          <span id="lobby-player-count" class="lp-count-pill"></span>
+        </div>
         <div id="lobby-player-list" class="lp-player-list"></div>
 
         <!-- Bot controls (host only) -->
@@ -184,23 +188,26 @@
             <i class="fa-solid fa-chevron-down lp-rules-chevron" aria-hidden="true"></i>
           </summary>
           <div class="lp-rules-body">
+            <p id="rules-locked-hint" class="lp-rules-locked" style="display:none">
+              <i class="fa-solid fa-lock" aria-hidden="true"></i> Cancela «Listo» para cambiar las reglas.
+            </p>
             <div id="host-rules-controls" class="rules-controls" style="display:none">
               <label class="check-row">
                 <input id="rule-elimination-winner" type="checkbox" onchange="onHostRulesChanged()" />
                 <span class="rule-line">Modo ganador
-                  <button type="button" class="rule-help" data-tooltip="Modo ganador: gana el ultimo jugador con dados.&#10;Modo perdedor: termina cuando alguien pierde todos sus dados." aria-label="Detalle de modo de partida"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                  <button type="button" class="rule-help" data-tooltip="Modo ganador: gana el último jugador con dados.&#10;Modo perdedor: termina cuando alguien pierde todos sus dados." aria-label="Detalle de modo de partida"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
               <label class="check-row">
                 <input id="rule-allow-gavilan" type="checkbox" onchange="onHostRulesChanged()" />
                 <span class="rule-line">Permitir Gavilán
-                  <button type="button" class="rule-help" data-tooltip="Permite dudar o calzar fuera de turno." aria-label="Detalle de Gavilan"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                  <button type="button" class="rule-help" data-tooltip="Permite dudar o calzar fuera de turno." aria-label="Detalle de Gavilán"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
               <label class="check-row">
                 <input id="rule-calzo-on-turn" type="checkbox" onchange="onHostRulesChanged()" />
                 <span class="rule-line">Calzo recupera en mi turno
-                  <button type="button" class="rule-help" data-tooltip="Si esta activo, un calzo correcto recupera dado tambien en tu turno. Si esta desactivado, solo recupera fuera de turno." aria-label="Detalle de recuperacion por calzo"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                  <button type="button" class="rule-help" data-tooltip="Si está activo, un calzo correcto recupera dado también en tu turno. Si está desactivado, solo recupera fuera de turno." aria-label="Detalle de recuperación por calzo"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
               <label class="check-row">
@@ -212,13 +219,13 @@
               <label class="check-row">
                 <input id="rule-bot-chat-enabled" type="checkbox" onchange="onHostRulesChanged()" />
                 <span class="rule-line">Bots envían mensajes
-                  <button type="button" class="rule-help" data-tooltip="Los bots envian mensajes durante la partida. Segun su dificultad pueden ser burlas, verdades o bluffs." aria-label="Detalle de mensajes de bots"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                  <button type="button" class="rule-help" data-tooltip="Los bots envían mensajes durante la partida. Según su dificultad pueden ser burlas, verdades o bluffs." aria-label="Detalle de mensajes de bots"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
               <label class="check-row">
                 <input id="rule-allow-ghost-gavilan" type="checkbox" onchange="onHostRulesChanged()" />
                 <span class="rule-line">Gavilán fantasma
-                  <button type="button" class="rule-help" data-tooltip="Permite que jugadores eliminados intenten dudo/calzo fantasma para revivir. Si fallan, nadie se entera y el cooldown aumenta." aria-label="Detalle de gavilan fantasma"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
+                  <button type="button" class="rule-help" data-tooltip="Permite que jugadores eliminados intenten dudo/calzo fantasma para revivir. Si fallan, nadie se entera y el cooldown aumenta." aria-label="Detalle de Gavilán fantasma"><i class="fa-regular fa-circle-question" aria-hidden="true"></i></button>
                 </span>
               </label>
               <label class="check-row timeout-row">
@@ -239,6 +246,9 @@
           </div>
         </details>
 
+        <!-- Estado de la sala: qué falta para empezar -->
+        <div id="lobby-status" class="lp-status" role="status" aria-live="polite"></div>
+
         <!-- Actions -->
         <div class="lp-actions">
           <button id="btn-ready" class="btn btn-ready-main" onclick="toggleReady()">
@@ -258,9 +268,6 @@
         <!-- Footer: level badge + hint -->
         <div class="lp-footer">
           <div id="level-badge" class="level-badge"></div>
-          <p class="lp-hint">
-            Mínimo 2 jugadores
-          </p>
         </div>
 
       </div><!-- .lp-card--room -->
