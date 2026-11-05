@@ -185,10 +185,11 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
         description = _share_description_for_room(room_id)
     else:
         share_url = f"{base_url}/"
-        title = "Dudo — Juego de los Cachos online gratis"
+        title = "Dudo (Cacho, Perudo) — Juego de dados online gratis"
         description = (
-            "Juega Dudo (el juego de los cachos) online y gratis, sin registro: crea una sala, "
-            "invita a tus amigos o juega contra bots. Apuesta, duda, calza y sobrevive hasta el final."
+            "Juega Dudo online y gratis, sin registro: el clásico juego de los cachos, también conocido como "
+            "Perudo, Cachito o Liar's Dice. Crea una sala, invita a tus amigos o juega contra bots. "
+            "Apuesta, duda, calza y sobrevive hasta el final."
         )
 
     image_url = f"{base_url}/static/og-cover.png"
