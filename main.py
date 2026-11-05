@@ -48,6 +48,12 @@ async def _security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Permissions-Policy", "camera=(), geolocation=(), microphone=(self)")
+    if request.url.path.startswith("/static/") and response.status_code == 200:
+        # Los assets referenciados con ?v=<hash> son inmutables; el resto, caché corta.
+        if "v" in request.query_params:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers.setdefault("Cache-Control", "public, max-age=3600")
     return response
 
 

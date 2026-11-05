@@ -1,14 +1,14 @@
 :root { --bg:#0a1a0f; --bg2:#0f2318; --gold:#e8b86d; --cream:#f5f0e8; --text:#e8e8e8; --dim:#9fb0a6; --border:rgba(255,255,255,.1); --felt:#1e5c38; }
     @media (prefers-color-scheme: light) { :root { --bg:#f6f3ec; --bg2:#fff; --text:#1b2a21; --dim:#52645a; --border:rgba(0,0,0,.12); --gold:#8a5a12; --cream:#1b2a21; } }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
     a { color: var(--gold); }
     header, main, footer { max-width: 780px; margin: 0 auto; padding: 0 20px; }
     header { display: flex; justify-content: space-between; align-items: center; padding-top: 18px; padding-bottom: 18px; }
-    .logo { font-family: 'Cinzel', serif; font-weight: 700; letter-spacing: .12em; font-size: 1.3rem; color: var(--gold); text-decoration: none; }
+    .logo { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; letter-spacing: .12em; font-size: 1.3rem; color: var(--gold); text-decoration: none; }
     .cta { display: inline-block; background: linear-gradient(135deg,#f0c97f,#c9993f); color: #1a1205; font-weight: 600; padding: 10px 20px; border-radius: 999px; text-decoration: none; }
-    h1 { font-family: 'Cinzel', serif; font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.2; color: var(--gold); margin: 18px 0 14px; }
-    h2 { font-family: 'Cinzel', serif; font-size: 1.45rem; color: var(--gold); margin: 38px 0 10px; }
+    h1 { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.2; color: var(--gold); margin: 18px 0 14px; }
+    h2 { font-family: Georgia, 'Times New Roman', serif; font-size: 1.45rem; color: var(--gold); margin: 38px 0 10px; }
     h3 { font-size: 1.05rem; margin: 22px 0 6px; }
     p, ul, ol { margin-bottom: 14px; }
     ul, ol { padding-left: 22px; }
