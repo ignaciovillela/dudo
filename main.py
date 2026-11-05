@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from game.manager import GameManager
@@ -230,6 +230,18 @@ async def root(request: Request, sala: str | None = None):
     room_id = normalize_room_id(sala)[:20] if sala else None
     return HTMLResponse(_build_index_with_dynamic_meta(request, room_id))
 
+
+
+@app.get("/como-jugar", include_in_schema=False)
+async def como_jugar():
+    return FileResponse(Path(__file__).resolve().parent / "static" / "pages" / "como-jugar.html", media_type="text/html")
+
+
+@app.get("/como-jugar/", include_in_schema=False)
+@app.get("/reglas", include_in_schema=False)
+@app.get("/reglas/", include_in_schema=False)
+async def como_jugar_alias():
+    return RedirectResponse("/como-jugar", status_code=301)
 
 
 @app.get("/robots.txt", include_in_schema=False)

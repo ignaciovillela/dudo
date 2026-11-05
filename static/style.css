@@ -4466,3 +4466,23 @@ input.input-error {
   .tut-new-badge, .tut-feedback { animation: none; }
   .tut-progress-bar { transition: none; }
 }
+/* ── SEO: nombres alternativos y enlaces a la guía ── */
+.brand-aka {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+  max-width: 320px;
+  margin: -18px 0 26px;
+}
+.brand-aka strong { color: var(--gold); font-weight: 600; }
+.lp-seo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  justify-content: center;
+  margin-top: 14px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.lp-seo-links a { color: var(--gold); text-decoration: none; }
+.lp-seo-links a:hover { text-decoration: underline; }

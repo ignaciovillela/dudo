@@ -2,7 +2,7 @@
 
 ## 👉 [Juega gratis ahora en dudo.igna.cl](https://dudo.igna.cl/)
 
-Sin registro, desde el celular o el computador: crea una sala, comparte el enlace con tus amigos o juega contra bots.
+Sin registro, desde el celular o el computador: crea una sala, comparte el enlace con tus amigos o juega contra bots. ¿Primera vez? Mira [cómo jugar y las reglas](https://dudo.igna.cl/como-jugar).
 
 <p align="center">
   <img src="docs/screenshots/web-partida.png" alt="Dudo en el navegador: mesa de juego con la apuesta en curso" width="820">
