@@ -1,6 +1,6 @@
 # 🎲 Dudo — El Juego de los Cachos (Cacho, Perudo, Liar's Dice)
 
-[![CI](https://github.com/ignaciovillela/dudo/actions/workflows/ci.yml/badge.svg)](https://github.com/ignaciovillela/dudo/actions/workflows/ci.yml) [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-green.svg)](LICENSE)
+[![Tests y deploy](https://github.com/ignaciovillela/dudo/actions/workflows/docker.yml/badge.svg)](https://github.com/ignaciovillela/dudo/actions/workflows/docker.yml) [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-green.svg)](LICENSE)
 
 ## 👉 [Juega gratis ahora en dudo.igna.cl](https://dudo.igna.cl/)
 
@@ -87,7 +87,7 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-Cubren las reglas puras (apuestas válidas, ases comodín, paso, turnos y configuración de sala). Ver también [CONTRIBUTING.md](CONTRIBUTING.md).
+Cubren las reglas puras, las acciones de la partida y el manager de salas; corren en CI antes de cada deploy. Ver también [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Guías del juego
 

@@ -7,7 +7,7 @@
 ```bash
 docker compose up --build        # app + Postgres en http://localhost:8000
 # o, sin Docker:
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements-dev.txt
 python -m pytest
 ```
 

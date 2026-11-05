@@ -21,3 +21,8 @@ node_modules/
 
 dist/
 build/
+
+tests/
+pytest.ini
+requirements-dev.txt
+.pytest_cache/

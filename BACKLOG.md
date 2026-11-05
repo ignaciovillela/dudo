@@ -34,7 +34,13 @@ Referencia completa en `CHANGELOG.md`.
 - URL compartible por `?sala=codigo`.
 - Transferencia automática de anfitrión.
 - Reconexión automática con backoff.
-- Eliminar soporte móvil (viewport fijo, sin @media queries de breakpoint).
+- Soporte móvil (vertical y horizontal) con layout compacto; botón de sentido junto a las pintas en móvil vertical.
+- Fix #4: desconexión del jugador en turno ya no congela la partida.
+- Fix #11: cantidad máxima de apuesta en el servidor (`MAX_BID_QUANTITY`).
+- #18: conteo grande con desglose (pinta + ases) en el reveal.
+- #25: botón "Reglas" durante la partida (abre el manual interactivo).
+- Manual interactivo, práctica contra bots, revancha en un click, pantalla encendida durante la partida.
+- Tests (pytest) en CI antes del deploy y Dependabot.
 - Fix: kick durante turno activo corrompe orden de turno.
 - Fix: setTimeout del overlay de fin de partida no era cancelable.
 - Fix: auto-apuesta por timeout siempre usaba cara=2.
@@ -59,22 +65,6 @@ Referencia completa en `CHANGELOG.md`.
 ---
 
 ## 🔴 Alta prioridad
-
-### 4. Fix: desconexión durante el turno activo congela la partida [no aplicar aún, se debe revisar bien el alcance]
-**Por qué:** cuando el jugador activo se desconecta, `active_players()` lo excluye y `current_player_id()` retorna al siguiente jugador, pero nunca se llama `_announce_turn`. Los demás jugadores no reciben anuncio de turno y la partida queda congelada visualmente hasta que el timeout expira.
-- Alcance técnico: backend.
-- Archivos principales: `game/manager.py` (función `disconnect`, ~línea 772).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: al desconectarse el jugador activo durante una partida, el siguiente jugador recibe inmediatamente el mensaje `turn`.
-
-### 18. Total de dados coincidentes visible en el reveal
-**Por qué:** durante los 7 segundos de revelación no se muestra cuántos dados de la cara apostada había en total en la mesa. Esa información existe en el payload `reveal` pero no se resume en ningún lugar visible.
-- Alcance técnico: frontend.
-- Archivos principales: `static/app.js` (función `onReveal`), `static/index.html`, `static/style.css`.
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: durante el reveal se muestra un resumen del tipo "Había 7 🎲5 en la mesa (se apostaron 8)"; el número de dados coincidentes y el total apostado son visibles durante toda la fase de revelación.
 
 ### 30. Highlight: Mayor mentira sobrevivida
 **Por qué:** captura las jugadas más absurdamente improbables que aun así no fueron castigadas; genera historias memorables al final de la partida.
@@ -115,14 +105,6 @@ Referencia completa en `CHANGELOG.md`.
 - Riesgo de implementación: `Bajo`.
 - Criterio de término: el botón "Unirse" muestra un estado de carga (texto o spinner) desde el click hasta recibir `joined` o error; se deshabilita para evitar doble envío.
 
-### 11. Fix: cap en cantidad apostada (cliente y servidor) [revisar, podría ser bueno solo limitar el máximo ej: 100]
-**Por qué:** no hay límite superior en la cantidad de la apuesta. Un cliente puede enviar `quantity: 9999999`; el servidor lo acepta porque solo valida que sea ≥ 1 y mayor a la apuesta anterior.
-- Alcance técnico: frontend + backend.
-- Archivos principales: `static/app.js` (función `adjBid`), `game/models.py` (función `is_valid_bid`).
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: el stepper de cantidad en el cliente tiene un máximo de `total_dados`; el backend rechaza apuestas con `quantity > total_dados` con mensaje de error.
-
 ### 23. Highlights de partida
 **Por qué:** al terminar la partida, mostrar los momentos más destacados (el bluff más arriesgado, el dudo más preciso, la apuesta más alta) genera conversación y replayability social.
 - Alcance técnico: backend + frontend.
@@ -153,14 +135,6 @@ Referencia completa en `CHANGELOG.md`.
 ---
 
 ## 🟢 Prioridad baja
-
-### 25. Modal de reglas accesible desde la partida
-**Por qué:** no hay forma de consultar las reglas una vez que empieza la partida. Los jugadores nuevos quedan perdidos sin poder salir de la vista de juego.
-- Alcance técnico: frontend.
-- Archivos principales: `static/index.html`, `static/app.js`, `static/style.css`.
-- Dificultad estimada: `Baja`.
-- Riesgo de implementación: `Bajo`.
-- Criterio de término: hay un botón `?` visible durante la partida que abre un modal con las reglas resumidas (acciones válidas, escalación de apuestas, resolución de retos); el modal se cierra sin afectar el estado del juego.
 
 ### 26. Confirmación en acción "Dudo" [no implementar, revisar como no hacerlo molesto]
 **Por qué:** un click accidental en "Dudo!" resulta en perder un dado sin posibilidad de corrección. Es la acción más irreversible del juego.
@@ -201,12 +175,8 @@ Referencia completa en `CHANGELOG.md`.
 
 | # | Mejora | Archivos afectados | Dificultad | Riesgo | Impacto |
 |---|--------|--------------------|------------|--------|---------|
-| 4 | Fix: desconexión congela turno activo | `manager.py` | Baja | Bajo | Alto |
-| 18 | Total de dados coincidentes en el reveal | `app.js`, `index.html`, `style.css` | Baja | Bajo | Alto |
 | 8 | UX: indicador de carga al unirse | `app.js`, `index.html`, `style.css` | Baja | Bajo | Medio |
-| 11 | Fix: cap en cantidad apostada | `app.js`, `models.py` | Baja | Bajo | Bajo |
 | 23 | Highlights de partida | `manager.py`, `app.js`, `index.html` | Alta | Medio | Medio |
-| 25 | Modal de reglas en partida | `index.html`, `app.js`, `style.css` | Baja | Bajo | Bajo |
 | 26 | Confirmación en acción "Dudo" | `app.js`, `index.html`, `style.css` | Baja | Bajo | Bajo |
 | 27 | Variante: ronda Palifico | `models.py`, `rules/`, `app.js`, `index.html` | Media | Medio | Bajo |
 | 29 | Variante: dados iniciales configurables | `models.py`, `manager.py`, `index.html`, `app.js` | Media | Medio | Bajo |

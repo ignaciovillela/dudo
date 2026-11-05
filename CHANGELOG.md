@@ -5,6 +5,29 @@ Todos los cambios importantes de este proyecto se documentan aqui.
 Este archivo sigue una estructura inspirada en Keep a Changelog.
 Como aun no hay tags de version en git, se usan versiones internas por fecha para resumir la evolucion real del proyecto.
 
+## [0.4.0] - 2026-11-02
+
+### Added
+- **Manual interactivo** "Cómo se juega" (`static/tutorial.js`): 10 pasos con ejercicios (pintas, ases comodines, subir apuestas, Dudo, Calzo, Paso, reglas de sala).
+- **Practicar contra bots**: el último paso del manual crea una sala privada con 2 bots fáciles y arranca la partida automáticamente.
+- **Revancha** en el overlay de fin de partida: vuelve al lobby marcándote como listo; si el anfitrión también la eligió, la partida empieza sola cuando todos están listos.
+- **Conteo en el reveal** (Backlog #18): número grande "Había N × pinta" con "se apostaron M" y desglose pinta + ases; verde si fue exacto, rojo si había menos.
+- **Botón "Reglas" durante la partida** (Backlog #25) en la barra de stats; abre el manual sin salir de la mesa. Los atajos de teclado de la partida se desactivan mientras el manual está abierto.
+- **Pantalla encendida** durante la partida (Screen Wake Lock API), se vuelve a pedir al regresar a la pestaña.
+- Lobby más claro: "Crear sala nueva" vs. "Unirse", códigos de sala legibles (`mesa-7k2`), sin distinguir mayúsculas, botones Copiar enlace / Compartir y panel que explica qué falta para empezar.
+- **Tests automáticos** (`tests/`, pytest): reglas de apuesta, conteo con ases, Paso, Dudo, Calzo, turnos con desconexiones y límite de cantidad. Correr con `pip install -r requirements-dev.txt` y `python -m pytest`.
+- **CI**: el workflow corre los tests y revisa la sintaxis de `app.js`/`tutorial.js` antes de construir y desplegar; en PRs solo corre los tests.
+- **Dependabot** (`.github/dependabot.yml`): PRs semanales para pip, npm, Docker y GitHub Actions.
+
+### Fixed
+- Desconexión del jugador en turno congelaba la partida (Backlog #4): ahora el turno pasa de inmediato al siguiente en el sentido actual y se anuncia. Además, conectar/desconectar a otro jugador ya no desplaza el índice de turno (antes el turno podía saltar a otra persona sin aviso). Nuevo `Game.set_player_connected`.
+- Cantidad máxima de apuesta en el servidor (Backlog #11): `MAX_BID_QUANTITY` (100 por defecto) en `bid` y `select_bid`.
+- Móvil vertical: no había forma de cambiar el sentido de los turnos porque el indicador vive en la barra de turno, que se oculta en móvil. Nuevo botón junto a las pintas.
+- Deploy: el job de deploy hace login en GHCR con el usuario del runner.
+
+### Changed
+- Dependencias a su última versión (FastAPI 0.162, uvicorn 0.54, numpy 2.5, scikit-learn 1.9, python-multipart 0.0.33, etc.), imagen base `python:3.14-slim`, acciones de GitHub a su última versión mayor. `@app.on_event` reemplazado por `lifespan`.
+
 ## [0.3.11] - 2026-05-08
 
 ### Added

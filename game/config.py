@@ -14,6 +14,8 @@ RATE_LIMIT_MS = int(os.getenv("RATE_LIMIT_MS", 200))
 DISCONNECT_GRACE_SECONDS = int(os.getenv("DISCONNECT_GRACE_SECONDS", 300))
 CHALLENGE_GUARD_MS = int(os.getenv("CHALLENGE_GUARD_MS", 500))
 CHALLENGE_CONSECUTIVE_MS = int(os.getenv("CHALLENGE_CONSECUTIVE_MS", 300))
+# Sanity cap for bid quantities sent by clients (Backlog #11).
+MAX_BID_QUANTITY = int(os.getenv("MAX_BID_QUANTITY", 100))
 
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").strip().lower() == "true"
 

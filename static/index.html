@@ -400,7 +400,8 @@
           <label class="bb-label">Pinta</label>
           <div class="face-row">
             <div id="face-picker" class="face-picker"></div>
-
+            <!-- En móvil (vertical) la barra de turno se oculta: este botón la reemplaza -->
+            <button id="direction-indicator-mobile" class="direction-indicator dir-mobile" type="button" onclick="toggleDirection()" aria-label="Sentido de los turnos"></button>
           </div>
           <label class="bb-label">Cantidad</label>
           <div id="qty-grid" class="qty-grid"></div>
@@ -458,6 +459,11 @@
           <span class="stat-lbl"><i class="fa-solid fa-dice" aria-hidden="true"></i> Dados</span>
           <span id="disp-total" class="stat-val">—</span>
         </div>
+        <div class="stat-divider"></div>
+        <button class="stat stat-help" type="button" onclick="openTutorial()" title="Repasar las reglas sin salir de la partida">
+          <span class="stat-lbl"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Reglas</span>
+          <span class="stat-val stat-help-icon"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
+        </button>
       </div>
 
       <!-- Log -->
@@ -502,8 +508,10 @@
     </div>
     <div class="go-actions">
       <button class="btn btn-sm" type="button" onclick="openAchievementsModal()">🏆 Logros</button>
-      <button class="btn btn-gold go-btn" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i>Volver al lobby</button>
+      <button class="btn btn-sm" type="button" onclick="closeGameOver()"><i class="fa-solid fa-door-open" aria-hidden="true"></i> Volver al lobby</button>
+      <button id="btn-rematch" class="btn btn-gold go-btn" type="button" onclick="rematch()"><i class="fa-solid fa-rotate" aria-hidden="true"></i>Revancha</button>
     </div>
+    <p id="go-rematch-hint" class="go-rematch-hint">Revancha te marca como listo. La partida empieza sola cuando todos la aceptan.</p>
   </div>
 </div>
 
@@ -654,6 +662,7 @@
 <!-- Reveal overlay: fuera del game-table para evitar problemas de stacking -->
 <div id="reveal-overlay" class="reveal-overlay" style="display:none">
   <div class="reveal-box">
+    <div id="reveal-count" class="reveal-count" style="display:none" aria-live="polite"></div>
     <div id="reveal-result" class="reveal-result"></div>
     <div id="reveal-countdown" class="reveal-countdown"></div>
   </div>

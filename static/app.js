@@ -1757,6 +1757,29 @@ function onJoined(msg) {
   renderAudioManagerModal();
   refreshQuickAudioClips();
   log(`Unido a la sala ${S.roomId}`, 'system');
+  if (S.practiceBots && S.isHost) setupPracticeRoom(S.practiceBots);
+  S.practiceBots = 0;
+}
+
+// ── Práctica contra bots (se lanza desde el final del manual) ──
+function startPracticeGame(bots = 2) {
+  if (S.roomId) { showToast('Ya estás en una sala'); return false; }
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) { flagMissingField('inp-name', 'Escribe tu nombre para practicar'); return false; }
+  S.practiceBots = bots;
+  createRoom();
+  return true;
+}
+
+function setupPracticeRoom(bots) {
+  for (let i = 0; i < bots; i++) send({ type: 'add_bot', difficulty: 'easy' });
+  // El servidor limita la frecuencia de mensajes (set_rules/ready): esperar un poco
+  // y recién entonces marcarse listo; onAllReady arranca la partida.
+  setTimeout(() => {
+    if (S.phase !== 'lobby' || !S.isHost) return;
+    S.autoStartPending = true;
+    if (!S.isReady) toggleReady();
+  }, 600);
 }
 
 function onJoinedSpectator(msg) {
@@ -2005,6 +2028,12 @@ function onHostChanged(msg) {
 }
 
 function onAllReady() {
+  if (S.isHost && S.autoStartPending && S.isReady && S.phase === 'lobby') {
+    S.autoStartPending = false;
+    log('Todos aceptaron la revancha', 'system');
+    startGame();
+    return;
+  }
   if (S.isHost) showToast('¡Todos listos! Pulsa Iniciar Juego cuando quieras.');
   log('Todos los jugadores están listos', 'system');
 }
@@ -2016,6 +2045,7 @@ function onRulesUpdated(msg) {
     Object.assign(S.players, msg.players);
   }
   S.isReady = false;
+  S.autoStartPending = false;
   updateReadyButton(false);
   renderLobbyPlayers();
   updateStartButton();
@@ -2077,6 +2107,7 @@ function onGameStarted(msg) {
   S.isSpectator = !msg.player_order.includes(S.playerId);
   S.phase       = 'playing';
   S.isReady     = false;
+  S.autoStartPending = false;
   S.playerOrder = msg.player_order;
   S.rules       = normalizeRules(msg.rules || S.rules);
   S.currentBid      = null;
@@ -2659,6 +2690,13 @@ function onGameOver(msg) {
     document.getElementById('go-standings').style.display = 'none';
   }
 
+  // Los espectadores no juegan la revancha: solo vuelven al lobby.
+  const canRematch = !S.isSpectator;
+  const rematchBtn = document.getElementById('btn-rematch');
+  if (rematchBtn) rematchBtn.style.display = canRematch ? '' : 'none';
+  const rematchHint = document.getElementById('go-rematch-hint');
+  if (rematchHint) rematchHint.style.display = canRematch ? '' : 'none';
+
   const revealSeconds = Number(msg.reveal_seconds || 7);
   S.gameOverTimer = setTimeout(() => {
     S.gameOverTimer = null;
@@ -2692,6 +2730,18 @@ function closeGameOver() {
   updateStartButton();
   updateReadyButton(false);
   document.getElementById('btn-ready').classList.remove('btn-start');
+}
+
+// Revancha: volver al lobby ya listo. Si el anfitrión la pidió, la partida
+// arranca sola apenas todos estén listos (ver onAllReady).
+function rematch() {
+  closeGameOver();
+  if (S.isSpectator) return;
+  S.autoStartPending = true;
+  if (!S.isReady) toggleReady();
+  showToast(S.isHost
+    ? 'Revancha: empieza sola cuando todos estén listos'
+    : 'Listo para la revancha. Esperando al resto…');
 }
 
 function onError(msg) {
@@ -3973,11 +4023,58 @@ function animateEmojiThrow(fromId, targetId, emoji) {
 
 // ══════════════════════════════════  REVEAL UI  ════════════════════════════════
 function showReveal(msg) {
+  renderRevealCount(msg);
   document.getElementById('reveal-overlay').style.display = 'flex';
+}
+
+// Backlog #18: resumen grande "Había N × pinta (se apostaron M)" con desglose pinta + ases.
+function renderRevealCount(msg) {
+  const el = document.getElementById('reveal-count');
+  if (!el) return;
+  const bid = msg.bid;
+  if (!bid || msg.action === 'paso' || typeof msg.actual_count !== 'number') {
+    el.style.display = 'none';
+    el.replaceChildren();
+    return;
+  }
+  let natural = 0, aces = 0;
+  for (const dice of Object.values(msg.all_dice || {})) {
+    for (const d of dice || []) {
+      if (d === bid.face) natural++;
+      else if (d === 1 && bid.face !== 1) aces++;
+    }
+  }
+  const main = document.createElement('div');
+  main.className = 'rc-main';
+  const label = document.createElement('span');
+  label.className = 'rc-label';
+  label.textContent = 'Había';
+  const num = document.createElement('span');
+  num.className = 'rc-num';
+  num.textContent = msg.actual_count;
+  const x = document.createElement('span');
+  x.className = 'rc-x';
+  x.textContent = '×';
+  main.append(label, num, x, makeDie(bid.face, { size: 'sm' }));
+
+  const sub = document.createElement('div');
+  sub.className = 'rc-sub';
+  const parts = [`se apostaron ${bid.quantity}`];
+  if (bid.face !== 1) {
+    parts.push(`${natural} ${faceName(bid.face, natural !== 1)} + ${aces} ${faceName(1, aces !== 1)}`);
+  }
+  sub.textContent = parts.join(' · ');
+
+  const diff = msg.actual_count - bid.quantity;
+  el.className = 'reveal-count ' + (diff === 0 ? 'rc-exact' : diff > 0 ? 'rc-over' : 'rc-under');
+  el.replaceChildren(main, sub);
+  el.style.display = '';
 }
 
 function hideReveal() {
   document.getElementById('reveal-overlay').style.display = 'none';
+  const rc = document.getElementById('reveal-count');
+  if (rc) { rc.style.display = 'none'; rc.replaceChildren(); }
   const r = document.getElementById('reveal-result');
   if (r) { r.textContent = ''; r.className = 'reveal-result'; }
 }
@@ -4530,16 +4627,22 @@ function updateBidDisplay() {
 function updateDirectionIndicator() {
   const canChange = S.playerId === S.roundFirstPlayer && !S.hasFirstAction && S.phase === 'playing';
 
-  const ind = document.getElementById('direction-indicator');
-  if (!ind) return;
-
-  ind.innerHTML = S.direction === 1
+  const icon = S.direction === 1
     ? '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>'
     : '<i class="fa-solid fa-rotate-left" aria-hidden="true"></i>';
-  ind.title = S.direction === 1 ? 'Sentido horario (toca para cambiar)' : 'Sentido antihorario (toca para cambiar)';
-  ind.style.display = 'inline-flex';
+  const label = (S.direction === 1 ? 'Sentido horario' : 'Sentido antihorario')
+    + (canChange ? ' (toca para cambiar)' : '');
 
-  ind.classList.toggle('clickable', canChange);
+  // Desktop: indicador en la barra de turno. Móvil: botón junto a las pintas.
+  const desktop = document.getElementById('direction-indicator');
+  if (desktop) desktop.style.display = 'inline-flex';
+  for (const ind of [desktop, document.getElementById('direction-indicator-mobile')]) {
+    if (!ind) continue;
+    ind.innerHTML = icon;
+    ind.title = label;
+    ind.setAttribute('aria-label', label);
+    ind.classList.toggle('clickable', canChange);
+  }
 }
 
 function diceValidasParaPaso(dice) {
@@ -5239,6 +5342,7 @@ function renderLobbySpectatorControls() {
 
 function toggleReady() {
   S.isReady = !S.isReady;
+  if (!S.isReady) S.autoStartPending = false;
   updateReadyButton(S.isReady);
   playSfx('click');
   send({ type: 'ready' });
@@ -5478,7 +5582,29 @@ function showScreen(name) {
     el.style.display = 'flex';
     el.classList.add('active');
   }
+  setScreenAwake(name === 'game');
 }
+
+// Mantener la pantalla encendida durante la partida (Screen Wake Lock API).
+// El navegador suelta el bloqueo al cambiar de pestaña, así que se pide de nuevo al volver.
+let _wakeLock = null;
+let _wantAwake = false;
+async function setScreenAwake(on) {
+  _wantAwake = on;
+  if (!('wakeLock' in navigator)) return;
+  try {
+    if (on && !_wakeLock) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    } else if (!on && _wakeLock) {
+      await _wakeLock.release();
+      _wakeLock = null;
+    }
+  } catch { /* sin permiso o batería baja: no es crítico */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && _wantAwake) setScreenAwake(true);
+});
 
 let toastTimer = null;
 function showToast(msg, isError = false) {
@@ -5810,6 +5936,9 @@ window.closeAudioManagerModal = closeAudioManagerModal;
 document.addEventListener('keydown', e => {
   if (S.isSpectator) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  // Con el manual abierto las teclas son del manual (flechas), no de la partida.
+  const tut = document.getElementById('tutorial-modal');
+  if (tut && tut.style.display && tut.style.display !== 'none') return;
   const isMyTurn = S.currentPid === S.playerId && S.phase === 'playing';
   const key = e.key.toLowerCase();
 
