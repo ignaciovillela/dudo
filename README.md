@@ -1,5 +1,7 @@
 # 🎲 Dudo — El Juego de los Cachos (Cacho, Perudo, Liar's Dice)
 
+[![CI](https://github.com/ignaciovillela/dudo/actions/workflows/ci.yml/badge.svg)](https://github.com/ignaciovillela/dudo/actions/workflows/ci.yml) [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-green.svg)](LICENSE)
+
 ## 👉 [Juega gratis ahora en dudo.igna.cl](https://dudo.igna.cl/)
 
 Sin registro, desde el celular o el computador: crea una sala, comparte el enlace con tus amigos o juega contra bots. ¿Primera vez? Mira [cómo jugar y las reglas](https://dudo.igna.cl/como-jugar-dudo).
@@ -77,6 +79,15 @@ uvicorn main:app --reload
 ### Clips de audio
 
 Los clips de sistema (botones de sonido rápidos) se leen de `static/audio_clips/`. El repositorio no incluye ninguno por temas de derechos: pon allí tus `.mp3`/`.ogg` y, si quieres, un `buttons.json` con `label`, `emoji` y `color` por clip.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Cubren las reglas puras (apuestas válidas, ases comodín, paso, turnos y configuración de sala). Ver también [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Guías del juego
 

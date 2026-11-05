@@ -1,0 +1,20 @@
+name: Reportar un bug
+description: Algo no funciona como debería
+labels: [bug]
+body:
+  - type: textarea
+    id: que
+    attributes:
+      label: ¿Qué pasó?
+      description: Describe el problema y qué esperabas que pasara.
+    validations:
+      required: true
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducirlo
+  - type: input
+    id: dispositivo
+    attributes:
+      label: Dispositivo y navegador
+      placeholder: "Ej: iPhone 14, Safari"

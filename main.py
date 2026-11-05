@@ -41,6 +41,16 @@ from game.audio_clips import (
 log = logging.getLogger(__name__)
 
 app = FastAPI(title="Dudo")
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Permissions-Policy", "camera=(), geolocation=(), microphone=(self)")
+    return response
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 def normalize_room_id(room_id: str) -> str:

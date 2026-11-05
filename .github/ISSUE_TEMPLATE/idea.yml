@@ -1,0 +1,14 @@
+name: Proponer una mejora
+description: Una idea para el juego (reglas, bots, interfaz…)
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: ¿Qué te gustaría?
+    validations:
+      required: true
+  - type: textarea
+    id: por-que
+    attributes:
+      label: ¿Por qué ayudaría?
