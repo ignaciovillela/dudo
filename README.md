@@ -8,7 +8,7 @@ Sin registro, desde el celular o el computador: crea una sala, comparte el enlac
   <img src="docs/screenshots/web-partida.png" alt="Dudo en el navegador: mesa de juego con la apuesta en curso" width="820">
 </p>
 
-**Dudo** —en Chile también "los cachos" o "cacho"— es un juego de dados multijugador en tiempo real. Es el mismo juego que en otros países se conoce como **Perudo**, **Cachito**, **Pico**, **Dadinho** o **Liar's Dice** / dados mentirosos (mundo anglosajón). Cada jugador oculta sus dados; por turnos se apuesta cuántos dados de una pinta hay en toda la mesa, y quien no cree la apuesta dice **¡Dudo!** o **¡Calzo!**. Gana el último con dados.
+**Dudo** —en Chile también "los cachos" o "cacho"— es un juego de dados multijugador en tiempo real. Es el mismo juego que en otros países se conoce como **Perudo**, **Cachito**, **Pico**, **Dadinho** o **Liar's Dice** (mundo anglosajón). Cada jugador oculta sus dados; por turnos se apuesta cuántos dados de una pinta hay en toda la mesa, y quien no cree la apuesta dice **¡Dudo!** o **¡Calzo!**. Gana el último con dados.
 
 ## Un juego, muchos nombres
 
