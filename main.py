@@ -235,7 +235,7 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
     return html
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root(request: Request, sala: str | None = None):
     room_id = normalize_room_id(sala)[:20] if sala else None
     return HTMLResponse(_build_index_with_dynamic_meta(request, room_id))
@@ -281,7 +281,7 @@ def _register_seo_page(slug: str) -> None:
             headers={"Cache-Control": "public, max-age=3600"},
         )
 
-    app.add_api_route(f"/{slug}", _page, methods=["GET"], include_in_schema=False)
+    app.add_api_route(f"/{slug}", _page, methods=["GET", "HEAD"], include_in_schema=False)
 
 
 def _register_seo_alias(alias: str, target: str) -> None:
@@ -298,12 +298,12 @@ for _alias, _target in _SEO_ALIASES.items():
     _register_seo_alias(_alias, _target)
 
 
-@app.get("/robots.txt", include_in_schema=False)
+@app.api_route("/robots.txt", methods=["GET", "HEAD"], include_in_schema=False)
 async def robots_txt():
     return FileResponse(Path(__file__).resolve().parent / "static" / "robots.txt", media_type="text/plain")
 
 
-@app.get("/sitemap.xml", include_in_schema=False)
+@app.api_route("/sitemap.xml", methods=["GET", "HEAD"], include_in_schema=False)
 async def sitemap_xml():
     return FileResponse(Path(__file__).resolve().parent / "static" / "sitemap.xml", media_type="application/xml")
 
