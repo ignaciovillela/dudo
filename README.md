@@ -2,7 +2,7 @@
 
 ## 👉 [Juega gratis ahora en dudo.igna.cl](https://dudo.igna.cl/)
 
-Sin registro, desde el celular o el computador: crea una sala, comparte el enlace con tus amigos o juega contra bots. ¿Primera vez? Mira [cómo jugar y las reglas](https://dudo.igna.cl/como-jugar).
+Sin registro, desde el celular o el computador: crea una sala, comparte el enlace con tus amigos o juega contra bots. ¿Primera vez? Mira [cómo jugar y las reglas](https://dudo.igna.cl/como-jugar-dudo).
 
 <p align="center">
   <img src="docs/screenshots/web-partida.png" alt="Dudo en el navegador: mesa de juego con la apuesta en curso" width="820">
@@ -77,6 +77,19 @@ uvicorn main:app --reload
 ### Clips de audio
 
 Los clips de sistema (botones de sonido rápidos) se leen de `static/audio_clips/`. El repositorio no incluye ninguno por temas de derechos: pon allí tus `.mp3`/`.ogg` y, si quieres, un `buttons.json` con `label`, `emoji` y `color` por clip.
+
+## Guías del juego
+
+El sitio incluye páginas de contenido (indexables por buscadores):
+
+- [Cómo jugar al Dudo (reglas completas)](https://dudo.igna.cl/como-jugar-dudo)
+- [Perudo: reglas y diferencias con el Dudo](https://dudo.igna.cl/perudo)
+- [Liar's Dice en español](https://dudo.igna.cl/liars-dice)
+- [Jugar Dudo online gratis](https://dudo.igna.cl/jugar-dudo-online)
+- [Estrategia y probabilidades](https://dudo.igna.cl/estrategia-dudo)
+- [Glosario: dudo, calzo, gavilán, cacho…](https://dudo.igna.cl/glosario-dudo)
+
+Se generan con `python scripts/seo_pages/build.py` a partir de los fragmentos de `scripts/seo_pages/` (también actualiza `static/sitemap.xml`).
 
 ## Regenerar la imagen de portada (OG)
 

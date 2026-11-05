@@ -7,9 +7,39 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://dudo.igna.cl/como-jugar</loc>
+    <loc>https://dudo.igna.cl/como-jugar-dudo</loc>
     <lastmod>2026-11-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://dudo.igna.cl/perudo</loc>
+    <lastmod>2026-11-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://dudo.igna.cl/liars-dice</loc>
+    <lastmod>2026-11-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://dudo.igna.cl/jugar-dudo-online</loc>
+    <lastmod>2026-11-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://dudo.igna.cl/estrategia-dudo</loc>
+    <lastmod>2026-11-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://dudo.igna.cl/glosario-dudo</loc>
+    <lastmod>2026-11-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
   </url>
 </urlset>

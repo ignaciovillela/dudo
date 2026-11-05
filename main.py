@@ -232,16 +232,60 @@ async def root(request: Request, sala: str | None = None):
 
 
 
-@app.get("/como-jugar", include_in_schema=False)
-async def como_jugar():
-    return FileResponse(Path(__file__).resolve().parent / "static" / "pages" / "como-jugar.html", media_type="text/html")
+_PAGES_DIR = Path(__file__).resolve().parent / "static" / "pages"
+_SEO_PAGES = (
+    "como-jugar-dudo",
+    "perudo",
+    "liars-dice",
+    "jugar-dudo-online",
+    "estrategia-dudo",
+    "glosario-dudo",
+)
+# URLs alternativas que la gente podría escribir o enlazar → página canónica.
+_SEO_ALIASES = {
+    "como-jugar": "como-jugar-dudo",
+    "como-jugar-cacho": "como-jugar-dudo",
+    "como-jugar-perudo": "perudo",
+    "reglas": "como-jugar-dudo",
+    "reglas-dudo": "como-jugar-dudo",
+    "reglas-del-dudo": "como-jugar-dudo",
+    "reglas-perudo": "perudo",
+    "reglas-del-perudo": "perudo",
+    "jugar-perudo": "perudo",
+    "jugar-perudo-online": "perudo",
+    "perudo-online": "perudo",
+    "dudo-online": "jugar-dudo-online",
+    "jugar-dudo": "jugar-dudo-online",
+    "liar-s-dice": "liars-dice",
+    "liarsdice": "liars-dice",
+    "estrategia": "estrategia-dudo",
+    "glosario": "glosario-dudo",
+}
 
 
-@app.get("/como-jugar/", include_in_schema=False)
-@app.get("/reglas", include_in_schema=False)
-@app.get("/reglas/", include_in_schema=False)
-async def como_jugar_alias():
-    return RedirectResponse("/como-jugar", status_code=301)
+def _register_seo_page(slug: str) -> None:
+    async def _page():
+        return FileResponse(
+            _PAGES_DIR / f"{slug}.html",
+            media_type="text/html",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    app.add_api_route(f"/{slug}", _page, methods=["GET"], include_in_schema=False)
+
+
+def _register_seo_alias(alias: str, target: str) -> None:
+    async def _redirect():
+        return RedirectResponse(f"/{target}", status_code=301)
+
+    for path in (f"/{alias}", f"/{alias}/"):
+        app.add_api_route(path, _redirect, methods=["GET"], include_in_schema=False)
+
+
+for _slug in _SEO_PAGES:
+    _register_seo_page(_slug)
+for _alias, _target in _SEO_ALIASES.items():
+    _register_seo_alias(_alias, _target)
 
 
 @app.get("/robots.txt", include_in_schema=False)
