@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import uuid
 from contextlib import asynccontextmanager
@@ -8,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from game.manager import GameManager
@@ -134,6 +135,9 @@ async def lifespan(_app: FastAPI):
 app.router.lifespan_context = lifespan
 
 
+CANONICAL_URL = os.getenv("CANONICAL_URL", "https://dudo.igna.cl").rstrip("/")
+
+
 def _replace_meta_tag(html: str, attr_name: str, attr_value: str, content: str) -> str:
     pattern = rf'(<meta\s+[^>]*{attr_name}="{re.escape(attr_value)}"[^>]*content=")([^"]*)("[^>]*>)'
     return re.sub(pattern, rf'\1{escape(content, quote=True)}\3', html)
@@ -181,8 +185,11 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
         description = _share_description_for_room(room_id)
     else:
         share_url = f"{base_url}/"
-        title = "Dudo — El Juego de los Cachos"
-        description = "Juega Dudo online con amigos: apuesta, duda, calza y sobrevive hasta el final."
+        title = "Dudo — Juego de los Cachos online gratis"
+        description = (
+            "Juega Dudo (el juego de los cachos) online y gratis, sin registro: crea una sala, "
+            "invita a tus amigos o juega contra bots. Apuesta, duda, calza y sobrevive hasta el final."
+        )
 
     image_url = f"{base_url}/static/og-cover.png"
 
@@ -196,7 +203,10 @@ def _build_index_with_dynamic_meta(request: Request, room_id: str | None = None)
     html = _replace_meta_tag(html, "name", "twitter:title", title)
     html = _replace_meta_tag(html, "name", "twitter:description", description)
     html = _replace_meta_tag(html, "name", "twitter:image", image_url)
-    html = _replace_canonical(html, share_url)
+    # Las salas son efímeras: no se indexan y apuntan al home como canónica.
+    html = _replace_canonical(html, f"{CANONICAL_URL}/")
+    if room_id:
+        html = _replace_meta_tag(html, "name", "robots", "noindex, follow")
 
     html = html.replace(
         'src="/static/app.js',
@@ -219,6 +229,16 @@ async def root(request: Request, sala: str | None = None):
     room_id = normalize_room_id(sala)[:20] if sala else None
     return HTMLResponse(_build_index_with_dynamic_meta(request, room_id))
 
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    return FileResponse(Path(__file__).resolve().parent / "static" / "robots.txt", media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml():
+    return FileResponse(Path(__file__).resolve().parent / "static" / "sitemap.xml", media_type="application/xml")
 
 
 @app.get("/api/audio_clips/system")
