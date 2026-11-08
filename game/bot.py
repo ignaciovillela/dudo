@@ -541,6 +541,7 @@ class MediumBot(BotStrategy):
     """
 
     DUDO_THRESHOLD = 0.32
+    DUDO_NOISE     = 0.15   # ignora la señal el 15% de las veces
     BID_MIN_PROB   = 0.42
     BLUFF_PROB     = 0.08
 
